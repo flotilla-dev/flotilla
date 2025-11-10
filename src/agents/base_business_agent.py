@@ -4,25 +4,12 @@ Base class for business logic agents
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from enum import Enum
 import json
 
 from pydantic import BaseModel, Field
 from config.config_models import LLMConfig
 from config.settings import Settings
 from llm.llm_provider import LLMProvider
-
-
-class BusinessDomain(str, Enum):
-    """Business domains for agent specialization"""
-    PRICING = "pricing"
-    INVENTORY = "inventory"
-    CUSTOMER = "customer"
-    SALES = "sales"
-    MARKETING = "marketing"
-    FINANCE = "finance"
-    OPERATIONS = "operations"
-    WEATHER = "weather"
 
 
 class AgentCapability(BaseModel):
@@ -57,11 +44,6 @@ class BaseBusinessAgent(ABC):
         """Initialize agent capabilities - must be implemented by subclasses"""
         pass
     
-    @abstractmethod
-    def get_domain(self) -> BusinessDomain:
-        """Return the business domain this agent specializes in"""
-        pass
-    
     def can_handle(self, query: str, context: Optional[Dict[str, Any]] = None) -> float:
         """
         Determine if this agent can handle the query
@@ -86,6 +68,7 @@ class BaseBusinessAgent(ABC):
         for capability in self._capabilities:
             keywords.extend(capability.keywords)
         return keywords
+    
     
     @abstractmethod
     def execute(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -118,7 +101,6 @@ class BaseBusinessAgent(ABC):
         return {
             "agent_id": self.agent_id,
             "agent_name": self.agent_name,
-            "domain": self.get_domain().value,
             "capabilities": [
                 {
                     "name": cap.name,
@@ -152,7 +134,6 @@ class BaseBusinessAgent(ABC):
             "success": success,
             "agent_id": self.agent_id,
             "agent_name": self.agent_name,
-            "domain": self.get_domain().value,
             "timestamp": datetime.now().isoformat()
         }
         

@@ -2,24 +2,18 @@
 Tests for business agent registry
 """
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from agents.agent_registry import BusinessAgentRegistry
-from agents.base_business_agent import BaseBusinessAgent, BusinessDomain, AgentCapability
+from agents.base_business_agent import BaseBusinessAgent, AgentCapability
 from config.config_models import AgentRegistryConfig
 from typing import List
-import importlib
-import inspect
-import pkgutil
-import pathlib
-import sys
 
 
 class MockBusinessAgent(BaseBusinessAgent):
     """Mock business agent for testing"""
     
-    def __init__(self, agent_id, agent_name, domain, keywords):
-        self.domain = domain
+    def __init__(self, agent_id, agent_name, keywords):
         self.test_keywords = keywords
         super().__init__(agent_id=agent_id, agent_name=agent_name)
 
@@ -34,9 +28,6 @@ class MockBusinessAgent(BaseBusinessAgent):
             )
         ]
         return capabilities
-    
-    def get_domain(self):
-        return self.domain
     
     def can_handle(self, query, context=None):
         return self._match_keywords(query, self.test_keywords)
@@ -55,7 +46,7 @@ class TestBusinessAgentRegistry:
 
     def test_empty_initialization(self):
         registry = BusinessAgentRegistry()
-        assert len(registry.agents) > 0
+        assert len(registry.agents) == 0
         assert registry.llm is not None
         assert registry.config is not None
 
@@ -66,7 +57,6 @@ class TestBusinessAgentRegistry:
         mock_agent = MockBusinessAgent(
             agent_id="test_agent",
             agent_name="Test Agent",
-            domain=BusinessDomain.PRICING,
             keywords=["price", "cost"]
         )
         
@@ -102,8 +92,8 @@ class TestBusinessAgentRegistry:
     def test_register_multiple_agents(self, mock_agent_registry_config):
         """Test registering multiple agents"""
         registry = BusinessAgentRegistry(config=mock_agent_registry_config)
-        agent1 = MockBusinessAgent("agent1", "Agent 1", BusinessDomain.PRICING, ["price"])
-        agent2 = MockBusinessAgent("agent2", "Agent 2", BusinessDomain.INVENTORY, ["stock"])
+        agent1 = MockBusinessAgent("agent1", "Agent 1", ["price"])
+        agent2 = MockBusinessAgent("agent2", "Agent 2", ["stock"])
         
         registry.register_agent(agent1)
         registry.register_agent(agent2)
@@ -116,7 +106,7 @@ class TestBusinessAgentRegistry:
     def test_unregister_agent(self):
         """Test unregistering an agent"""
         registry = BusinessAgentRegistry()
-        mock_agent = MockBusinessAgent("test_agent", "Test", BusinessDomain.PRICING, ["price"])
+        mock_agent = MockBusinessAgent("test_agent", "Test", ["price"])
         
         registry.register_agent(mock_agent)
         assert "test_agent" in registry.agents
@@ -135,7 +125,7 @@ class TestBusinessAgentRegistry:
     def test_get_agent(self):
         """Test retrieving agent by ID"""
         registry = BusinessAgentRegistry()
-        mock_agent = MockBusinessAgent("test_agent", "Test", BusinessDomain.PRICING, ["price"])
+        mock_agent = MockBusinessAgent("test_agent", "Test", ["price"])
         
         registry.register_agent(mock_agent)
         
@@ -153,8 +143,8 @@ class TestBusinessAgentRegistry:
     def test_list_agents(self, mock_agent_registry_config):
         """Test listing all agents"""
         registry = BusinessAgentRegistry(config=mock_agent_registry_config)
-        agent1 = MockBusinessAgent("agent1", "Agent 1", BusinessDomain.PRICING, ["price"])
-        agent2 = MockBusinessAgent("agent2", "Agent 2", BusinessDomain.INVENTORY, ["stock"])
+        agent1 = MockBusinessAgent("agent1", "Agent 1", ["price"])
+        agent2 = MockBusinessAgent("agent2", "Agent 2", ["stock"])
         
         registry.register_agent(agent1)
         registry.register_agent(agent2)
@@ -172,10 +162,10 @@ class TestBusinessAgentRegistry:
         registry = BusinessAgentRegistry()
 
         pricing_agent = MockBusinessAgent(
-            "pricing", "Pricing", BusinessDomain.PRICING, ["price", "markdown", "discount"]
+            "pricing", "Pricing", ["price", "markdown", "discount"]
         )
         inventory_agent = MockBusinessAgent(
-            "inventory", "Inventory", BusinessDomain.INVENTORY, ["stock", "reorder"]
+            "inventory", "Inventory", ["stock", "reorder"]
         )
         
         registry.register_agent(pricing_agent)
@@ -215,7 +205,7 @@ class TestBusinessAgentRegistry:
         """Test agent selection when no agent matches"""
         registry = BusinessAgentRegistry()
 
-        agent = MockBusinessAgent("test", "Test", BusinessDomain.PRICING, ["specific", "keywords"])
+        agent = MockBusinessAgent("test", "Test", ["specific", "keywords"])
         registry.register_agent(agent)
         
         selected = registry.select_agent(
@@ -230,7 +220,7 @@ class TestBusinessAgentRegistry:
     def test_select_agent_with_min_confidence(self):
         """Test agent selection respects minimum confidence threshold"""
         registry = BusinessAgentRegistry()
-        agent = MockBusinessAgent("test", "Test", BusinessDomain.PRICING, ["price"])
+        agent = MockBusinessAgent("test", "Test", ["price"])
         registry.register_agent(agent)
         
         # High confidence requirement - should fail
@@ -272,8 +262,8 @@ class TestBusinessAgentRegistry:
         """Test agent selection using LLM router"""
         registry = BusinessAgentRegistry()
 
-        agent1 = MockBusinessAgent("agent1", "Agent 1", BusinessDomain.PRICING, ["price"])
-        agent2 = MockBusinessAgent("agent2", "Agent 2", BusinessDomain.INVENTORY, ["stock"])
+        agent1 = MockBusinessAgent("agent1", "Agent 1", ["price"])
+        agent2 = MockBusinessAgent("agent2", "Agent 2", ["stock"])
         
         registry.register_agent(agent1)
         registry.register_agent(agent2)
@@ -296,7 +286,7 @@ class TestBusinessAgentRegistry:
         """Test LLM router returning invalid agent ID"""
         registry = BusinessAgentRegistry(mock_agent_registry_config)
 
-        agent = MockBusinessAgent("valid_agent", "Valid", BusinessDomain.PRICING, ["price"])
+        agent = MockBusinessAgent("valid_agent", "Valid", ["price"])
         registry.register_agent(agent)
         
         # Mock LLM to return invalid agent ID
@@ -317,7 +307,7 @@ class TestBusinessAgentRegistry:
         """Test executing with best matching agent"""
         registry = BusinessAgentRegistry()
 
-        agent = MockBusinessAgent("test", "Test", BusinessDomain.PRICING, ["price"])
+        agent = MockBusinessAgent("test", "Test", ["price"])
         registry.register_agent(agent)
         
         result = registry.execute_with_best_agent(
@@ -335,7 +325,7 @@ class TestBusinessAgentRegistry:
         """Test execution when no agent matches"""
         registry = BusinessAgentRegistry()
 
-        agent = MockBusinessAgent("test", "Test", BusinessDomain.PRICING, ["specific"])
+        agent = MockBusinessAgent("test", "Test", ["specific"])
         registry.register_agent(agent)
         
         result = registry.execute_with_best_agent(
@@ -352,8 +342,8 @@ class TestBusinessAgentRegistry:
         """Test executing with multiple qualifying agents"""
         registry = BusinessAgentRegistry()
 
-        agent1 = MockBusinessAgent("agent1", "Agent 1", BusinessDomain.PRICING, ["price", "cost"])
-        agent2 = MockBusinessAgent("agent2", "Agent 2", BusinessDomain.PRICING, ["price", "value"])
+        agent1 = MockBusinessAgent("agent1", "Agent 1", ["price", "cost"])
+        agent2 = MockBusinessAgent("agent2", "Agent 2", ["price", "value"])
         
         registry.register_agent(agent1)
         registry.register_agent(agent2)
@@ -367,33 +357,6 @@ class TestBusinessAgentRegistry:
         assert isinstance(results, list)
         # Results may vary based on keyword matching
 
-
-    def test_get_agent_by_domain(self):
-        """Test retrieving agent by business domain"""
-        registry = BusinessAgentRegistry()
-
-        pricing_agent = MockBusinessAgent("pricing", "Pricing", BusinessDomain.PRICING, ["price"])
-        inventory_agent = MockBusinessAgent("inventory", "Inventory", BusinessDomain.INVENTORY, ["stock"])
-        
-        registry.register_agent(pricing_agent)
-        registry.register_agent(inventory_agent)
-        
-        retrieved = registry.get_agent_by_domain(BusinessDomain.PRICING)
-        
-        assert retrieved is not None
-        assert retrieved.get_domain() == BusinessDomain.PRICING
-
-
-    def test_get_agent_by_domain_not_found(self):
-        """Test get_agent_by_domain when domain doesn't exist"""
-        registry = BusinessAgentRegistry()
-
-        agent = MockBusinessAgent("test", "Test", BusinessDomain.PRICING, ["price"])
-        registry.register_agent(agent)
-        
-        retrieved = registry.get_agent_by_domain(BusinessDomain.MARKETING)
-        
-        assert retrieved is None
 
 
     def test_registry_with_no_agents(self, mock_agent_registry_config):
@@ -412,7 +375,7 @@ class TestBusinessAgentRegistry:
         """Test agent selection considers context"""
         registry = BusinessAgentRegistry()
 
-        agent = MockBusinessAgent("test", "Test", BusinessDomain.PRICING, ["price"])
+        agent = MockBusinessAgent("test", "Test", ["price"])
         registry.register_agent(agent)
         
         context = {"pricing_data": {"current_price": 29.99}}

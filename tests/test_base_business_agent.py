@@ -6,7 +6,6 @@ from datetime import datetime
 
 from agents.base_business_agent import (
     BaseBusinessAgent,
-    BusinessDomain,
     AgentCapability
 )
 
@@ -31,9 +30,6 @@ class ConcreteBusinessAgent(BaseBusinessAgent):
             )
         ]
         return capabilities
-    
-    def get_domain(self):
-        return BusinessDomain.PRICING
     
     def can_handle(self, query, context=None):
         return self._match_keywords(query, self.test_keywords)
@@ -109,7 +105,6 @@ class TestBaseBusinessAgent:
         
         assert info["agent_id"] == "test_id"
         assert info["agent_name"] == "Test Agent"
-        assert info["domain"] == BusinessDomain.PRICING.value
         assert "capabilities" in info
         assert isinstance(info["capabilities"], list)
     
@@ -182,7 +177,6 @@ class TestBaseBusinessAgent:
         assert result["data"] == {"test": "data"}
         assert result["agent_id"] == agent.agent_id
         assert result["agent_name"] == agent.agent_name
-        assert result["domain"] == BusinessDomain.PRICING.value
         assert "timestamp" in result
     
     def test_create_result_failure(self):
@@ -222,7 +216,6 @@ class TestBaseBusinessAgent:
         assert "success" in result
         assert "agent_id" in result
         assert "agent_name" in result
-        assert "domain" in result
         assert "timestamp" in result
     
     def test_can_handle_returns_float(self):
@@ -233,22 +226,6 @@ class TestBaseBusinessAgent:
         
         assert isinstance(score, float)
         assert 0.0 <= score <= 1.0
-    
-    def test_business_domain_enum(self):
-        """Test BusinessDomain enum values"""
-        assert BusinessDomain.PRICING == BusinessDomain.PRICING
-        assert BusinessDomain.INVENTORY == BusinessDomain.INVENTORY
-        assert BusinessDomain.CUSTOMER == BusinessDomain.CUSTOMER
-        assert BusinessDomain.SALES == BusinessDomain.SALES
-        assert BusinessDomain.MARKETING == BusinessDomain.MARKETING
-        assert BusinessDomain.FINANCE == BusinessDomain.FINANCE
-        assert BusinessDomain.OPERATIONS == BusinessDomain.OPERATIONS
-    
-    def test_business_domain_values(self):
-        """Test BusinessDomain enum string values"""
-        assert BusinessDomain.PRICING.value == "pricing"
-        assert BusinessDomain.INVENTORY.value == "inventory"
-        assert BusinessDomain.CUSTOMER.value == "customer"
     
     def test_agent_cannot_be_instantiated_directly(self):
         """Test that BaseBusinessAgent cannot be instantiated"""
