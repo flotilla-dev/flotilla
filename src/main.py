@@ -107,7 +107,7 @@ def test(ctx, client_config, azure_config, block_config):
         
         # Test tools
         console.print("Testing Tool Registry...")
-        tool_names = agent.tool_registry.getToolNames()
+        tool_names = agent.tool_registry.get_tool_names()
         if (len(tool_names)) > 0:
             console.print(f"Tools loaded: {', '.join(tool_names)} ")
         else:
