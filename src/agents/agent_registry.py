@@ -2,12 +2,12 @@
 Business Agent Registry
 Manages and routes queries to appropriate business logic agents
 """
-from typing import Dict, Any, List, Optional, Type
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from agents.base_business_agent import BaseBusinessAgent
-from llm.llm_provider import LLMProvider
+from llm.llm_factory import LLMFactory
 from config.settings import Settings
 from config.config_models import AgentRegistryConfig
 from utils.logger import get_logger
@@ -33,7 +33,7 @@ class BusinessAgentRegistry:
         
         self.config = config
         
-        llmProvider = LLMProvider()
+        llmProvider = LLMFactory()
         self.llm = llmProvider.get_llm(self.config.llm_config)
         self.agents: Dict[str, BaseBusinessAgent] = {}
         if (self.config.agent_discovery):

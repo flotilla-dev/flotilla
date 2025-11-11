@@ -127,43 +127,6 @@ def mock_llm_with_text():
     return llm
 
 
-@pytest.fixture
-def sample_decision_tree():
-    """Sample decision tree for testing"""
-    return {
-        "root": {
-            "question": "Is inventory high?",
-            "condition": "inventory_level",
-            "branches": {
-                "high": {
-                    "threshold": 100,
-                    "action": "Apply markdown",
-                    "next": None
-                },
-                "low": {
-                    "threshold": 50,
-                    "action": "Maintain price"
-                }
-            }
-        },
-        "metadata": {
-            "created": "2025-01-01T00:00:00",
-            "context": "Test decision",
-            "criteria": ["inventory", "price"]
-        }
-    }
-
-
-@pytest.fixture
-def sample_query_data():
-    """Sample data for testing queries"""
-    return {
-        "inventory": 150,
-        "price": 29.99,
-        "sales_velocity": 5.2,
-        "category": "electronics"
-    }
-
 
 @pytest.fixture(autouse=True, scope="session")
 def reset_environment():

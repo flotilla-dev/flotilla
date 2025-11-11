@@ -12,7 +12,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from config.config_models import OrchestrationConfig
 from agents.agent_registry import BusinessAgentRegistry
 from utils.logger import get_logger
-from llm.llm_provider import LLMProvider
+from llm.llm_factory import LLMFactory
 from tools.tool_registry import ToolRegistry
 
 
@@ -30,8 +30,8 @@ class OrchestrationAgent:
         #TODO define a structure for creation and initialization of all tools & agents 
         
         # load the LLM Provider
-        llmProvider = LLMProvider()
-        self.llm = llmProvider.get_llm(config.llm_config) 
+        self.llm_factory = LLMFactory()
+        self.llm = self.llm_factory.get_llm(config.llm_config) 
 
         # load the tools
         #self.checkpointer = self._create_checkpointer()

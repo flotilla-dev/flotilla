@@ -17,10 +17,10 @@ class TestOrchestrationAgent:
     @pytest.fixture
     def mock_llm_provider(self):
         """Mock LLM provider"""
-        with patch('agents.orchestration_agent.LLMProvider') as mock_provider_class:
+        with patch('agents.orchestration_agent.LLMFactory') as mock_provider_class:
             mock_provider = MagicMock()
             mock_llm = MagicMock()
-            mock_provider.getLLM.return_value = mock_llm
+            mock_provider.get_llm.return_value = mock_llm
             mock_provider_class.return_value = mock_provider
             yield mock_provider_class, mock_llm
     
