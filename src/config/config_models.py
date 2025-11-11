@@ -5,13 +5,25 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 
+
 class LLMConfig(BaseModel):
     """Configugration for LLM"""
-    #endpoint: str = Field(..., description="LLM endpoint URL")
     api_key: str = Field(..., description="LLM API key")
-    model_name: str = Field(default="gpt-4o-mini", description="The name of the model version to use")
     temperature: float = Field(default=0.1, description="Temperature for LLM responses")
     max_tokens: Optional[int] = Field(default=2000, description="Maximum tokens in response")
+
+
+class OpenAIConfig(LLMConfig):
+    """Configuration for standard OpenAI service"""
+    model_name: str = Field(default="gpt-4o-mini", description="The name of the model version to use")
+
+
+class AzureOpenAIConfig(LLMConfig):
+    """Configuration for Azure OpenAI service"""
+    endpoint: str = Field(..., description="Azure OpenAI endpoint URL")
+    api_version: str = Field(default="2024-02-15-preview", description="API version")
+    deployment_name: str = Field(default="gpt-4", description="GPT-4 deployment name")
+
 
 
 class ToolRegistryConfig(BaseModel):
@@ -28,15 +40,6 @@ class AgentRegistryConfig(BaseModel):
     llm_config:LLMConfig = Field(..., description="The LLMConfig to use with the AgentRegistry")
 
 '''
-class AzureOpenAIConfig(BaseModel):
-    """Configuration for Azure OpenAI service"""
-    endpoint: str = Field(..., description="Azure OpenAI endpoint URL")
-    api_key: str = Field(..., description="Azure OpenAI API key")
-    api_version: str = Field(default="2024-02-15-preview", description="API version")
-    deployment_name: str = Field(default="gpt-4", description="GPT-4 deployment name")
-    temperature: float = Field(default=0.7, description="Temperature for LLM responses")
-    max_tokens: Optional[int] = Field(default=2000, description="Maximum tokens in response")
-
 class FabricWorkspaceConfig(BaseModel):
     """Configuration for Microsoft Fabric workspace"""
     workspace_id: str = Field(..., description="Fabric workspace ID")

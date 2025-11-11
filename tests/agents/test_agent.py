@@ -1,4 +1,4 @@
-from agents.base_business_agent import BaseBusinessAgent, AgentCapability, BusinessDomain
+from agents.base_business_agent import BaseBusinessAgent, AgentCapability
 from utils.logger import get_logger
 from config.config_models import LLMConfig
 from typing import Any, Dict, Optional, List
@@ -26,9 +26,6 @@ class TestAgent(BaseBusinessAgent):
     
     def can_handle(self, query, context = None):
         return self._match_keywords(query, self.get_keywords())
-
-    def get_domain(self) -> BusinessDomain:
-        return BusinessDomain.WEATHER
     
     def execute(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         pass

@@ -1,34 +1,23 @@
 # Orchestration Agent System
 
-A multi-agent orchestration system built with LangChain that coordinates:
-- **Fabric Data Agents** - Text-to-SQL queries for Azure Fabric Lakehouse
-- **Decisioning Agent** - LLM-based decision tree creation and evaluation
-- **Block MCP Client** - Square POS integration for pricing and catalog management
 
 ## Architecture
 
 ```
-orchestration_system/
+flotilla/
 ├── agents/
-│   ├── fabric_data_agent.py      # Azure Fabric lakehouse queries
-│   ├── decisioning_agent.py      # LLM decision trees
+│   ├── base_business_agent.py    # Base class for all business agents
+│   ├── agent_registry.py         # Dynamic agent selection/routing
 │   ├── orchestration_agent.py    # Main orchestration logic
 │   └── business_logic/           # Specialized business agents
-│       ├── base_business_agent.py    # Base class for all business agents
-│       ├── agent_registry.py         # Dynamic agent selection/routing
-│       ├── pricing_agent.py          # Pricing optimization agent
-│       ├── inventory_agent.py        # Inventory management agent
-│       ├── customer_agent.py         # Customer strategy agent (example)
-│       └── README.md                 # Business agent documentation
-├── clients/
-│   └── block_mcp_client.py       # Block (Square) MCP integration
+│       └── README.md             # Business agent documentation
 ├── config/
-│   ├── config_loader.py          # Configuration management
-│   ├── client_config.json        # Client-specific settings
-│   ├── azure_openai_config.json  # Azure OpenAI credentials
-│   └── block_mcp_config.json     # Block MCP settings
-├── models/
+│   ├── settings.py               # Configuration management
 │   └── config_models.py          # Pydantic configuration models
+├── llm/
+│   └── llm_provider.py           # Factory for creating LLM instance
+├── tools/
+│   └── tool_registry.py          # Dynamic tool discovery and registration
 ├── utils/
 │   └── logger.py                 # Logging utilities
 ├── main.py                       # CLI entry point
@@ -38,33 +27,11 @@ orchestration_system/
 
 ## Features
 
-### 🗄️ Fabric Data Agent
-- Natural language to SQL conversion
-- Queries Azure Fabric Lakehouse via REST API
-- Automatic schema discovery
-- Support for analytical queries
-
-### 🧠 Decisioning Agent
-- Create decision trees on-the-fly using GPT-4
-- Evaluate data against decision logic
-- Refine decision trees based on feedback
-- Structured JSON decision tree format
-
 ### 🎯 Business Logic Agents (Dynamic Selection)
 - **Multiple specialized agents** for different business domains
 - **Automatic agent selection** based on query content
-- **Built-in agents**:
-  - **Pricing Agent**: Price optimization, markdowns, competitive analysis
-  - **Inventory Agent**: Reorder optimization, stock management, turnover
 - **Extensible**: Easy to add custom agents for your business needs
 - **Intelligent routing**: Keyword matching + optional LLM-based selection
-
-### 💳 Block MCP Client
-- Update catalog item prices
-- Search catalog and orders
-- List POS locations
-- Batch price updates
-- Asynchronous and synchronous interfaces
 
 ### 🎯 Orchestration Agent
 - Coordinates all sub-agents
@@ -76,10 +43,6 @@ orchestration_system/
 
 ### Prerequisites
 - Python 3.9+
-- Node.js (for Block MCP server)
-- Azure Fabric workspace with lakehouse
-- Azure OpenAI deployment (GPT-4)
-- Square (Block) developer account
 
 ### Setup
 
@@ -411,16 +374,9 @@ For issues and questions:
 
 ## Roadmap
 
-- [x] Multiple business logic agents with dynamic selection
-- [x] Keyword-based and LLM-based agent routing
 - [ ] Add support for multiple lakehouses per client
 - [ ] Implement caching for frequently accessed data
 - [ ] Add webhook support for real-time POS events
 - [ ] Expand decision tree persistence options
 - [ ] Add monitoring and metrics dashboard
-- [ ] Agent performance analytics and optimization
 - [ ] Multi-agent collaboration on complex queries
-- [ ] Azure configuration (AppConfig and Data Vault)
-- [ ] Dynamic loading of tools
-- [ ] Dynamic loading of agents
-- [ ] Move LLM creation & config to separate reusable class across calls

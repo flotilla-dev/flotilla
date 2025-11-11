@@ -4,7 +4,7 @@ from agents.base_business_agent import (
     AgentCapability
 )
 from typing import Any, Dict, Optional
-from llm.llm_provider import LLMProvider,LLMConfig
+from llm.llm_factory import LLMFactory,LLMConfig
 from langchain_core.messages import HumanMessage, SystemMessage
 from utils.logger import get_logger
 

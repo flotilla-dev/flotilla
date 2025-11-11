@@ -8,7 +8,9 @@ from config.config_models import (
     LLMConfig,
     ToolRegistryConfig,
     AgentRegistryConfig,
-    OrchestrationConfig
+    OrchestrationConfig,
+    OpenAIConfig,
+    AzureOpenAIConfig
 )
 
 
@@ -16,27 +18,34 @@ class TestLLMConfig:
     def test_valid_config_creation(self):
         """Should create an LLMConfig with all required fields."""
         config = LLMConfig(
-            #endpoint="https://api.openai.com/v1",
             api_key="sk-test-key",
-            model_name="gpt-4o-mini",
             temperature=0.2,
             max_tokens=1500
         )
 
-        #assert config.endpoint == "https://api.openai.com/v1"
         assert config.api_key == "sk-test-key"
-        assert config.model_name == "gpt-4o-mini"
         assert config.temperature == 0.2
         assert config.max_tokens == 1500
+
+    def test_valid_openai_config_creation(self):
+        config = OpenAIConfig(
+            api_key="sk-test-key",
+            model_name="gpt-4o-mini",
+            temperature=0.3,
+            max_tokens=1000
+        )
+
+        assert config.api_key == "sk-test-key"
+        assert config.model_name == "gpt-4o-mini"
+        assert config.temperature == 0.3
+        assert config.max_tokens == 1000
 
     def test_defaults_are_applied(self):
         """Should apply default model_name, temperature, and max_tokens when omitted."""
         config = LLMConfig(
-            endpoint="https://example.com/llm",
             api_key="sk-123"
         )
 
-        assert config.model_name == "gpt-4o-mini"
         assert config.temperature == 0.1
         assert config.max_tokens == 2000
 
@@ -161,7 +170,6 @@ class TestAgentRegistryConfig:
     def test_nested_llm_config_defaults_apply(self):
         """Should preserve LLMConfig defaults when nested inside AgentRegistryConfig."""
         llm_cfg = LLMConfig(
-            endpoint="https://api.fake.com",
             api_key="sk-123"
         )
 
@@ -170,6 +178,5 @@ class TestAgentRegistryConfig:
             llm_config=llm_cfg
         )
 
-        assert config.llm_config.model_name == "gpt-4o-mini"
         assert config.llm_config.temperature == 0.1
         assert config.llm_config.max_tokens == 2000

@@ -1,6 +1,13 @@
 from pydantic_settings import BaseSettings
 from typing import List
-from config.config_models import LLMConfig, ToolRegistryConfig, AgentRegistryConfig, OrchestrationConfig, ClientConfig
+from config.config_models import LLMConfig, ToolRegistryConfig, AgentRegistryConfig, OrchestrationConfig, ClientConfig, OpenAIConfig, AzureOpenAIConfig
+from enum import Enum
+
+
+class LLMType(Enum):
+    OPENAI = "openai"
+    AZURE_OPENAI = "azure_openai"
+
 
 class Settings(BaseSettings):
     """Application Settings"""
@@ -8,6 +15,7 @@ class Settings(BaseSettings):
     llm_api_key: str = "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"
     llm_model: str = "gpt-4o-mini"
     llm_temperature: str = "0"
+    llm_type:LLMType = LLMType.OPENAI
 
     enable_tracing: bool = False
     max_retries: int = 3
@@ -26,10 +34,15 @@ class Settings(BaseSettings):
 
     def get_llm_config(self) -> LLMConfig:
         """Creates a LLM Config"""
-        return LLMConfig(
-            api_key = self.llm_api_key,
-            model_name = self.llm_model,
-            temperature = self.llm_temperature
+        return self._get_openai_llm_config()
+    
+    
+    def _get_openai_llm_config(self) -> LLMConfig:
+        """Creates an OpenAIConfig"""
+        return OpenAIConfig(
+            api_key=self.llm_api_key,
+            model_name=self.llm_model,
+            temperature=self.llm_temperature
         )
         
     

@@ -2,12 +2,12 @@
 Business Agent Registry
 Manages and routes queries to appropriate business logic agents
 """
-from typing import Dict, Any, List, Optional, Type
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from agents.base_business_agent import BaseBusinessAgent, BusinessDomain
-from llm.llm_provider import LLMProvider
+from agents.base_business_agent import BaseBusinessAgent
+from llm.llm_factory import LLMFactory
 from config.settings import Settings
 from config.config_models import AgentRegistryConfig
 from utils.logger import get_logger
@@ -33,7 +33,7 @@ class BusinessAgentRegistry:
         
         self.config = config
         
-        llmProvider = LLMProvider()
+        llmProvider = LLMFactory()
         self.llm = llmProvider.get_llm(self.config.llm_config)
         self.agents: Dict[str, BaseBusinessAgent] = {}
         if (self.config.agent_discovery):
@@ -95,7 +95,7 @@ class BusinessAgentRegistry:
             agent: Business agent instance
         """
         self.agents[agent.agent_id] = agent
-        logger.info(f"Registered agent: {agent.agent_name} (ID: {agent.agent_id}, Domain: {agent.get_domain().value})")
+        logger.info(f"Registered agent: {agent.agent_name} (ID: {agent.agent_id}")
     
     def unregister_agent(self, agent_id: str):
         """
@@ -190,7 +190,6 @@ class BusinessAgentRegistry:
             agent_descriptions.append(
                 f"Agent ID: {agent_id}\n"
                 f"Name: {agent.agent_name}\n"
-                f"Domain: {agent.get_domain().value}\n"
                 f"Capabilities:\n{capabilities}"
             )
         
@@ -299,17 +298,3 @@ class BusinessAgentRegistry:
         
         return results
     
-    def get_agent_by_domain(self, domain: BusinessDomain) -> Optional[BaseBusinessAgent]:
-        """
-        Get agent by business domain
-        
-        Args:
-            domain: Business domain
-            
-        Returns:
-            Agent for that domain or None
-        """
-        for agent in self.agents.values():
-            if agent.get_domain() == domain:
-                return agent
-        return None
