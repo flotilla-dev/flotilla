@@ -2,7 +2,7 @@ import importlib
 import inspect
 import pkgutil
 import pathlib
-from typing import List
+from typing import List, Callable
 from config.settings import Settings
 from langchain_core.tools import StructuredTool
 from config.config_models import ToolRegistryConfig
@@ -55,7 +55,7 @@ class ToolRegistry:
         return all_tools
 
 
-    def loadTools(self, force_reload: bool = False):
+    def load_tools(self, force_reload: bool = False):
         """Load or reload tools from configured packages."""
         if self._loaded and not force_reload:
             return
@@ -64,13 +64,25 @@ class ToolRegistry:
         print(f"Loaded {len(self._tools)} tools from {self.config.tool_packages}")
 
 
-    def getAllTools(self) -> List:
+    def get_all_tools(self) -> List:
         """Return list of all discovered tools."""
         if not self._loaded:
-            self.loadTools()
+            self.load_tools()
         return self._tools
+    
+    def get_tools(self, filter_function: Callable[[StructuredTool], bool]) -> List[StructuredTool]:
+        """Returns a list of Tools based on the filter function that was provided"""
+        return list(filter(filter_function, self.get_all_tools()))
 
-
-    def getToolNames(self) -> List[str]:
+    def get_tool_names(self) -> List[str]:
         """Return just the names of all tools."""
-        return [t.name for t in self.getAllTools()]
+        return [t.name for t in self.get_all_tools()]
+    
+    def register_tool(self, tool:StructuredTool):
+        """Adds a Tool the internal collection of tools"""
+        self._tools.append(tool)
+
+    def unregister_tool(self, name:str):
+        """Removes a tool from the internal collection if its name matches the tools name"""
+        filtered_toools = [tool for tool in self._tools if tool.name != name]
+        self._tools = filtered_toools

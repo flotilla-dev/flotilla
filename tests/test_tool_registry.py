@@ -41,17 +41,17 @@ def test_loadTools_sets_loaded_flag(mock_settings):
 
     with patch.object(registry, "_discover_tools", return_value=["tool1", "tool2"]) as mock_discover:
         # First load
-        registry.loadTools()
+        registry.load_tools()
         assert registry._loaded is True
         assert registry._tools == ["tool1", "tool2"]
         mock_discover.assert_called_once()
 
         # Second load without force_reload should not re-call _discover_tools
-        registry.loadTools()
+        registry.load_tools()
         mock_discover.assert_called_once()
 
         # With force_reload=True, it should call again
-        registry.loadTools(force_reload=True)
+        registry.load_tools(force_reload=True)
         assert mock_discover.call_count == 2
 
 
@@ -59,9 +59,9 @@ def test_getAllTools_triggers_lazy_load(mock_settings):
     """Ensure getAllTools() triggers a load if not already loaded."""
     registry = ToolRegistry(mock_settings)
 
-    with patch.object(registry, "loadTools") as mock_load:
+    with patch.object(registry, "load_tools") as mock_load:
         registry._loaded = False
-        registry.getAllTools()
+        registry.get_all_tools()
         mock_load.assert_called_once()
 
 
@@ -76,5 +76,48 @@ def test_getToolNames_returns_tool_names(mock_settings):
     registry._loaded = True
     registry._tools = [fake_tool_1, fake_tool_2]
 
-    names = registry.getToolNames()
+    names = registry.get_tool_names()
     assert names == ["tool1", "tool2"]
+
+def test_tool_registration(mock_settings):
+    mock_tool = MagicMock(name="tool_1")
+    mock_tool.name = "tool_1"
+    registry = ToolRegistry(mock_settings)
+    registry._loaded = True
+    # start with empty tool list
+    registry._tools = []
+    assert len(registry.get_all_tools()) == 0
+    
+    registry.register_tool(mock_tool)
+    assert len(registry.get_all_tools()) == 1
+
+    registry.unregister_tool(mock_tool.name)
+    assert len(registry.get_all_tools()) == 0
+
+
+def test_get_tools_by_filter(mock_settings):
+    # add mock tools
+    fake_tool_1 = MagicMock(name="tool1")
+    fake_tool_1.name = "tool1"
+    fake_tool_2 = MagicMock(name="tool2")
+    fake_tool_2.name = "tool2"
+    fake_tool_3 = MagicMock(name="tool3")
+    fake_tool_3.name = "tool3"
+    fake_tool_4 = MagicMock(name="tool4")
+    fake_tool_4.name = "tool4"
+
+    registry = ToolRegistry(mock_settings)
+    registry._loaded = True
+    registry._tools = [fake_tool_1, fake_tool_2, fake_tool_3, fake_tool_4]
+
+    filtered_tools = registry.get_tools(filter_tools)
+    assert filtered_tools is not None
+    assert len(filtered_tools) == 1
+    assert filtered_tools[0] == fake_tool_3
+
+
+def filter_tools(tool:object):
+    if (tool.name == "tool3"):
+        return True
+    else:
+        return False

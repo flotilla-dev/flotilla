@@ -36,7 +36,7 @@ class OrchestrationAgent:
         # load the tools
         #self.checkpointer = self._create_checkpointer()
         self.tool_registry = ToolRegistry()
-        self.tools = self.tool_registry.getAllTools()
+        self.tools = self.tool_registry.get_all_tools()
 
         logger.info(f"Loaded {len(self.tools)} from from ToolRegistry")
 
