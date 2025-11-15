@@ -8,7 +8,6 @@ from datetime import datetime
 from langchain_core.messages import HumanMessage, SystemMessage
 from agents.base_business_agent import BaseBusinessAgent
 from llm.llm_factory import LLMFactory
-from config.settings import Settings
 from config.config_models import AgentRegistryConfig
 from utils.logger import get_logger
 
@@ -26,15 +25,10 @@ class BusinessAgentRegistry:
     Dynamically routes queries to the most appropriate agent based on content
     """
     
-    def __init__(self, config:AgentRegistryConfig | None = None ):
-        if (config is None):
-            settings = Settings()
-            config = settings.get_agent_registry_config()
-        
+    def __init__(self, config:AgentRegistryConfig):       
         self.config = config
         
-        llmProvider = LLMFactory()
-        self.llm = llmProvider.get_llm(self.config.llm_config)
+        self.llm = LLMFactory.get_llm(self.config.llm_config)
         self.agents: Dict[str, BaseBusinessAgent] = {}
         if (self.config.agent_discovery):
             self.agents = self._discover_agents()

@@ -15,7 +15,8 @@ from config.config_models import (
     ToolRegistryConfig,
     AgentRegistryConfig,
     ClientConfig,
-    OrchestrationConfig
+    OrchestrationConfig,
+    OpenAIConfig
 )
 
 from config.settings import Settings
@@ -24,7 +25,12 @@ settings = Settings()
 
 @pytest.fixture
 def mock_llm_config():
-    return settings.get_llm_config()
+    return OpenAIConfig(
+        api_key="test-key",
+        model_name="gpt-4o-mini",
+        temperature=0.3,
+        max_tokens=1000
+    )
 
 @pytest.fixture
 def mock_tool_registry_config():
@@ -40,12 +46,17 @@ def mock_agent_registry_config():
         agent_discovery=False,
         agent_packages=["tests.agents"],
         agent_recursive=False,
-        llm_config=settings.get_llm_config()
+        llm_config=OpenAIConfig(api_key="test-key", model_name="gpt")
     )
 
 @pytest.fixture
 def mock_orchestration_config():
-    return settings.get_orchestration_config()
+    return OrchestrationConfig(
+        llm_config=OpenAIConfig(api_key="test-key", temperature=0.1, model_name="gpt-4"),
+        client=ClientConfig(client_id="test_client", client_name="Test Client"),
+        tool_registry_config=ToolRegistryConfig(tool_discovery=True, tool_packages=["tests.tools"], tool_recursive=True),
+        agent_registry_config=AgentRegistryConfig(agent_discovery=True, agent_packages=["tests.agents"], agent_recursive=True)
+    )
 
 '''
 @pytest.fixture

@@ -28,16 +28,17 @@ class AzureOpenAIConfig(LLMConfig):
 
 class ToolRegistryConfig(BaseModel):
     """Configuration for Tool Registry"""
-    tool_discovery: bool = Field(default=True, description="COntrols if Tools should be automatically discovered")
-    tool_packages:List[str] = Field(..., description="A list of packages to load tools from")
+    tool_discovery: bool = Field(default=True, description="Controls if Tools should be automatically discovered")
+    tool_packages:List[str] | None = Field(default=[], description="A list of packages to load tools from")
     tool_recursive: bool = Field(default=True, description="If the Tool Registry should load recusrively")
 
 class AgentRegistryConfig(BaseModel):
     """Configuration for Agent Registry"""
     agent_discovery: bool = Field(default=True, description="Controls if Agents should automatcally be discovered")
-    agent_packages:List[str] = Field(..., description="A list of packages to load agents from")
+    agent_packages:List[str] | None = Field(default=[], description="A list of packages to load agents from")
     agent_recursive: bool = Field(default=True, description="If the Agent Registry should load recurisvely")
-    llm_config:LLMConfig = Field(..., description="The LLMConfig to use with the AgentRegistry")
+    llm_config: LLMConfig | None = Field(default=None, description="The LLMConfig to use with the AgentRegistry",
+    )
 
 '''
 class FabricWorkspaceConfig(BaseModel):
@@ -71,7 +72,6 @@ class ClientConfig(BaseModel):
     """Complete configuration for a single client"""
     client_id: str = Field(..., description="Unique client identifier")
     client_name: str = Field(..., description="Client name")
-    llm_config: LLMConfig = Field(..., description="Config for the LLM used by the Client")
     metadata: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
         description="Additional client metadata"
@@ -82,4 +82,6 @@ class OrchestrationConfig(BaseModel):
     """Master orchestration configuration"""
     client: ClientConfig = Field(..., description="Configuration for the current client")
     log_level: str = Field(default="INFO", description="Logging level")
-    llm_config: LLMConfig = Field(..., description="Config for the LLM used by the Orchestration Agent")
+    llm_config: LLMConfig = Field(..., description="Config for the LLM used by the Orchestration Agent"),
+    tool_registry_config:ToolRegistryConfig = Field(..., description="Configuration for the Tool Registry"),
+    agent_registry_config:AgentRegistryConfig = Field(..., description="Configuratoin for the Agent Registry")
