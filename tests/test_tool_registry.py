@@ -19,12 +19,9 @@ def mock_settings():
     return mock
 
 
-def test_discover_tools_finds_valid_tools():
-    """Ensure _discover_tools() finds valid callable tool objects."""
-    test_settings = Settings()
-    test_settings.tool_packages = ["tests.tools"]
-
-    registry = ToolRegistry(test_settings)
+def test_discover_tools_finds_valid_tools(mock_tool_registry_config):
+    """Ensure _discover_tools() finds valid callable tool objects."""    
+    registry = ToolRegistry(mock_tool_registry_config)
 
     tools = registry._discover_tools()
 

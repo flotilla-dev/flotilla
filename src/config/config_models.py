@@ -82,7 +82,4 @@ class OrchestrationConfig(BaseModel):
     """Master orchestration configuration"""
     client: ClientConfig = Field(..., description="Configuration for the current client")
     log_level: str = Field(default="INFO", description="Logging level")
-    enable_tracing: bool = Field(default=True, description="Enable request tracing")
-    max_retries: int = Field(default=3, description="Maximum retry attempts")
-    retry_delay: float = Field(default=1.0, description="Delay between retries in seconds")
     llm_config: LLMConfig = Field(..., description="Config for the LLM used by the Orchestration Agent")
