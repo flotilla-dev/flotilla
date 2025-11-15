@@ -28,7 +28,11 @@ def mock_llm_config():
 
 @pytest.fixture
 def mock_tool_registry_config():
-    return settings.get_tool_registry_config()
+    return ToolRegistryConfig(
+        tool_packages=["tests.tools"],
+        tool_discovery=True,
+        tool_recursive=True
+    )
 
 @pytest.fixture
 def mock_agent_registry_config():
