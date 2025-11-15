@@ -13,14 +13,12 @@ class ToolRegistry:
     defined in configured packages.
     """
 
-    def __init__(self, config:ToolRegistryConfig | None = None):
-        if config is None:
-            settings = Settings()
-            config = settings.get_tool_registry_config()
-        
+    def __init__(self, config:ToolRegistryConfig):        
         self.config = config
         self._tools = []
         self._loaded = False
+        if self.config.tool_discovery:
+            self.tools = self._discover_tools()
 
 
     def _discover_tools(self) -> List:
@@ -51,7 +49,8 @@ class ToolRegistry:
                     # LangChain tools are StructuredTool
                     if isinstance(obj, StructuredTool):
                         all_tools.append(obj)
-
+                    
+        self._loaded = False
         return all_tools
 
 
@@ -66,8 +65,6 @@ class ToolRegistry:
 
     def get_all_tools(self) -> List:
         """Return list of all discovered tools."""
-        if not self._loaded:
-            self.load_tools()
         return self._tools
     
     def get_tools(self, filter_function: Callable[[StructuredTool], bool]) -> List[StructuredTool]:

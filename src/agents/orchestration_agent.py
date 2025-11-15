@@ -30,18 +30,20 @@ class OrchestrationAgent:
         #TODO define a structure for creation and initialization of all tools & agents 
         
         # load the LLM Provider
-        self.llm_factory = LLMFactory()
-        self.llm = self.llm_factory.get_llm(config.llm_config) 
+        self.llm = LLMFactory.get_llm(config.llm_config) 
 
         # load the tools
         #self.checkpointer = self._create_checkpointer()
-        self.tool_registry = ToolRegistry()
-        self.tools = self.tool_registry.get_all_tools()
+        self.tool_registry = ToolRegistry(self.config.tool_registry_config)
+        logger.info(f"Loaded {len(self.tool_registry.get_all_tools())} from from ToolRegistry")
 
-        logger.info(f"Loaded {len(self.tools)} from from ToolRegistry")
+        #TODO: Tools aren't passed to the agents!!!!
 
         # load the agents
-        self.business_registry = BusinessAgentRegistry()
+        if (self.config.agent_registry_config.llm_config is None):
+            logger.debug("AgentRegistryConfig.LLMConfig was None, use OrchestrationAgent LLMConfig")
+            self.config.agent_registry_config.llm_config = self.config.llm_config
+        self.business_registry = BusinessAgentRegistry(self.config.agent_registry_config)
         logger.info(f"Registered {len(self.business_registry.agents)} with AgentRegistry")
         
         logger.info(f"Orchestration agent initialized for client: {config.client.client_name}")

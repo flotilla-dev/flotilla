@@ -9,6 +9,7 @@ import json
 from pydantic import BaseModel, Field
 from config.config_models import LLMConfig
 from config.settings import Settings
+from config.config_factory import ConfigFactory
 from llm.llm_factory import LLMFactory
 
 
@@ -32,11 +33,10 @@ class BaseBusinessAgent(ABC):
         self._capabilities = self._initialize_capabilities()
         if (llm_config is None):
             settings = Settings()
-            self.llm_config = settings.get_llm_config()
+            self.llm_config = ConfigFactory.create_llm_config(settings)
         else:
             self.llm_config = llm_config
-        llm_proivder = LLMFactory()
-        self.llm = llm_proivder.get_llm(llm_config)
+        self.llm = LLMFactory.get_llm(llm_config)
         
     
     @abstractmethod

@@ -13,37 +13,24 @@ from config.config_models import OrchestrationConfig
 @pytest.mark.orchestration
 class TestOrchestrationAgent:
     """Test orchestration agent functionality"""
-    
+        
     @pytest.fixture
-    def mock_llm_provider(self):
-        """Mock LLM provider"""
-        with patch('agents.orchestration_agent.LLMFactory') as mock_provider_class:
-            mock_provider = MagicMock()
-            mock_llm = MagicMock()
-            mock_provider.get_llm.return_value = mock_llm
-            mock_provider_class.return_value = mock_provider
-            yield mock_provider_class, mock_llm
-    
-    @pytest.fixture
-    def orchestration_agent(self, mock_orchestration_config, mock_llm_provider):
+    def orchestration_agent(self, mock_orchestration_config):
         """Create orchestration agent with mocked dependencies"""
-        mock_provider_class, mock_llm = mock_llm_provider
         agent = OrchestrationAgent(mock_orchestration_config)
         return agent
         
     
-    def test_initialization(self, mock_orchestration_config, mock_llm_provider):
+    def test_initialization(self, mock_orchestration_config):
         """Test agent initializes correctly"""
-        mock_provider_class, mock_llm = mock_llm_provider
         
-        with patch('agents.orchestration_agent.create_agent'):
-            agent = OrchestrationAgent(config=mock_orchestration_config)
+        agent = OrchestrationAgent(config=mock_orchestration_config)
             
-            assert agent.config == mock_orchestration_config
-            assert agent.llm is not None
-            #assert agent.checkpointer is not None
-            assert agent.tools is not None
-            assert agent.business_registry is not None
+        assert agent.config == mock_orchestration_config
+        assert agent.llm is not None
+        #assert agent.checkpointer is not None
+        assert agent.tool_registry is not None
+        assert agent.business_registry is not None
     
     '''
     def test_create_checkpointer(self, orchestration_agent):
@@ -57,18 +44,19 @@ class TestOrchestrationAgent:
     '''
     
     
-    def test_execute_success(self, orchestration_agent):
+    def test_execute_success(self, mock_orchestration_config):
         """Test successful query execution"""
+        agent = OrchestrationAgent(mock_orchestration_config)
         # Mock agent_executor for execute method
-        orchestration_agent.business_registry = MagicMock()
-        orchestration_agent.business_registry.execute_with_best_agent.return_value = {
+        agent.business_registry = MagicMock()
+        agent.business_registry.execute_with_best_agent.return_value = {
             "result": "Test response",
             "success": True,
             "timestamp": datetime.now().isoformat(),
             "selected_agent": "mock_agent"
         }
         
-        result = orchestration_agent.execute("test query")
+        result = agent.execute("test query")
         
         assert result["success"] is True
         assert result["result"] == "Test response"

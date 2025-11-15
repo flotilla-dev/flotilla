@@ -51,8 +51,12 @@ class ConfigLoader:
         # 4. Resolve KeyVault references inside all merged values
         resolved = ConfigLoader._resolve_keyvault_references(merged)
 
-        # 5. Finally construct the Settings object using resolved values
-        return Settings(**resolved)
+        # 5. Filter out unsupported keys
+        filtered = ConfigLoader._filter_to_settings_fields(resolved)
+
+        # 6. Finally construct the Settings object using resolved values
+        return Settings(**filtered)
+
 
     # ------------------------------------------------------------------------------
     # ENV FILE LOADING
@@ -108,6 +112,13 @@ class ConfigLoader:
         except Exception as ex:
             print(f"ConfigLoader: Failed to load Azure App Configuration: {ex}")
             return {}
+
+
+    @staticmethod
+    def _filter_to_settings_fields(values: Dict[str, Any]) -> Dict[str, Any]:
+        """Return only keys that exist as fields on the Settings model."""
+        allowed = set(Settings.model_fields.keys())
+        return {k: v for k, v in values.items() if k in allowed}
 
     # ------------------------------------------------------------------------------
     # KEY VAULT RESOLUTION

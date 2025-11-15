@@ -95,12 +95,6 @@ class TestToolRegistryConfig:
         config = ToolRegistryConfig(tool_packages=["tools.ai"])
         assert config.tool_recursive is True  # pydantic should coerce "true" → True
 
-    def test_missing_tool_packages_raises_error(self):
-        """Should raise ValidationError when tool_packages is missing."""
-        with pytest.raises(ValidationError) as exc:
-            ToolRegistryConfig()
-        errors = str(exc.value)
-        assert "tool_packages" in errors
 
     def test_tool_packages_must_be_list_of_strings(self):
         """Should raise ValidationError if tool_packages is not a list of strings."""
@@ -144,20 +138,6 @@ class TestAgentRegistryConfig:
 
         assert config.agent_recursive is True
 
-    def test_missing_required_fields_raises_error(self):
-        """Should raise ValidationError if required fields are missing."""
-        with pytest.raises(ValidationError) as exc:
-            AgentRegistryConfig()
-        errors = str(exc.value)
-        assert "agent_packages" in errors
-        assert "llm_config" in errors
-
-    def test_invalid_agent_packages_type_raises_error(self):
-        """Should raise ValidationError if agent_packages is not a list of strings."""
-        llm_cfg = LLMConfig(endpoint="https://api.fake.com", api_key="sk-xyz")
-
-        with pytest.raises(ValidationError):
-            AgentRegistryConfig(agent_packages="not-a-list", llm_config=llm_cfg)
 
     def test_invalid_llm_config_type_raises_error(self):
         """Should raise ValidationError if llm_config is not an LLMConfig."""

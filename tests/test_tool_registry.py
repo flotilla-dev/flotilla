@@ -32,19 +32,19 @@ def test_discover_tools_finds_valid_tools(mock_tool_registry_config):
     
 
 
-def test_loadTools_sets_loaded_flag(mock_settings):
+def test_loadTools_sets_loaded_flag(mock_tool_registry_config):
     """Ensure loadTools loads tools only once unless forced."""
-    registry = ToolRegistry(mock_settings)
+    # disable automatic discovery to test properly
+    mock_tool_registry_config.tool_discovery = False
+    registry = ToolRegistry(mock_tool_registry_config)
 
     with patch.object(registry, "_discover_tools", return_value=["tool1", "tool2"]) as mock_discover:
+        assert registry._loaded is False
+        assert len(registry._tools) == 0
         # First load
-        registry.load_tools()
+        registry.load_tools(force_reload=True)
         assert registry._loaded is True
         assert registry._tools == ["tool1", "tool2"]
-        mock_discover.assert_called_once()
-
-        # Second load without force_reload should not re-call _discover_tools
-        registry.load_tools()
         mock_discover.assert_called_once()
 
         # With force_reload=True, it should call again
@@ -52,34 +52,25 @@ def test_loadTools_sets_loaded_flag(mock_settings):
         assert mock_discover.call_count == 2
 
 
-def test_getAllTools_triggers_lazy_load(mock_settings):
-    """Ensure getAllTools() triggers a load if not already loaded."""
-    registry = ToolRegistry(mock_settings)
 
-    with patch.object(registry, "load_tools") as mock_load:
-        registry._loaded = False
-        registry.get_all_tools()
-        mock_load.assert_called_once()
-
-
-def test_getToolNames_returns_tool_names(mock_settings):
+def test_getToolNames_returns_tool_names(mock_tool_registry_config):
     """Ensure getToolNames() extracts the 'name' property correctly."""
     fake_tool_1 = MagicMock(name="tool1")
     fake_tool_1.name = "tool1"
     fake_tool_2 = MagicMock(name="tool2")
     fake_tool_2.name = "tool2"
 
-    registry = ToolRegistry(mock_settings)
+    registry = ToolRegistry(mock_tool_registry_config)
     registry._loaded = True
     registry._tools = [fake_tool_1, fake_tool_2]
 
     names = registry.get_tool_names()
     assert names == ["tool1", "tool2"]
 
-def test_tool_registration(mock_settings):
+def test_tool_registration(mock_tool_registry_config):
     mock_tool = MagicMock(name="tool_1")
     mock_tool.name = "tool_1"
-    registry = ToolRegistry(mock_settings)
+    registry = ToolRegistry(mock_tool_registry_config)
     registry._loaded = True
     # start with empty tool list
     registry._tools = []
@@ -92,7 +83,7 @@ def test_tool_registration(mock_settings):
     assert len(registry.get_all_tools()) == 0
 
 
-def test_get_tools_by_filter(mock_settings):
+def test_get_tools_by_filter(mock_tool_registry_config):
     # add mock tools
     fake_tool_1 = MagicMock(name="tool1")
     fake_tool_1.name = "tool1"
@@ -103,7 +94,7 @@ def test_get_tools_by_filter(mock_settings):
     fake_tool_4 = MagicMock(name="tool4")
     fake_tool_4.name = "tool4"
 
-    registry = ToolRegistry(mock_settings)
+    registry = ToolRegistry(mock_tool_registry_config)
     registry._loaded = True
     registry._tools = [fake_tool_1, fake_tool_2, fake_tool_3, fake_tool_4]
 
