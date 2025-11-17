@@ -8,6 +8,8 @@ from azure.appconfiguration import AzureAppConfigurationClient
 from azure.keyvault.secrets import SecretClient
 from dotenv import dotenv_values
 
+from config.application_settings import ApplicationSettings
+from config.flotilla_setttings import FlotillaSettings
 from .settings import Settings
 
 
@@ -51,11 +53,20 @@ class ConfigLoader:
         # 4. Resolve KeyVault references inside all merged values
         resolved = ConfigLoader._resolve_keyvault_references(merged)
 
-        # 5. Filter out unsupported keys
-        filtered = ConfigLoader._filter_to_settings_fields(resolved)
+        # 5. Filter for only Frmaeowrk keys
+        framework_keys = set(FlotillaSettings.model_fields.keys())
+
+        # framework_values = only keys that match FrameworkSettings fields
+        framework_values = {k: v for k, v in resolved.items() if k in framework_keys}
+
+        # application_values = everything else 
+        application_values = {k: v for k, v in resolved.items() if k not in framework_keys}
 
         # 6. Finally construct the Settings object using resolved values
-        return Settings(**filtered)
+        return Settings(
+            flotilla=FlotillaSettings(**framework_values),
+            application=ApplicationSettings(**application_values),
+        )    
 
 
     # ------------------------------------------------------------------------------

@@ -17,9 +17,9 @@ from typing import List
 class ConcreteBusinessAgent(BaseBusinessAgent):
     """Concrete implementation for testing"""
     
-    def __init__(self, agent_id:str, agent_name:str, llm_config:LLMConfig):
+    def __init__(self, agent_id:str, agent_name:str):
         self.test_keywords = ["test", "sample"]
-        super().__init__(agent_id=agent_id, agent_name=agent_name, llm_config=llm_config)
+        super().__init__(agent_id=agent_id, agent_name=agent_name)
         
     
     def _initialize_capabilities(self) ->List[AgentCapability]:
@@ -76,34 +76,56 @@ class TestAgentCapability:
 class TestBaseBusinessAgent:
     """Test base business agent functionality"""
     
-    def test_initialization(self, mock_llm_config):
+    def test_initialization(self):
         """Test agent initializes correctly"""
         agent = ConcreteBusinessAgent(
             agent_id="test_id",
-            agent_name="Test Name",
-            llm_config=mock_llm_config
-        )
+            agent_name="Test Name"        
+            )
         
         assert agent.agent_id == "test_id"
         assert agent.agent_name == "Test Name"
-        assert len(agent._capabilities) > 0
+        assert agent._capabilities is None
+        assert agent.config is None
+        assert agent.llm is None
+
+    def test_configure(self, mock_business_agent_config):
+        """Test the cofigure() lifecycle call"""
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
+        agent.configure(mock_business_agent_config)
+
+        assert agent.agent_id == "test_id"
+        assert agent.agent_name == "Test Agent"
+        assert agent._capabilities is not None
+        assert agent.config is not None
+        assert agent.llm is not None
+
+
+
+    def test_startup(self, mock_settings):
+        pass
+
+    def test_shutdown(self, mock_settings):
+        pass
     
-    def test_get_capabilities(self, mock_llm_config):
+    def test_get_capabilities(self, mock_business_agent_config):
         """Test retrieving agent capabilities"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
+
+        agent.configure(mock_business_agent_config)
         capabilities = agent.get_capabilities()
         
         assert isinstance(capabilities, list)
         assert len(capabilities) > 0
         assert all(isinstance(cap, AgentCapability) for cap in capabilities)
     
-    def test_get_info(self, mock_llm_config):
+    def test_get_info(self, mock_business_agent_config):
         """Test getting agent information"""
         agent = ConcreteBusinessAgent(
             agent_id="test_id",
-            agent_name="Test Agent",
-            llm_config=mock_llm_config
-        )
+            agent_name="Test Agent"
+            )
+        agent.configure(mock_business_agent_config)
         
         info = agent.get_info()
         
@@ -112,9 +134,9 @@ class TestBaseBusinessAgent:
         assert "capabilities" in info
         assert isinstance(info["capabilities"], list)
     
-    def test_match_keywords_exact_match(self, mock_llm_config):
+    def test_match_keywords_exact_match(self):
         """Test keyword matching with exact match"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
         
         score = agent._match_keywords(
             query="This is a test query",
@@ -123,9 +145,9 @@ class TestBaseBusinessAgent:
         
         assert score > 0
     
-    def test_match_keywords_no_match(self, mock_llm_config):
+    def test_match_keywords_no_match(self):
         """Test keyword matching with no match"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
         
         score = agent._match_keywords(
             query="completely different words",
@@ -134,9 +156,9 @@ class TestBaseBusinessAgent:
         
         assert score == 0
     
-    def test_match_keywords_multiple_matches(self, mock_llm_config):
+    def test_match_keywords_multiple_matches(self):
         """Test keyword matching with multiple matches"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
         
         score = agent._match_keywords(
             query="test sample query",
@@ -146,9 +168,9 @@ class TestBaseBusinessAgent:
         # Should score higher with more matches
         assert score > 0
     
-    def test_match_keywords_case_insensitive(self, mock_llm_config):
+    def test_match_keywords_case_insensitive(self):
         """Test keyword matching is case insensitive"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
         
         score = agent._match_keywords(
             query="TEST SAMPLE QUERY",
@@ -157,9 +179,9 @@ class TestBaseBusinessAgent:
         
         assert score > 0
     
-    def test_match_keywords_empty_keywords(self, mock_llm_config):
+    def test_match_keywords_empty_keywords(self):
         """Test keyword matching with empty keywords list"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
         
         score = agent._match_keywords(
             query="any query",
@@ -168,9 +190,9 @@ class TestBaseBusinessAgent:
         
         assert score == 0
     
-    def test_create_result_success(self, mock_llm_config):
+    def test_create_result_success(self):
         """Test creating successful result"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
         
         result = agent._create_result(
             success=True,
@@ -183,9 +205,9 @@ class TestBaseBusinessAgent:
         assert result["agent_name"] == agent.agent_name
         assert "timestamp" in result
     
-    def test_create_result_failure(self, mock_llm_config):
+    def test_create_result_failure(self):
         """Test creating failure result"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
         
         result = agent._create_result(
             success=False,
@@ -197,9 +219,9 @@ class TestBaseBusinessAgent:
         assert "agent_id" in result
         assert "timestamp" in result
     
-    def test_create_result_with_metadata(self, mock_llm_config):
+    def test_create_result_with_metadata(self):
         """Test creating result with metadata"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
         
         metadata = {"source": "test", "version": "1.0"}
         
@@ -211,10 +233,10 @@ class TestBaseBusinessAgent:
         
         assert result["metadata"] == metadata
     
-    def test_execute_returns_standardized_result(self, mock_llm_config):
+    def test_execute_returns_standardized_result(self, mock_business_agent_config):
         """Test execute method returns standardized result"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
-        
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
+        agent.configure(mock_business_agent_config)
         result = agent.execute("test query")
         
         assert "success" in result
@@ -222,23 +244,24 @@ class TestBaseBusinessAgent:
         assert "agent_name" in result
         assert "timestamp" in result
     
-    def test_can_handle_returns_float(self, mock_llm_config):
+    def test_can_handle_returns_float(self, mock_business_agent_config):
         """Test can_handle returns float score"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
-        
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
+        agent.configure(mock_business_agent_config)
         score = agent.can_handle("test query")
         
         assert isinstance(score, float)
         assert 0.0 <= score <= 1.0
     
-    def test_agent_cannot_be_instantiated_directly(self, mock_llm_config):
+    def test_agent_cannot_be_instantiated_directly(self):
         """Test that BaseBusinessAgent cannot be instantiated"""
         with pytest.raises(TypeError):
-            BaseBusinessAgent("id", "name", mock_llm_config)
+            BaseBusinessAgent("id", "name")
     
-    def test_timestamp_format(self, mock_llm_config):
+    def test_timestamp_format(self, mock_business_agent_config):
         """Test that timestamp is in ISO format"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm_config=mock_llm_config)
+        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
+        agent.configure(mock_business_agent_config)
         result = agent._create_result(success=True, data={})
         
         # Should be parseable as ISO datetime

@@ -131,7 +131,7 @@ def test_full_load(mock_kv, mock_app_config, mock_env_file):
 
     # Validate the override precedence:
     # OS env ("from_os") > App Config ("from_app_config") > .env ("from_env_file") > default ("INFO")
-    assert settings.LOG__LEVEL == "from_os"
+    assert settings.flotilla.LOG__LEVEL == "from_os"
 
     # cleanup for test isolation
     del os.environ["LOG__LEVEL"]

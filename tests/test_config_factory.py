@@ -4,7 +4,8 @@ Pytest tests for ConfigFactory
 import pytest
 from unittest.mock import Mock, patch
 from config.config_factory import ConfigFactory
-from config.settings import Settings, LLMType
+from config.settings import Settings
+from config.flotilla_setttings import FlotillaSettings, LLMType
 from config.config_loader import ConfigLoader
 from config.config_models import (
     LLMConfig,
@@ -21,17 +22,18 @@ from config.config_models import (
 def mock_settings():
     """Create a mock Settings object with default values"""
     settings = Mock(spec=Settings)
-    settings.LLM__API_KEY = "test-api-key"
-    settings.LLM__MODEL = "gpt-4o-mini"
-    settings.LLM__TEMPERATURE = "0.1"
-    settings.LLM__TYPE = LLMType.OPENAI
-    settings.LOG__LEVEL = "INFO"
-    settings.TOOL_REGISTRY__PACKAGES = ["tools"]
-    settings.TOOL_REGISTRY__RECURISVE = True
-    settings.TOOL_REGISTRY__ENABLE_DISCOVERY = True
-    settings.AGENT_REGISTRY__PACKAGES = ["agents.business_logic"]
-    settings.AGENT_REGISTRY__RECURSIVE = True
-    settings.AGENT_REGISTRY__ENABLE_DISCOVERY = True
+    settings.flotilla = Mock(spec=FlotillaSettings)
+    settings.flotilla.LLM__API_KEY = "test-api-key"
+    settings.flotilla.LLM__MODEL = "gpt-4o-mini"
+    settings.flotilla.LLM__TEMPERATURE = "0.1"
+    settings.flotilla.LLM__TYPE = LLMType.OPENAI
+    settings.flotilla.LOG__LEVEL = "INFO"
+    settings.flotilla.TOOL_REGISTRY__PACKAGES = ["tools"]
+    settings.flotilla.TOOL_REGISTRY__RECURISVE = True
+    settings.flotilla.TOOL_REGISTRY__ENABLE_DISCOVERY = True
+    settings.flotilla.AGENT_REGISTRY__PACKAGES = ["agents.business_logic"]
+    settings.flotilla.AGENT_REGISTRY__RECURSIVE = True
+    settings.flotilla.AGENT_REGISTRY__ENABLE_DISCOVERY = True
     return settings
 
 
@@ -89,7 +91,7 @@ class TestLLMConfigCreation:
     
     def test_unsupported_llm_type_raises_error(self, mock_settings):
         """Test that unsupported LLM type raises ValueError"""
-        mock_settings.LLM__TYPE = "unsupported_type"
+        mock_settings.flotilla.LLM__TYPE = "unsupported_type"
         
         
         
@@ -120,14 +122,14 @@ class TestToolRegistryConfigCreation:
 
     def test_tool_registry_config_disabled_discovery(self, mock_settings):
         """Test tool registry config with discovery disabled"""
-        mock_settings.TOOL_REGISTRY__ENABLE_DISCOVERY = False
+        mock_settings.flotilla.TOOL_REGISTRY__ENABLE_DISCOVERY = False
         config = ConfigFactory.create_tool_registry_config(mock_settings)
         assert config.tool_discovery is False
 
     
     def test_tool_registry_config_multiple_packages(self, mock_settings):
         """Test tool registry config with multiple packages"""
-        mock_settings.TOOL_REGISTRY__PACKAGES = ["tools", "custom_tools", "plugins"]
+        mock_settings.flotilla.TOOL_REGISTRY__PACKAGES = ["tools", "custom_tools", "plugins"]
         
         config = ConfigFactory.create_tool_registry_config(mock_settings)
         
@@ -157,7 +159,7 @@ class TestAgentRegistryConfigCreation:
     
     def test_agent_registry_config_disabled_discovery(self, mock_settings):
         """Test agent registry config with discovery disabled"""
-        mock_settings.AGENT_REGISTRY__ENABLE_DISCOVERY = False
+        mock_settings.flotilla.AGENT_REGISTRY__ENABLE_DISCOVERY = False
         
         config = ConfigFactory.create_agent_registry_config(mock_settings)
         
@@ -233,7 +235,7 @@ class TestOrchestrationConfigCreation:
 
     def test_orchestration_config_log_level(self, mock_settings):
         """Test orchestration config respects log level setting"""
-        mock_settings.LOG__LEVEL = "DEBUG"
+        mock_settings.flotilla.LOG__LEVEL = "DEBUG"
         
         config = ConfigFactory.create_orchestration_config(mock_settings)
         
@@ -245,7 +247,7 @@ class TestEdgeCases:
     
     def test_empty_tool_packages(self, mock_settings):
         """Test behavior with empty tool packages list"""
-        mock_settings.TOOL_REGISTRY__PACKAGES = []
+        mock_settings.flotilla.TOOL_REGISTRY__PACKAGES = []
         
         config = ConfigFactory.create_tool_registry_config(mock_settings)
         
@@ -253,13 +255,13 @@ class TestEdgeCases:
     
     def test_empty_agent_packages(self, mock_settings):
         """Test behavior with empty agent packages list"""
-        mock_settings.AGENT_REGISTRY__PACKAGES = []
+        mock_settings.flotilla.AGENT_REGISTRY__PACKAGES = []
         config = ConfigFactory.create_agent_registry_config(mock_settings)        
         assert config.agent_packages == []
     
     def test_zero_temperature(self, mock_settings):
         """Test handling of zero temperature"""
-        mock_settings.LLM__TEMPERATURE = "0"
+        mock_settings.flotilla.LLM__TEMPERATURE = "0"
         
         config = ConfigFactory.create_llm_config(mock_settings)
         
@@ -267,7 +269,7 @@ class TestEdgeCases:
     
     def test_high_temperature(self, mock_settings):
         """Test handling of high temperature value"""
-        mock_settings.LLM__TEMPERATURE = "2.0"
+        mock_settings.flotilla.LLM__TEMPERATURE = "2.0"
 
         config = ConfigFactory.create_llm_config(mock_settings)
 

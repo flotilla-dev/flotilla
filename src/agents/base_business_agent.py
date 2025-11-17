@@ -7,10 +7,12 @@ from datetime import datetime
 import json
 
 from pydantic import BaseModel, Field
-from config.config_models import LLMConfig
-from config.settings import Settings
-from config.config_factory import ConfigFactory
+from config.config_models import BusinessAgentConfg
 from llm.llm_factory import LLMFactory
+from utils.logger import get_logger
+from langchain_core.tools import StructuredTool
+
+logger = get_logger(__name__)
 
 
 class AgentCapability(BaseModel):
@@ -27,18 +29,70 @@ class BaseBusinessAgent(ABC):
     All business agents must inherit from this class
     """
     
-    def __init__(self, agent_id: str, agent_name: str, llm_config:LLMConfig | None = None):
+    def __init__(self, agent_id:str, agent_name:str):
         self.agent_id = agent_id
         self.agent_name = agent_name
-        self._capabilities = self._initialize_capabilities()
-        if (llm_config is None):
-            settings = Settings()
-            self.llm_config = ConfigFactory.create_llm_config(settings)
-        else:
-            self.llm_config = llm_config
-        self.llm = LLMFactory.get_llm(llm_config)
+        self.config = None
+        self.llm = None
+        self._capabilities = None
+        self.tools = None
+
         
     
+    def configure(self, config:BusinessAgentConfg):
+        """Lifecycle method that allows the BusinessAgent to perform necessary configuration steps after being registered with the AgentRegisry"""
+        self.config = config
+        self._capabilities = self._initialize_capabilities()
+        self.llm = LLMFactory.get_llm(config.llm_config)
+        self._process_agent_configuration()
+        
+
+    def startup(self):
+        """Lifecycle method that allows BusinessAgents to perform necessary startup logic before use.  This method is called after configure()"""
+        logger.debug(f"Run empty startup on Agent {self.agent_name}")
+
+
+    def shutdown(self):
+        """Lifecycle method that allows subclasses to perform necessary cleanup"""
+        logger.debug(f"Run empty shutdown on Agent {self.agent_name}")
+
+
+    def _process_agent_configuration(self):
+        """
+        Method called during configure() that allows subclasses to optionall process any additional data points that are attached to the BusinessAgentConfig
+        """
+        logger.debug(f"Run empty _process_agent_configuration on Agent {self.agent_name}")
+
+
+    def filter_tools(self, tool:StructuredTool) -> bool:
+        """
+        Called by the AgentRegistry and passed to the ToolRegistry this method allows the BusinessAgent to select which tools will be passed to the
+        Agent as part of the BusinessAgentConfig.  This allows the Agent to select only the Tools that it needs from those that are 
+        registered with the ToolRegistry.
+
+        The default implementation of this method always returns True, meaning all Tools will be passed to the BusinessAgent
+
+
+        Args:
+            tool: A StructuredTool instance that can be checked by the BusinessAgent
+        
+        Returns:
+            A True if the tool should be passed to the Agent, False if not
+        """
+        logger.debug(f"Filter tool {tool.name} for BusinessAgent {self.agent_name}")
+        return True
+    
+    def attach_tools(self, tools:List[StructuredTool]):
+        """
+        Lifecycle method called by the AgentRegistry during registration that attaches the list of Tools that are available to this Agent.  The list is usually a result of 
+        the tools selected via the filter_tools() method.
+
+        Args:
+            tools: The list of StructuredTool instances for this Agent
+        """
+        logger.debug(f"Attaching tools {tools}")
+        self.tools = tools
+
     @abstractmethod
     def _initialize_capabilities(self) -> List[AgentCapability]:
         """Initialize agent capabilities - must be implemented by subclasses"""

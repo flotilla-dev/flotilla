@@ -103,28 +103,23 @@ class TestToolRegistryConfig:
 
 
 class TestAgentRegistryConfig:
-    def test_valid_config_creation(self):
+    def test_valid_config_creation(self, mock_settings, mock_llm_config):
         """Should create a valid AgentRegistryConfig with all required fields."""
-        llm_cfg = LLMConfig(
-            endpoint="https://api.openai.com/v1",
-            api_key="sk-test-key",
-            model_name="gpt-4o-mini",
-            temperature=0.3,
-            max_tokens=1500
-        )
-
         config = AgentRegistryConfig(
             agent_packages=["agents.sales", "agents.marketing"],
             agent_recursive=True,
-            llm_config=llm_cfg
+            llm_config=mock_llm_config,
+            settings=mock_settings
         )
 
         assert config.agent_packages == ["agents.sales", "agents.marketing"]
         assert config.agent_recursive is True
+        assert config.llm_config is not None
         assert isinstance(config.llm_config, LLMConfig)
-        assert config.llm_config.api_key == "sk-test-key"
+        assert config.settings is not None
+        assert config.llm_config.api_key == "test-key"
 
-    def test_default_recursive_true(self):
+    def test_default_recursive_true(self, mock_settings):
         """Should default agent_recursive to True when not specified."""
         llm_cfg = LLMConfig(
             endpoint="https://example.com/llm",
@@ -133,7 +128,8 @@ class TestAgentRegistryConfig:
 
         config = AgentRegistryConfig(
             agent_packages=["agents.customer"],
-            llm_config=llm_cfg
+            llm_config=llm_cfg,
+            settings=mock_settings
         )
 
         assert config.agent_recursive is True
@@ -147,7 +143,7 @@ class TestAgentRegistryConfig:
                 llm_config="not-an-llm-config"
             )
 
-    def test_nested_llm_config_defaults_apply(self):
+    def test_nested_llm_config_defaults_apply(self, mock_settings):
         """Should preserve LLMConfig defaults when nested inside AgentRegistryConfig."""
         llm_cfg = LLMConfig(
             api_key="sk-123"
@@ -155,7 +151,8 @@ class TestAgentRegistryConfig:
 
         config = AgentRegistryConfig(
             agent_packages=["agents.test"],
-            llm_config=llm_cfg
+            llm_config=llm_cfg,
+            settings=mock_settings
         )
 
         assert config.llm_config.temperature == 0.1
