@@ -37,13 +37,12 @@ class OrchestrationAgent:
         self.tool_registry = ToolRegistry(self.config.tool_registry_config)
         logger.info(f"Loaded {len(self.tool_registry.get_all_tools())} from from ToolRegistry")
 
-        #TODO: Tools aren't passed to the agents!!!!
-
         # load the agents
         if (self.config.agent_registry_config.llm_config is None):
             logger.debug("AgentRegistryConfig.LLMConfig was None, use OrchestrationAgent LLMConfig")
             self.config.agent_registry_config.llm_config = self.config.llm_config
-        self.business_registry = BusinessAgentRegistry(self.config.agent_registry_config)
+            
+        self.business_registry = BusinessAgentRegistry(self.config.agent_registry_config, tool_registry=self.tool_registry)
         logger.info(f"Registered {len(self.business_registry.agents)} with AgentRegistry")
         
         logger.info(f"Orchestration agent initialized for client: {config.client.client_name}")
@@ -83,4 +82,6 @@ class OrchestrationAgent:
     def cleanup(self):
         """Cleanup resources"""
         logger.info("Cleaning up orchestration agent resources")
+        
+        self.business_registry.shutdown()
     

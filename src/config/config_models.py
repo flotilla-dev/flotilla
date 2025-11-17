@@ -3,6 +3,8 @@ Configuration models for the orchestration system
 """
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
+from config.settings import Settings
+from langchain_core.tools import StructuredTool
 
 
 
@@ -37,8 +39,20 @@ class AgentRegistryConfig(BaseModel):
     agent_discovery: bool = Field(default=True, description="Controls if Agents should automatcally be discovered")
     agent_packages:List[str] | None = Field(default=[], description="A list of packages to load agents from")
     agent_recursive: bool = Field(default=True, description="If the Agent Registry should load recurisvely")
-    llm_config: LLMConfig | None = Field(default=None, description="The LLMConfig to use with the AgentRegistry",
+    llm_config: LLMConfig | None = Field(default=None, description="The LLMConfig to use with the AgentRegistry")
+    settings: Settings = Field(..., description="The full settings for the application")
+    
+
+class BusinessAgentConfg(BaseModel):
+    """Configuration for a BusinesAgent"""
+    llm_config: LLMConfig = Field(default=None, description="The LLMConfig for use in the BusinessAgent")
+    tools: List[StructuredTool] | None = Field(default = [], description="List of Tools that be passed to the Agent")
+    agent_configuration: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Additional agent configuration data"
     )
+
+
 
 '''
 class FabricWorkspaceConfig(BaseModel):

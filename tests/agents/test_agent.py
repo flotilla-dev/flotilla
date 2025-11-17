@@ -8,8 +8,8 @@ logger = get_logger(__name__)
 
 class TestAgent(BaseBusinessAgent):
 
-    def __init__(self, llm_config:LLMConfig | None = None):
-        super().__init__(agent_id="test_agent_1", agent_name= "Test Agent_1", llm_config=llm_config)
+    def __init__(self):
+        super().__init__(agent_id="test_agent_1", agent_name= "Test Agent_1")
 
     def _initialize_capabilities(self) -> List[AgentCapability]:
         capabilities = [

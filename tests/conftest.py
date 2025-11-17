@@ -7,6 +7,8 @@ import pytest
 from unittest.mock import Mock, MagicMock
 from pathlib import Path
 
+from config.settings import Settings, FlotillaSettings, ApplicationSettings
+
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -16,12 +18,11 @@ from config.config_models import (
     AgentRegistryConfig,
     ClientConfig,
     OrchestrationConfig,
-    OpenAIConfig
+    OpenAIConfig,
+    BusinessAgentConfg
 )
 
-from config.settings import Settings
 
-settings = Settings()
 
 @pytest.fixture
 def mock_llm_config():
@@ -41,12 +42,39 @@ def mock_tool_registry_config():
     )
 
 @pytest.fixture
+def mock_settings():
+    return dummy_settings()
+
+
+def dummy_settings() -> Settings:
+    return Settings(
+        flotilla=FlotillaSettings(),
+        application=ApplicationSettings(
+            agent_configs={
+                "Test Agent": {"foo": "bar"},
+                "Agent 1": {"threshold": 0.7},
+            }
+        ),
+    )
+
+@pytest.fixture
 def mock_agent_registry_config():
-    return AgentRegistryConfig(
+    return dummy_agent_registry_config()
+
+def dummy_agent_registry_config() -> AgentRegistryConfig:
+    return AgentRegistryConfig( 
         agent_discovery=False,
         agent_packages=["tests.agents"],
         agent_recursive=False,
-        llm_config=OpenAIConfig(api_key="test-key", model_name="gpt")
+        llm_config=OpenAIConfig(api_key="test-key", model_name="gpt"),
+        settings = dummy_settings()
+    )
+
+@pytest.fixture
+def mock_business_agent_config():
+    return BusinessAgentConfg(
+        llm_config=OpenAIConfig(api_key="test-key", temperature=0.1, model_name="gpt-4"),
+        agent_configuration={}
     )
 
 @pytest.fixture
@@ -55,76 +83,8 @@ def mock_orchestration_config():
         llm_config=OpenAIConfig(api_key="test-key", temperature=0.1, model_name="gpt-4"),
         client=ClientConfig(client_id="test_client", client_name="Test Client"),
         tool_registry_config=ToolRegistryConfig(tool_discovery=True, tool_packages=["tests.tools"], tool_recursive=True),
-        agent_registry_config=AgentRegistryConfig(agent_discovery=True, agent_packages=["tests.agents"], agent_recursive=True)
+        agent_registry_config=dummy_agent_registry_config()
     )
-
-'''
-@pytest.fixture
-def mock_azure_openai_config():
-    """Mock Azure OpenAI configuration"""
-    return AzureOpenAIConfig(
-        endpoint="https://test-resource.openai.azure.com/",
-        api_key="test-api-key",
-        api_version="2024-02-15-preview",
-        deployment_name="gpt-4",
-        temperature=0.7,
-        max_tokens=2000
-    )
-
-
-@pytest.fixture
-def mock_fabric_workspace_config():
-    """Mock Fabric workspace configuration"""
-    return FabricWorkspaceConfig(
-        workspace_id="test-workspace-id",
-        lakehouse_id="test-lakehouse-id",
-        lakehouse_name="test_lakehouse",
-        endpoint="https://api.fabric.microsoft.com/v1",
-        tenant_id="test-tenant-id"
-    )
-
-
-@pytest.fixture
-def mock_block_mcp_config():
-    """Mock Block MCP configuration"""
-    return BlockMCPConfig(
-        server_command="npx",
-        server_args=["-y", "@modelcontextprotocol/server-square"],
-        access_token="test-access-token",
-        environment="sandbox",
-        timeout=30
-    )
-
-
-@pytest.fixture
-def mock_client_config(
-    mock_azure_openai_config,
-    mock_fabric_workspace_config,
-    mock_block_mcp_config
-):
-    """Mock client configuration"""
-    return ClientConfig(
-        client_id="test_client_001",
-        client_name="Test Client",
-        azure_openai=mock_azure_openai_config,
-        fabric_workspace=mock_fabric_workspace_config,
-        block_mcp=mock_block_mcp_config,
-        metadata={"industry": "test", "region": "test_region"}
-    )
-
-
-@pytest.fixture
-def mock_orchestration_config(mock_client_config):
-    """Mock orchestration configuration"""
-    return OrchestrationConfig(
-        client=mock_client_config,
-        log_level="INFO",
-        enable_tracing=True,
-        max_retries=3,
-        retry_delay=1.0
-    )
-
-'''
 
 @pytest.fixture
 def mock_llm():
@@ -140,6 +100,14 @@ def mock_llm_with_text():
     llm = MagicMock()
     llm.invoke = Mock(return_value=MagicMock(content="Test response"))
     return llm
+
+@pytest.fixture
+def mock_tool_registry():
+    """Mock Tool Registry that does nothing"""
+    tool_registry = MagicMock()
+    tool_registry.get_all_tools.return_value = []
+    tool_registry.get_tools.side_effect = lambda fn: list(filter(fn, tool_registry.get_all_tools()))
+    return tool_registry
 
 
 

@@ -9,7 +9,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from agents.base_business_agent import BaseBusinessAgent
 from llm.llm_factory import LLMFactory
 from config.config_models import AgentRegistryConfig
+from config.config_factory import ConfigFactory
 from utils.logger import get_logger
+from tools.tool_registry import ToolRegistry
 
 import importlib
 import inspect
@@ -25,19 +27,18 @@ class BusinessAgentRegistry:
     Dynamically routes queries to the most appropriate agent based on content
     """
     
-    def __init__(self, config:AgentRegistryConfig):       
+    def __init__(self, config:AgentRegistryConfig, tool_registry:ToolRegistry):       
         self.config = config
+        self.tool_registry = tool_registry
         
         self.llm = LLMFactory.get_llm(self.config.llm_config)
         self.agents: Dict[str, BaseBusinessAgent] = {}
         if (self.config.agent_discovery):
-            self.agents = self._discover_agents()
+            self._discover_agents()
  
     
-    def _discover_agents(self) -> Dict[str, BaseBusinessAgent]:
+    def _discover_agents(self):
         """Internal: scans configured packages and loads BaseBusinessAgent objects."""
-        all_agents = {}
-
         for package_name in self.config.agent_packages:
             package = importlib.import_module(package_name)
             package_path = pathlib.Path(package.__file__).parent
@@ -48,37 +49,33 @@ class BusinessAgentRegistry:
                 else pkgutil.iter_modules([str(package_path)])
             )
 
+            # Scan submodules
             for _, full_module_name, is_pkg in iterator:
-                if is_pkg:
-                    continue
+                if not is_pkg:
+                    self._load_agents_from_module(full_module_name)
 
+            # Also check the package’s __init__.py
+            self._load_agents_from_module(package_name)
+
+
+
+    def _load_agents_from_module(self, module_name: str):
+        """Import a module and load all BaseBusinessAgent subclasses inside it."""
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as e:
+            logger.warning(f"Skipping {module_name}: import failed ({e})")
+            return
+
+        for _, obj in inspect.getmembers(module, inspect.isclass):
+            if issubclass(obj, BaseBusinessAgent) and obj is not BaseBusinessAgent:
                 try:
-                    module = importlib.import_module(full_module_name)
+                    agent_instance = obj()
+                    self.register_agent(agent_instance)
                 except Exception as e:
-                    print(f"Skipping {full_module_name}: import failed ({e})")
-                    continue
+                    logger.error(f"Failed to initialize agent {obj.__name__}: {e}")
 
-                for _, obj in inspect.getmembers(module, inspect.isclass):
-                    # Look for subclasses of BaseBusinessAgent (not the base class itself)
-                    if issubclass(obj, BaseBusinessAgent) and obj is not BaseBusinessAgent:
-                        try:
-                            agent_instance = obj()
-                            all_agents[agent_instance.agent_id] = agent_instance
-                        except Exception as e:
-                            logger.error(f"Failed to initialize agent {obj.__name__}: {e}")
 
-        # Also check classes defined directly in the package’s __init__.py
-        for package_name in self.config.agent_packages:
-            package = importlib.import_module(package_name)
-            for _, obj in inspect.getmembers(package, inspect.isclass):
-                if issubclass(obj, BaseBusinessAgent) and obj is not BaseBusinessAgent:
-                    try:
-                        agent_instance = obj()
-                        all_agents[agent_instance.agent_id] = agent_instance
-                    except Exception as e:
-                        logger.error(f"Failed to initialize agent {obj.__name__}: {e}")
-
-        return all_agents
 
     
     def register_agent(self, agent: BaseBusinessAgent):
@@ -88,8 +85,21 @@ class BusinessAgentRegistry:
         Args:
             agent: Business agent instance
         """
-        self.agents[agent.agent_id] = agent
-        logger.info(f"Registered agent: {agent.agent_name} (ID: {agent.agent_id}")
+        logger.info(f"Registering agent: {agent.agent_name} (ID: {agent.agent_id}")
+        try:
+            # 1) Greate the Agent speficic BusinessAgnetConfig for this instance and call configure()
+            agent_config = ConfigFactory.create_business_agent_config(agent.agent_name, self.config.settings)
+            agent.configure(agent_config)
+            # 2) filter and attach tools to the Agent
+            tools = self.tool_registry.get_tools(agent.filter_tools)
+            agent.attach_tools(tools)
+            # 3) Start the agent
+            agent.startup()
+            # 4) Add agent to the internal map of Agents 
+            self.agents[agent.agent_id] = agent
+        except Exception as e:
+            logger.error(f"Error registering Agent {agent.agent_name}: {e}")
+        
     
     def unregister_agent(self, agent_id: str):
         """
@@ -98,9 +108,11 @@ class BusinessAgentRegistry:
         Args:
             agent_id: Agent ID to remove
         """
+        logger.info(f"Attempting to unregister agent: {agent_id}")
         if agent_id in self.agents:
             agent = self.agents.pop(agent_id)
-            logger.info(f"Unregistered agent: {agent.agent_name}")
+            agent.shutdown()
+
     
     def get_agent(self, agent_id: str) -> Optional[BaseBusinessAgent]:
         """Get agent by ID"""
@@ -292,3 +304,16 @@ class BusinessAgentRegistry:
         
         return results
     
+
+    def shutdown(self):
+        """
+        Lifecycle method that is called by OrchestrationAgent to safely shutdown the AgentRegistry.  The AgentRegistry will cycle through all registered BusinessAgents and call their
+        shutdown methods to allow for safe cleanup
+        """
+        logger.info("Shutdown called for AgentRegistry, shutdown all registered Agents")
+        agent_names = self.list_agent_names()
+        
+        for name in agent_names:
+            logger.debug(f"Shutdown BusinessAgent {name}")
+            agent = self.get_agent(name)
+            agent.shutdown()
