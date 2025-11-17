@@ -35,8 +35,11 @@ def mock_llm_config():
 
 @pytest.fixture
 def mock_tool_registry_config():
+    return dummy_tool_registry_config()
+
+def dummy_tool_registry_config() -> ToolRegistryConfig:
     return ToolRegistryConfig(
-        tool_packages=["tests.tools"],
+        tool_packages=["tests.unit.tools"],
         tool_discovery=True,
         tool_recursive=True
     )
@@ -64,7 +67,7 @@ def mock_agent_registry_config():
 def dummy_agent_registry_config() -> AgentRegistryConfig:
     return AgentRegistryConfig( 
         agent_discovery=False,
-        agent_packages=["tests.agents"],
+        agent_packages=["tests.unit.agents"],
         agent_recursive=False,
         llm_config=OpenAIConfig(api_key="test-key", model_name="gpt"),
         settings = dummy_settings()
@@ -82,7 +85,7 @@ def mock_orchestration_config():
     return OrchestrationConfig(
         llm_config=OpenAIConfig(api_key="test-key", temperature=0.1, model_name="gpt-4"),
         client=ClientConfig(client_id="test_client", client_name="Test Client"),
-        tool_registry_config=ToolRegistryConfig(tool_discovery=True, tool_packages=["tests.tools"], tool_recursive=True),
+        tool_registry_config=dummy_tool_registry_config(),
         agent_registry_config=dummy_agent_registry_config()
     )
 

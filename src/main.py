@@ -12,6 +12,9 @@ from rich.table import Table
 from rich import print as rprint
 
 from config.settings import Settings
+from config.config_loader import ConfigLoader
+from config.config_factory import ConfigFactory
+from config.config_models import OrchestrationConfig
 from agents.orchestration_agent import OrchestrationAgent
 from utils.logger import setup_logging, get_logger
 
@@ -21,27 +24,23 @@ logger = get_logger(__name__)
 
 
 @click.group()
-@click.option('--config-dir', default='config', help='Configuration directory path')
-@click.option('--log-level', default='INFO', help='Logging level')
+@click.option('--env', default='DEV', help='Environment to use')
 @click.pass_context
-def cli(ctx, config_dir, log_level):
+def cli(ctx, env):
     """Orchestration Agent CLI - Coordinate data agents, decisioning, and POS operations"""
     ctx.ensure_object(dict)
-    ctx.obj['config_dir'] = config_dir
-    ctx.obj['log_level'] = log_level
-    setup_logging(log_level)
+    settings = ConfigLoader.load(env=env)
+    ctx.obj['settings'] = settings
+    setup_logging(settings.flotilla.LOG__LEVEL)
 
 
 
 @cli.command()
 @click.argument('query')
-@click.option('--client-config', help='Path to client config file')
-@click.option('--azure-config', help='Path to Azure OpenAI config file')
-@click.option('--block-config', help='Path to Block MCP config file')
 @click.pass_context
-def query(ctx, query, client_config, azure_config, block_config):
+def query(ctx, query):
     """Execute a natural language query"""
-    config_dir = ctx.obj['config_dir']
+    settings = ctx.obj['settings']
     
     console.print(Panel.fit(
         f"[bold cyan]Query:[/bold cyan] {query}",
@@ -49,10 +48,9 @@ def query(ctx, query, client_config, azure_config, block_config):
     ))
     
     try:
-
-        settings = Settings()
         # Initialize orchestration agent
-        agent = OrchestrationAgent(settings.get_orchestration_config())
+        orchestration_config = ConfigFactory.create_orchestration_config(settings=settings)
+        agent = OrchestrationAgent(orchestration_config)
         
         # Execute query
         with console.status("[bold green]Executing query..."):
@@ -85,13 +83,10 @@ def query(ctx, query, client_config, azure_config, block_config):
 
 
 @cli.command()
-@click.option('--client-config', help='Path to client config file')
-@click.option('--azure-config', help='Path to Azure OpenAI config file')
-@click.option('--block-config', help='Path to Block MCP config file')
 @click.pass_context
-def test(ctx, client_config, azure_config, block_config):
+def test(ctx):
     """Test the orchestration system components"""
-    config_dir = ctx.obj['config_dir']
+    settings = ctx.obj['settings']
     
     console.print(Panel.fit(
         "[bold cyan]Testing Orchestration System[/bold cyan]",
@@ -100,9 +95,9 @@ def test(ctx, client_config, azure_config, block_config):
     
     try:
 
-        settings = Settings()
         # Initialize orchestration agent
-        agent = OrchestrationAgent(settings.get_orchestration_config())
+        orchestration_config = ConfigFactory.create_orchestration_config(settings=settings)
+        agent = OrchestrationAgent(orchestration_config)
         console.print(f"[green]✓[/green] Orchestration agent initialized\n")
         
         # Test tools
@@ -136,7 +131,7 @@ def test(ctx, client_config, azure_config, block_config):
 @click.pass_context
 def info(ctx):
     """Display system information"""
-    config_dir = ctx.obj['config_dir']
+    settings = ctx.obj['settings']
     
     console.print(Panel.fit(
         "[bold cyan]Orchestration Agent System Information[/bold cyan]",
@@ -147,31 +142,12 @@ def info(ctx):
     table.add_column("Property", style="cyan")
     table.add_column("Value")
     
-    table.add_row("Configuration Directory", config_dir)
-    table.add_row("Log Level", ctx.obj['log_level'])
     
     # Check if config files exist
-    config_path = Path(config_dir)
-    client_config_exists = (config_path / "client_config.json").exists()
-    azure_config_exists = (config_path / "azure_openai_config.json").exists()
-    block_config_exists = (config_path / "block_mcp_config.json").exists()
-    
-    status = "✓" if all([client_config_exists, azure_config_exists, block_config_exists]) else "✗"
-    table.add_row("Configuration Status", f"{status} {'Complete' if status == '✓' else 'Incomplete'}")
     
     console.print(table)
     
-    console.print("\n[bold]Components:[/bold]")
-    console.print("  • Fabric Data Agent - Text-to-SQL lakehouse queries")
-    console.print("  • Decisioning Agent - LLM-based decision trees")
-    console.print("  • Block MCP Client - Square POS integration")
-    
-    console.print("\n[bold]Available Commands:[/bold]")
-    console.print("  • init     - Initialize configuration files")
-    console.print("  • query    - Execute natural language query")
-    console.print("  • workflow - Execute workflow from JSON file")
-    console.print("  • test     - Test system components")
-    console.print("  • info     - Display this information")
+
 
 
 
@@ -179,27 +155,21 @@ def info(ctx):
 @click.pass_context
 def interactive(ctx):
     """Start interactive mode"""
-    config_dir = ctx.obj['config_dir']
-    console.print(f"Config dir {config_dir}")
+    settings = ctx.obj['settings']
     
     console.print(Panel.fit(
         "[bold cyan]Interactive Mode[/bold cyan]\nType 'exit' or 'quit' to end session",
         border_style="cyan"
     ))
     
-    try:
-        # Load configuration
-        #loader = ConfigLoader(config_dir)
-        #config = loader.load_orchestration_config()
-        settings = Settings()
-
-        
+    try:       
         #console.print(f"\n[dim]Client: {config.client.client_name}[/dim]")
         console.print(f"[dim]Initializing agent...[/dim]\n")
         
         # Initialize orchestration agent
-        agent = OrchestrationAgent(settings.get_orchestration_config())
-        
+        orchestration_config = ConfigFactory.create_orchestration_config(settings=settings)
+        agent = OrchestrationAgent(orchestration_config)
+
         console.print("[green]✓[/green] Ready for queries\n")
         
         # Interactive loop

@@ -69,12 +69,12 @@ class TestBusinessAgentRegistry:
         assert "test_agent" in registry.agents
         assert registry.agents["test_agent"] == mock_agent
 
-    def test_discover_agents(self, mock_settings, mock_llm_config, mock_tool_registry):
+    def test_discover_agents(self, mock_agent_registry_config, mock_tool_registry):
         """Tests the automatic discovery of agents"""
-        #module = importlib.import_module("tests.agents")
-        #print(f"Module loaded from imporrtlib {module}")
-        config = AgentRegistryConfig(agent_packages=["tests.agents"], agent_discovery=True, agent_recursive=True, llm_config=mock_llm_config, settings=mock_settings)
-        registry = BusinessAgentRegistry(config=config, tool_registry=mock_tool_registry)
+        config = mock_agent_registry_config
+        config.agent_discovery = True
+        config.agent_recursive = True
+        registry = BusinessAgentRegistry(config=mock_agent_registry_config, tool_registry=mock_tool_registry)
 
         #all_agents = registry._discover_agents()
 
@@ -186,16 +186,12 @@ class TestBusinessAgentRegistry:
 
     
 
-    def test_select_test_agent(self, mock_settings, mock_llm_config, mock_tool_registry):
+    def test_select_test_agent(self, mock_agent_registry_config, mock_tool_registry):
         """Try query for weather lookup"""
-        config = AgentRegistryConfig(
-            agent_discovery=True, 
-            agent_packages=["tests.agents"], 
-            agent_recursive=True,
-            llm_config=mock_llm_config,
-            settings=mock_settings
-        )
-        registry = BusinessAgentRegistry(config=config, tool_registry=mock_tool_registry)
+        config = mock_agent_registry_config
+        config.agent_discovery = True
+        config.agent_recursive = True
+        registry = BusinessAgentRegistry(config=mock_agent_registry_config, tool_registry=mock_tool_registry)
 
         selected = registry.select_agent(
             query = "What is the weather in Chicago?",

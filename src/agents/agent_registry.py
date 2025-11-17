@@ -316,4 +316,5 @@ class BusinessAgentRegistry:
         for name in agent_names:
             logger.debug(f"Shutdown BusinessAgent {name}")
             agent = self.get_agent(name)
-            agent.shutdown()
+            if (agent):
+                agent.shutdown()

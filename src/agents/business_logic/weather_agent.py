@@ -1,22 +1,29 @@
 from agents.base_business_agent import (
     BaseBusinessAgent,
-    BusinessDomain,
     AgentCapability
 )
 from typing import Any, Dict, Optional
-from llm.llm_factory import LLMFactory,LLMConfig
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage
 from utils.logger import get_logger
+from dataclasses import dataclass
+
 
 
 logger = get_logger(__name__)
 
+@dataclass
+class ResponseFormat:
+    """Response schemea for the agent"""
+    punny_response: str
+    weather_conditions: str | None = None    
 
 class WeatherAgent(BaseBusinessAgent):
     """Business logic agent for return punny weather foracasts"""
 
-    def __init__(self, llm_config:LLMConfig | None = None):
-        super().__init__("weather_agent", "Weather Pun Agent", llm_config)
+    def __init__(self):
+        super().__init__("weather_agent", "Weather Pun Agent")
+        self.agent = None
 
 
     def _initialize_capabilities(self):
@@ -30,13 +37,9 @@ class WeatherAgent(BaseBusinessAgent):
                     "What is the forceast for NYC?"                ]
             )]
         return capabilities
-        
     
-    def get_domain(self) -> BusinessDomain:
-        return BusinessDomain.WEATHER
-    
-    def execute(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        system_prompt="""You are an expert weather forecaster, who speaks in puns.
+    def startup(self):
+        SYSTEM_PROMPT="""You are an expert weather forecaster, who speaks in puns.
 
         You have access to two tools:
 
@@ -46,7 +49,22 @@ class WeatherAgent(BaseBusinessAgent):
         If a user asks you for the weather, make sure you know the location. If you can tell from the question that they mean wherever they are, use the get_user_location tool to find their location.
         
         Provide the results in structured JSON format """
+        self.agent = agent = create_agent(
+            model=self.llm,
+            system_prompt=SYSTEM_PROMPT,
+            tools=self.tools,
+            response_format=ResponseFormat
+        )
 
+        return super().startup()
+    
+    def execute(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+
+        messages = [HumanMessage(content=query)]
+        response = self.agent.invoke({"messages": messages}, context=context)
+        #response = self.agent.invoke({f"messages": [{"role": "user", "content": {query}}]}, context=context)
+
+        '''
         user_prompt=f"Query: {query}"
         logger.info(f"Type of self.llm: {type(self.llm)}")
         logger.info(f"Calling LLM to get punny weather for query {user_prompt}")
@@ -54,6 +72,7 @@ class WeatherAgent(BaseBusinessAgent):
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt)        
         ])
+        '''
+        return self._parse_json_response(response.messages.ai)
         
-        return self._parse_json_response(response.content)
-        
+
