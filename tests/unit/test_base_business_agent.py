@@ -9,6 +9,15 @@ from agents.base_business_agent import (
     AgentCapability
 )
 
+from unittest.mock import Mock, MagicMock, patch
+
+
+from agents.business_agent_response import (
+    BusinessAgentResponse, 
+    ErrorResponse,
+    ResponseStatus
+)
+
 from config.config_models import LLMConfig
 
 from typing import List
@@ -190,59 +199,7 @@ class TestBaseBusinessAgent:
         
         assert score == 0
     
-    def test_create_result_success(self):
-        """Test creating successful result"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
-        
-        result = agent._create_result(
-            success=True,
-            data={"test": "data"}
-        )
-        
-        assert result["success"] is True
-        assert result["data"] == {"test": "data"}
-        assert result["agent_id"] == agent.agent_id
-        assert result["agent_name"] == agent.agent_name
-        assert "timestamp" in result
     
-    def test_create_result_failure(self):
-        """Test creating failure result"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
-        
-        result = agent._create_result(
-            success=False,
-            error="Test error message"
-        )
-        
-        assert result["success"] is False
-        assert result["error"] == "Test error message"
-        assert "agent_id" in result
-        assert "timestamp" in result
-    
-    def test_create_result_with_metadata(self):
-        """Test creating result with metadata"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
-        
-        metadata = {"source": "test", "version": "1.0"}
-        
-        result = agent._create_result(
-            success=True,
-            data={"test": "data"},
-            metadata=metadata
-        )
-        
-        assert result["metadata"] == metadata
-    
-    def test_execute_returns_standardized_result(self, mock_business_agent_config):
-        """Test execute method returns standardized result"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
-        agent.configure(mock_business_agent_config)
-        result = agent.execute("test query")
-        
-        assert "success" in result
-        assert "agent_id" in result
-        assert "agent_name" in result
-        assert "timestamp" in result
     
     def test_can_handle_returns_float(self, mock_business_agent_config):
         """Test can_handle returns float score"""
@@ -257,14 +214,127 @@ class TestBaseBusinessAgent:
         """Test that BaseBusinessAgent cannot be instantiated"""
         with pytest.raises(TypeError):
             BaseBusinessAgent("id", "name")
-    
-    def test_timestamp_format(self, mock_business_agent_config):
-        """Test that timestamp is in ISO format"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
-        agent.configure(mock_business_agent_config)
-        result = agent._create_result(success=True, data={})
-        
-        # Should be parseable as ISO datetime
-        timestamp = result["timestamp"]
-        parsed = datetime.fromisoformat(timestamp)
-        assert isinstance(parsed, datetime)
+
+    # --------------------------------------
+    # ADDITIONAL TESTS START HERE
+    # --------------------------------------
+
+    """Tests for new response-building methods in BaseBusinessAgent"""
+
+    @pytest.fixture
+    def agent(self):
+        return ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent")
+
+    def test_build_success_response(self, agent):
+        """Ensure success response is built correctly"""
+        resp = agent.build_success_response(
+            query="weather in chicago",
+            data={"temp": "72F"},
+            message="OK",
+            confidence=0.8,
+            actions=[{"type": "next"}],
+        )
+
+        assert isinstance(resp, BusinessAgentResponse)
+        assert resp.status == ResponseStatus.SUCCESS
+        assert resp.agent_name == "Test Agent"
+        assert resp.query == "weather in chicago"
+        assert resp.data == {"temp": "72F"}
+        assert resp.message == "OK"
+        assert resp.confidence == 0.8
+        assert resp.actions == [{"type": "next"}]
+        assert resp.errors is None
+
+    def test_build_error_response(self, agent):
+        """Ensure error response is built correctly"""
+        resp = agent.build_error_response(
+            query="invalid",
+            error_code="SOME_ERROR",
+            error_details="details here",
+            message="Failed",
+        )
+
+        assert resp.status == ResponseStatus.ERROR
+        assert resp.agent_name == "Test Agent"
+        assert resp.query == "invalid"
+        assert resp.message == "Failed"
+        assert resp.confidence == 0.0
+        assert resp.data == {}
+        assert isinstance(resp.errors, list)
+        assert resp.errors[0].error_code == "SOME_ERROR"
+        assert resp.errors[0].error_details == "details here"
+
+    def test_parse_json_response_valid_json(self, agent):
+        """Test JSON parsing helper with valid JSON string"""
+        raw = '{"a": 1, "b": 2}'
+        parsed = agent._parse_json_response(raw)
+        assert parsed == {"a": 1, "b": 2}
+
+    def test_parse_json_response_invalid_json(self, agent):
+        """Should fall back to raw response wrapper"""
+        raw = "not-json"
+        parsed = agent._parse_json_response(raw)
+        assert parsed == {"raw_response": "not-json"}
+
+    def test_parse_json_response_dict(self, agent):
+        """If dict is passed, return unchanged"""
+        parsed = agent._parse_json_response({"x": 7})
+        assert parsed == {"x": 7}
+
+    @patch("agents.base_business_agent.LLMFactory.get_llm")
+    def test_llm_call_success(self, mock_llm_factory, agent):
+        """Test successful LLM call through helper"""
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(content='{"result": "ok"}')
+        mock_llm_factory.return_value = mock_llm
+
+        # Configure agent so llm is created
+        agent.configure(MagicMock(llm_config=MagicMock()))
+
+        resp = agent.llm_call(messages=[{"role": "user"}], query="hello")
+
+        assert resp.status == ResponseStatus.SUCCESS
+        assert resp.data == {"result": "ok"}
+
+    @patch("agents.base_business_agent.LLMFactory.get_llm")
+    def test_llm_call_failure(self, mock_llm_factory, agent):
+        """LLM call should return structured error response on exception"""
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = Exception("boom")
+        mock_llm_factory.return_value = mock_llm
+
+        agent.configure(MagicMock(llm_config=MagicMock()))
+
+        resp = agent.llm_call(messages=[], query="test")
+
+        assert resp.status == ResponseStatus.ERROR
+        assert resp.errors[0].error_code == "LLM_CALL_FAILED"
+        assert "boom" in resp.errors[0].error_details
+
+    def test_run_internal_agent_success(self, agent):
+        """run_internal_agent should return success response"""
+        agent.agent = MagicMock()
+        agent.agent.invoke.return_value = {"val": 123}
+
+        resp = agent.run_internal_agent(query="hi")
+
+        assert resp.status == ResponseStatus.SUCCESS
+        assert resp.data == {"result": {"val": 123}}
+
+    def test_run_internal_agent_not_initialized(self, agent):
+        """If .agent was never set, return structured error"""
+        resp = agent.run_internal_agent(query="hi")
+
+        assert resp.status == ResponseStatus.ERROR
+        assert resp.errors[0].error_code == "AGENT_NOT_INITIALIZED"
+
+    def test_run_internal_agent_failure(self, agent):
+        """Exception inside internal agent should produce structured error"""
+        agent.agent = MagicMock()
+        agent.agent.invoke.side_effect = Exception("oops")
+
+        resp = agent.run_internal_agent(query="boom")
+
+        assert resp.status == ResponseStatus.ERROR
+        assert resp.errors[0].error_code == "AGENT_EXECUTION_FAILED"
+        assert "oops" in resp.errors[0].error_details

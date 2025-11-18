@@ -12,6 +12,7 @@ from config.config_models import AgentRegistryConfig
 from config.config_factory import ConfigFactory
 from utils.logger import get_logger
 from tools.tool_registry import ToolRegistry
+from agents.business_agent_response import BusinessAgentResponse, ResponseStatus, ErrorResponse
 
 import importlib
 import inspect
@@ -240,7 +241,7 @@ class BusinessAgentRegistry:
         query: str,
         context: Optional[Dict[str, Any]] = None,
         min_confidence: float = 0.3
-    ) -> Dict[str, Any]:
+    ) -> BusinessAgentResponse:
         """
         Select and execute with the best agent for the query
         
@@ -265,20 +266,15 @@ class BusinessAgentRegistry:
         
         # Execute with selected agent
         logger.info(f"Executing query with agent: {selected_agent.agent_name}")
-        result = selected_agent.execute(query, context)
-        
-        # Add selection metadata
-        result["selected_agent"] = selected_agent.agent_name
-        result["selection_timestamp"] = datetime.now().isoformat()
-        
-        return result
+        return selected_agent.execute(query, context)
     
+    '''
     def execute_with_multiple_agents(
         self,
         query: str,
         context: Optional[Dict[str, Any]] = None,
         min_confidence: float = 0.3
-    ) -> List[Dict[str, Any]]:
+    ) -> BusinessAgentResponse:
         """
         Execute query with all agents that meet confidence threshold
         Useful for getting multiple perspectives
@@ -303,7 +299,7 @@ class BusinessAgentRegistry:
                 results.append(result)
         
         return results
-    
+        '''
 
     def shutdown(self):
         """
