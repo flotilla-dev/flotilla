@@ -10,7 +10,8 @@ from config.config_models import (
     AgentRegistryConfig,
     OrchestrationConfig,
     ClientConfig,
-    BusinessAgentConfg
+    BusinessAgentConfg,
+    ToolConfig
 )
 from config.settings import Settings, ApplicationSettings, FlotillaSettings
 from config.flotilla_setttings import LLMType
@@ -57,7 +58,8 @@ class ConfigFactory:
         return ToolRegistryConfig(
             tool_packages = settings.flotilla.TOOL_REGISTRY__PACKAGES,
             tool_recursive = settings.flotilla.TOOL_REGISTRY__RECURISVE,
-            tool_discovery = settings.flotilla.TOOL_REGISTRY__ENABLE_DISCOVERY
+            tool_discovery = settings.flotilla.TOOL_REGISTRY__ENABLE_DISCOVERY,
+            settings= settings
         )
     
     @staticmethod
@@ -89,9 +91,15 @@ class ConfigFactory:
             agent_registry_config=ConfigFactory.create_agent_registry_config(settings)
         )
     
-
-    def create_business_agent_config(agent_name:str, settings:Settings) -> BusinessAgentConfg:
+    @staticmethod
+    def create_business_agent_config(agent_id:str, settings:Settings) -> BusinessAgentConfg:
         """Creates a BusinessAgentConfig for a specific BusinessAgent from the Settings"""
         return BusinessAgentConfg(
             llm_config=ConfigFactory.create_llm_config(settings),
-            agent_configuration=settings.application.agent_configs.get(agent_name, {})        )
+            agent_configuration=settings.application.agent_configs.get(agent_id, {})        
+        )
+    
+    def create_tool_config(tool_id:str, settings:Settings) -> ToolConfig:
+        return ToolConfig(
+            tool_configuration=settings.application.agent_configs.get(tool_id, {})
+        )

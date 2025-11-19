@@ -8,104 +8,106 @@ import pkgutil
 
 from tools.tool_registry import ToolRegistry
 from config.settings import Settings
+from tools.base_tool import BaseTool
+from langchain_core.tools import tool
 
 
-@pytest.fixture
-def mock_settings():
-    """Create a fake Settings object for testing."""
-    mock = MagicMock()
-    mock.tool_packages = ["fake_package"]
-    mock.tool_recursive = False
-    return mock
-
-
-def test_discover_tools_finds_valid_tools(mock_tool_registry_config):
-    """Ensure _discover_tools() finds valid callable tool objects."""    
-    registry = ToolRegistry(mock_tool_registry_config)
-
-    tools = registry._discover_tools()
-
-    # Assertions
-    assert len(tools) >= 1, "Expected at least one tool to be discovered"
-    tool_names = [t.name for t in tools]
-    assert "my_tool_1" in tool_names, f"Discovered tools: {tool_names}"
+class MockTool(BaseTool):
+    def __init__(self, id:str | None = "mock_1", name:str | None = "Mock Tool"):
+        """COnstructor"""
+        super().__init__(id, name)
     
+    def _register_tools(self):
+        """Returns the list of tools"""
+        return [self.mock_tool]
+    
+    @tool
+    def mock_tool(self):
+        """Fake tool logic"""
+        pass
 
 
-def test_loadTools_sets_loaded_flag(mock_tool_registry_config):
-    """Ensure loadTools loads tools only once unless forced."""
-    # disable automatic discovery to test properly
-    mock_tool_registry_config.tool_discovery = False
-    registry = ToolRegistry(mock_tool_registry_config)
+@pytest.mark.unit
+@pytest.mark.registry
+class TestToolRegistry:
+    def test_discover_tools_finds_valid_tools(self, mock_tool_registry_config):
+        """Ensure _discover_tools() finds valid callable tool objects."""    
+        registry = ToolRegistry(mock_tool_registry_config)
 
-    with patch.object(registry, "_discover_tools", return_value=["tool1", "tool2"]) as mock_discover:
+        tools = registry._tools
+        # Assertions
+        assert len(tools) >= 1, "Expected at least one tool to be discovered"
+        tool_names = [t.tool_name for t in tools]
+        assert "Test Tool" in tool_names, f"Discovered tools: {tool_names}"
+        
+
+
+    def test_loadTools_sets_loaded_flag(self, mocker, mock_tool_registry_config):
+        """Ensure loadTools loads tools only once unless forced."""
+        # disable automatic discovery to test properly
+        mock_tool_registry_config.tool_discovery = False
+        registry = ToolRegistry(mock_tool_registry_config)
+        spy = mocker.spy(registry, "_discover_tools")
+
         assert registry._loaded is False
         assert len(registry._tools) == 0
         # First load
         registry.load_tools(force_reload=True)
         assert registry._loaded is True
-        assert registry._tools == ["tool1", "tool2"]
-        mock_discover.assert_called_once()
+        assert spy.call_count == 1
 
-        # With force_reload=True, it should call again
+            # With force_reload=True, it should call again
         registry.load_tools(force_reload=True)
-        assert mock_discover.call_count == 2
+        assert spy.call_count == 2
 
 
+    def test_get_all_tools_returns_tools(self, mock_tool_registry_config):
+        registry = ToolRegistry(mock_tool_registry_config)
 
-def test_getToolNames_returns_tool_names(mock_tool_registry_config):
-    """Ensure getToolNames() extracts the 'name' property correctly."""
-    fake_tool_1 = MagicMock(name="tool1")
-    fake_tool_1.name = "tool1"
-    fake_tool_2 = MagicMock(name="tool2")
-    fake_tool_2.name = "tool2"
+        tools = registry.get_all_tools()
+        assert tools
+        assert len(tools) == 2
 
-    registry = ToolRegistry(mock_tool_registry_config)
-    registry._loaded = True
-    registry._tools = [fake_tool_1, fake_tool_2]
+    def test_tool_names_returns_tool_names(self, mock_tool_registry_config):
+        registry = ToolRegistry(mock_tool_registry_config)
 
-    names = registry.get_tool_names()
-    assert names == ["tool1", "tool2"]
+        tool_names = registry.get_tool_names()
 
-def test_tool_registration(mock_tool_registry_config):
-    mock_tool = MagicMock(name="tool_1")
-    mock_tool.name = "tool_1"
-    registry = ToolRegistry(mock_tool_registry_config)
-    registry._loaded = True
-    # start with empty tool list
-    registry._tools = []
-    assert len(registry.get_all_tools()) == 0
-    
-    registry.register_tool(mock_tool)
-    assert len(registry.get_all_tools()) == 1
-
-    registry.unregister_tool(mock_tool.name)
-    assert len(registry.get_all_tools()) == 0
+        assert tool_names
+        assert len(tool_names) == 2
+        assert tool_names == ["my_tool_1", "my_tool_2"]
 
 
-def test_get_tools_by_filter(mock_tool_registry_config):
-    # add mock tools
-    fake_tool_1 = MagicMock(name="tool1")
-    fake_tool_1.name = "tool1"
-    fake_tool_2 = MagicMock(name="tool2")
-    fake_tool_2.name = "tool2"
-    fake_tool_3 = MagicMock(name="tool3")
-    fake_tool_3.name = "tool3"
-    fake_tool_4 = MagicMock(name="tool4")
-    fake_tool_4.name = "tool4"
+    def test_tool_registration(self, mock_tool_registry_config):
+        mock_tool_registry_config.tool_discovery = False
+        registry = ToolRegistry(mock_tool_registry_config)
+        tool = MockTool()
 
-    registry = ToolRegistry(mock_tool_registry_config)
-    registry._loaded = True
-    registry._tools = [fake_tool_1, fake_tool_2, fake_tool_3, fake_tool_4]
+        assert registry
+        assert not registry._loaded
+        assert registry._tools is not None
+        assert len(registry._tools) == 0
 
-    filtered_tools = registry.get_tools(filter_tools)
-    assert filtered_tools is not None
-    assert len(filtered_tools) == 1
-    assert filtered_tools[0] == fake_tool_3
+        registry.register_tool(tool)
+
+        assert registry._loaded
+        assert len(registry._tools) == 1
+        
+
+    def test_get_tools_by_filter(self, mock_tool_registry_config):
+        # load standard test tools
+        registry = ToolRegistry(mock_tool_registry_config)
+        # add mock tools
+        mock_tool = MockTool("tool_1", "Tool1")
+        registry.register_tool(mock_tool)
 
 
-def filter_tools(tool:object):
-    if (tool.name == "tool3"):
-        return True
-    else:
-        return False
+        filtered_tools = registry.get_tools(self.filter_tools)
+        assert filtered_tools is not None
+        assert len(filtered_tools) == 1
+        assert filtered_tools[0] == mock_tool.mock_tool
+
+
+    @staticmethod
+    def filter_tools(tool) -> bool:
+        return tool.name == "mock_tool"

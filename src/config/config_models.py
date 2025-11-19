@@ -33,6 +33,7 @@ class ToolRegistryConfig(BaseModel):
     tool_discovery: bool = Field(default=True, description="Controls if Tools should be automatically discovered")
     tool_packages:List[str] | None = Field(default=[], description="A list of packages to load tools from")
     tool_recursive: bool = Field(default=True, description="If the Tool Registry should load recusrively")
+    settings: Settings = Field(..., description="The full settings for the application")
 
 class AgentRegistryConfig(BaseModel):
     """Configuration for Agent Registry"""
@@ -99,3 +100,10 @@ class OrchestrationConfig(BaseModel):
     llm_config: LLMConfig = Field(..., description="Config for the LLM used by the Orchestration Agent"),
     tool_registry_config:ToolRegistryConfig = Field(..., description="Configuration for the Tool Registry"),
     agent_registry_config:AgentRegistryConfig = Field(..., description="Configuratoin for the Agent Registry")
+
+class ToolConfig(BaseModel):
+    """Configuration for a BaseTool class"""
+    tool_configuration: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Additional tool configuration data"
+    )   

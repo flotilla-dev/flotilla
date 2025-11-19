@@ -41,7 +41,8 @@ def dummy_tool_registry_config() -> ToolRegistryConfig:
     return ToolRegistryConfig(
         tool_packages=["tests.unit.tools"],
         tool_discovery=True,
-        tool_recursive=True
+        tool_recursive=True,
+        settings=dummy_settings()
     )
 
 @pytest.fixture

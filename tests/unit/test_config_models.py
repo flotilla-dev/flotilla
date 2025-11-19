@@ -80,19 +80,20 @@ class TestLLMConfig:
 
 
 class TestToolRegistryConfig:
-    def test_valid_config_creation(self):
+    def test_valid_config_creation(self, mock_settings):
         """Should create a valid ToolRegistryConfig with required fields."""
         config = ToolRegistryConfig(
             tool_packages=["tools.common", "tools.math"],
-            tool_recursive=True
+            tool_recursive=True,
+            settings=mock_settings
         )
 
         assert config.tool_packages == ["tools.common", "tools.math"]
         assert config.tool_recursive is True
 
-    def test_default_recursive_is_true(self):
+    def test_default_recursive_is_true(self, mock_settings):
         """Should default tool_recursive to True when not specified."""
-        config = ToolRegistryConfig(tool_packages=["tools.ai"])
+        config = ToolRegistryConfig(tool_packages=["tools.ai"], settings=mock_settings)
         assert config.tool_recursive is True  # pydantic should coerce "true" → True
 
 
