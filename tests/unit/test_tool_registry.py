@@ -111,3 +111,33 @@ class TestToolRegistry:
     @staticmethod
     def filter_tools(tool) -> bool:
         return tool.name == "mock_tool"
+    
+
+    def test_shutdown_calls_shutdown_on_base_tools(self, caplog):
+        # --- Setup registry ---
+        registry = ToolRegistry(config=MagicMock())
+
+        # Create mock BaseTool instance
+        mock_tool = MagicMock(spec=BaseTool)
+        mock_tool.tool_name = "MockTool"
+
+        # Fake non-tool object
+        non_tool = "not-a-tool"
+
+        # Inject both into registry
+        registry._tools = [mock_tool, non_tool]
+
+        # --- Run shutdown ---
+        with caplog.at_level("DEBUG"):
+            registry.shutdown()
+
+        # --- Assertions ---
+        # BaseTool.shutdown() should be called
+        mock_tool.shutdown.assert_called_once()
+
+        # Non-tools should not cause errors (no shutdown call)
+        # And log a warning
+        assert any(
+            "Non BaseTool in tools" in record.message
+            for record in caplog.records
+        )

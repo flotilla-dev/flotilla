@@ -127,3 +127,14 @@ class ToolRegistry:
         """Return just the names of all tools."""
         return [t.name for t in self.get_all_tools()]
     
+
+    def shutdown(self):
+        """Lifecycle method to cleanup resources when the application is finished"""
+        logger.info("Shutdown the ToolRegistry")
+        for tool in self._tools:
+            if tool and isinstance(tool, BaseTool):
+                logger.debug(f"Calling shutdown on Tool {tool.tool_name}")
+                tool.shutdown()
+            else:
+                logger.warning(f"Non BaseTool in tools {tool}, skipping shutdown call")
+

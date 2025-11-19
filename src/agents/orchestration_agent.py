@@ -82,6 +82,6 @@ class OrchestrationAgent:
     def cleanup(self):
         """Cleanup resources"""
         logger.info("Cleaning up orchestration agent resources")
-        
+        self.tool_registry.shutdown()
         self.business_registry.shutdown()
     
