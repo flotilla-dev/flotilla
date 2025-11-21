@@ -1,7 +1,6 @@
 # tests/test_weather_agent_integration.py
-import os
 import pytest
-from agents.business_logic.weather_agent import WeatherAgent
+from example_app.src.agents.weather_agent import WeatherAgent
 from config.settings import Settings
 from config.config_loader import ConfigLoader
 from config.config_factory import ConfigFactory

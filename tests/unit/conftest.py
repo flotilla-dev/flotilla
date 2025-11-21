@@ -52,13 +52,23 @@ def mock_settings():
 
 def dummy_settings() -> Settings:
     return Settings(
-        flotilla=FlotillaSettings(),
+        flotilla=dummy_flotilla_settings(),
         application=ApplicationSettings(
             agent_configs={
                 "Test Agent": {"foo": "bar"},
                 "Agent 1": {"threshold": 0.7},
             }
         ),
+    )
+
+def dummy_flotilla_settings() -> FlotillaSettings:
+    return FlotillaSettings(
+        LLM__API_KEY="mock-key",
+        LLM__MODEL="mock-model",
+        LLM__TEMPERATURE="1",
+        LLM__TYPE="openai",
+        TOOL_REGISTRY__PACKAGES=["tools"],
+        AGENT_REGISTRY__PACKAGES=["agents"]
     )
 
 @pytest.fixture

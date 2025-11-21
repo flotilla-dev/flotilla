@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from typing import List
 from enum import Enum
 
@@ -15,23 +16,23 @@ class FlotillaSettings(BaseSettings):
     """
 
     # LLM configuration
-    LLM__API_KEY: str = "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"
-    LLM__MODEL: str = "gpt-4o-mini"
-    LLM__TEMPERATURE: str = "0"
-    LLM__TYPE: LLMType = LLMType.OPENAI
+    LLM__API_KEY: str = Field(..., description="API Key for the LLM used by the application.  Should not be set in a config file")
+    LLM__MODEL: str = Field(..., description="The type of the model to be used by the LLM")
+    LLM__TEMPERATURE: str = Field(..., description="The temperature value to use with LLM")
+    LLM__TYPE: LLMType = Field(..., description="The type of LLM to use")
 
     # Logging
-    LOG__LEVEL: str = "INFO"
+    LOG__LEVEL: str = Field(default="INFO", description="The Log Level to use with the application")
 
     # Tool registry discovery
-    TOOL_REGISTRY__PACKAGES: List[str] = ["tools"]
-    TOOL_REGISTRY__RECURISVE: bool = True
-    TOOL_REGISTRY__ENABLE_DISCOVERY: bool = True
+    TOOL_REGISTRY__PACKAGES: List[str] = Field(..., description="The list of packages to search for Tools")
+    TOOL_REGISTRY__RECURISVE: bool = Field(default=True, description="If tool discovery should recursively search for folders")
+    TOOL_REGISTRY__ENABLE_DISCOVERY: bool = Field(default=True, description="Controls if the Tool Regisry should automatically search for tools in the packages list")
 
     # Agent registry discovery
-    AGENT_REGISTRY__PACKAGES: List[str] = ["agents.business_logic"]
-    AGENT_REGISTRY__RECURSIVE: bool = True
-    AGENT_REGISTRY__ENABLE_DISCOVERY: bool = True
+    AGENT_REGISTRY__PACKAGES: List[str] = Field(..., description="The list of packages to search for Agents") 
+    AGENT_REGISTRY__RECURSIVE: bool = Field(default=True, description="If Agent discovery should recursively search for folders")
+    AGENT_REGISTRY__ENABLE_DISCOVERY: bool = Field(default=True, description="Controls if the Agent Regisry should automatically search for agents in the packages list")
 
     class ConfigDict:
         env_file = ".env"

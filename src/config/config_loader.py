@@ -1,6 +1,5 @@
-# config/loader.py
-
 import os
+import yaml
 from typing import Dict, Any, Optional
 
 from azure.identity import DefaultAzureCredential
@@ -10,204 +9,236 @@ from dotenv import dotenv_values
 
 from config.application_settings import ApplicationSettings
 from config.flotilla_setttings import FlotillaSettings
-from .settings import Settings
+from config.settings import Settings
 
 
 class ConfigLoader:
     """
-    Loads configuration from:
+    Enhanced configuration loader with hierarchical YAML support.
+
+    Supports:
+      - Nested flotilla.yml, agents.yml, tools.yml, feature_flags.yml
+      - Environment override files: *.local.yml, *.dev.yml, *.uat.yml, *.prod.yml
+      - .env.* files
       - OS environment variables
-      - Environment-specific .env files
       - Azure App Configuration
-      - Azure Key Vault secret references
+      - KeyVault secret resolution
+      - Per-agent inheritance from flotilla defaults
     """
 
-    # ------------------------------------------------------------------------------
-    # PUBLIC API
-    # ------------------------------------------------------------------------------
-
+    # ----------------------------------------------------------------------
+    # Public API
+    # ----------------------------------------------------------------------
     @staticmethod
-    def load(env: Optional[str] = None) -> Settings:
-        """
-        Main entry point for building a Settings instance with fully resolved config.
+    def load(env: Optional[str] = None, config_dir: str = "./config") -> Settings:
 
-        env: "LOCAL", "DEV", "UAT", "PROD"
-        """
-
-        # Determine environment (LOCAL -> default)
         environment = env or os.getenv("APP_ENV", "LOCAL").upper()
 
-        # 1. Load environment-specific .env overrides
-        env_values = ConfigLoader._load_env_file(environment)
+        # ------------------------------------------------------------------
+        # Load hierarchical YAML (base + override)
+        # ------------------------------------------------------------------
+        flotilla_yaml = ConfigLoader._load_yaml_pair(
+            f"{config_dir}/flotilla.yml",
+            f"{config_dir}/flotilla.{environment.lower()}.yml",
+        )
 
-        # 2. Load Azure App Configuration values
+        agents_yaml = ConfigLoader._load_yaml_pair(
+            f"{config_dir}/agents.yml",
+            f"{config_dir}/agents.{environment.lower()}.yml",
+        )
+
+        tools_yaml = ConfigLoader._load_yaml_pair(
+            f"{config_dir}/tools.yml",
+            f"{config_dir}/tools.{environment.lower()}.yml",
+        )
+
+        feature_flags_yaml = ConfigLoader._load_yaml_pair(
+            f"{config_dir}/feature_flags.yml",
+            f"{config_dir}/feature_flags.{environment.lower()}.yml",
+        )
+
+        # ------------------------------------------------------------------
+        # Traditional sources (.env, Azure AppConfig, OS env)
+        # ------------------------------------------------------------------
+        env_values = ConfigLoader._load_env_file(environment)
         app_config_values = ConfigLoader._load_app_configuration_if_enabled()
 
-        # 3. Combine .env + Azure AppConfiguration + OS env vars
-        merged = ConfigLoader._merge_sources(
+        scalar_merged = ConfigLoader._merge_scalar_sources(
             file_env=env_values,
             app_config=app_config_values,
             os_env=os.environ,
         )
 
-        # 4. Resolve KeyVault references inside all merged values
-        resolved = ConfigLoader._resolve_keyvault_references(merged)
+        scalar_resolved = ConfigLoader._resolve_keyvault_references(scalar_merged)
 
-        # 5. Filter for only Frmaeowrk keys
-        framework_keys = set(FlotillaSettings.model_fields.keys())
+        # ------------------------------------------------------------------
+        # Apply hierarchical YAML to FlotillaSettings (flattened)
+        # ------------------------------------------------------------------
+        flat_flotilla = ConfigLoader._flatten_yaml(flotilla_yaml)
 
-        # framework_values = only keys that match FrameworkSettings fields
-        framework_values = {k: v for k, v in resolved.items() if k in framework_keys}
+        flotilla_settings = FlotillaSettings(
+            **ConfigLoader._extract_settings_fields(flat_flotilla, scalar_resolved)
+        )
 
-        # application_values = everything else 
-        application_values = {k: v for k, v in resolved.items() if k not in framework_keys}
+        # ------------------------------------------------------------------
+        # Application settings (agents, tools, feature flags)
+        # ------------------------------------------------------------------
+        agent_configs = ConfigLoader._apply_agent_overrides(
+            agents_yaml=agents_yaml,
+            flotilla_defaults=flotilla_settings,
+        )
 
-        # 6. Finally construct the Settings object using resolved values
+        application_settings = ApplicationSettings(
+            agent_configs=agent_configs,
+            tool_configs=tools_yaml,
+            feature_flags=feature_flags_yaml,
+        )
+
         return Settings(
-            flotilla=FlotillaSettings(**framework_values),
-            application=ApplicationSettings(**application_values),
-        )    
+            flotilla=flotilla_settings,
+            application=application_settings,
+        )
 
-
-    # ------------------------------------------------------------------------------
-    # ENV FILE LOADING
-    # ------------------------------------------------------------------------------
+    # ==========================================================================
+    # YAML LOADING + MERGING
+    # ==========================================================================
+    @staticmethod
+    def _load_yaml(path: str) -> Dict[str, Any]:
+        if not os.path.exists(path):
+            return {}
+        with open(path, "r") as f:
+            return yaml.safe_load(f) or {}
 
     @staticmethod
+    def _deep_merge(base: Dict, override: Dict) -> Dict:
+        result = dict(base)
+        for key, value in override.items():
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
+                result[key] = ConfigLoader._deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    @staticmethod
+    def _load_yaml_pair(base_path: str, override_path: str) -> Dict[str, Any]:
+        base_yaml = ConfigLoader._load_yaml(base_path)
+        override_yaml = ConfigLoader._load_yaml(override_path)
+        return ConfigLoader._deep_merge(base_yaml, override_yaml)
+
+    # ==========================================================================
+    # YAML FLATTENING (hierarchical → LLM__API_KEY style)
+    # ==========================================================================
+    @staticmethod
+    def _flatten_yaml(d: Dict[str, Any], parent_key: str = "") -> Dict[str, Any]:
+        items = {}
+        for k, v in d.items():
+            new_key = f"{parent_key}__{k}" if parent_key else k
+            new_key = new_key.upper()  # Match Pydantic fields
+            if isinstance(v, dict):
+                items.update(ConfigLoader._flatten_yaml(v, new_key))
+            else:
+                items[new_key] = v
+        return items
+
+    # ==========================================================================
+    # ENV FILES + APP CONFIG
+    # ==========================================================================
+    @staticmethod
     def _load_env_file(environment: str) -> Dict[str, Any]:
-        """
-        Loads .env files for specific environments:
-         .env.local, .env.dev, .env.uat, .env.prod
-        """
-
         filename = f".env.{environment.lower()}"
-        if not os.path.exists(filename):
-            print(f"ConfigLoader: No {filename} file found. Skipping.")
-            return {}
-
-        print(f"ConfigLoader: Loading {filename}")
-        return dotenv_values(filename)
-
-    # ------------------------------------------------------------------------------
-    # AZURE APP CONFIGURATION
-    # ------------------------------------------------------------------------------
+        return dotenv_values(filename) if os.path.exists(filename) else {}
 
     @staticmethod
     def _load_app_configuration_if_enabled() -> Dict[str, Any]:
-        """
-        Loads key-values from Azure App Configuration if configured.
-        Requires the environment variable:
-          AZURE_APP_CONFIG_ENDPOINT=https://xxx.azconfig.io
-        """
-
         endpoint = os.getenv("AZURE_APP_CONFIG_ENDPOINT")
         if not endpoint:
             return {}
 
-        print(f"ConfigLoader: Connecting to Azure App Configuration at {endpoint}...")
-
         try:
             credential = DefaultAzureCredential()
             client = AzureAppConfigurationClient(endpoint, credential)
-
-            settings_dict = {}
-
-            for setting in client.list_configuration_settings():
-                # Key Vault-stored strings usually appear as: 
-                # {"value": "@Microsoft.KeyVault(SecretUri=...)"}
-                settings_dict[setting.key] = setting.value
-
-            print(f"ConfigLoader: Loaded {len(settings_dict)} values from App Configuration.")
-            return settings_dict
-
-        except Exception as ex:
-            print(f"ConfigLoader: Failed to load Azure App Configuration: {ex}")
+            return {item.key: item.value for item in client.list_configuration_settings()}
+        except Exception:
             return {}
 
-
     @staticmethod
-    def _filter_to_settings_fields(values: Dict[str, Any]) -> Dict[str, Any]:
-        """Return only keys that exist as fields on the Settings model."""
-        allowed = set(Settings.model_fields.keys())
-        return {k: v for k, v in values.items() if k in allowed}
+    def _merge_scalar_sources(file_env: Dict, app_config: Dict, os_env: Dict) -> Dict:
+        merged = {}
+        merged.update(file_env)
+        merged.update(app_config)
+        merged.update(os_env)
+        return merged
 
-    # ------------------------------------------------------------------------------
-    # KEY VAULT RESOLUTION
-    # ------------------------------------------------------------------------------
-
+    # ==========================================================================
+    # KEY VAULT
+    # ==========================================================================
     @staticmethod
     def _resolve_keyvault_references(values: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Resolves references like:
-          "@Microsoft.KeyVault(SecretUri=https://myvault.vault.azure.net/secrets/my-secret)"
-        """
-
         resolved = {}
-        for key, value in values.items():
-            if isinstance(value, str) and value.startswith("@Microsoft.KeyVault("):
-                secret_value = ConfigLoader._fetch_keyvault_secret(value)
-                resolved[key] = secret_value
+        for k, v in values.items():
+            if isinstance(v, str) and v.startswith("@Microsoft.KeyVault("):
+                resolved[k] = ConfigLoader._fetch_keyvault_secret(v)
             else:
-                resolved[key] = value
-
+                resolved[k] = v
         return resolved
 
     @staticmethod
     def _fetch_keyvault_secret(value: str) -> Optional[str]:
-        """
-        Extract SecretUri from the KeyVault reference and fetch the actual secret.
-        """
-
         try:
-            # Example format:
-            # @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/<secret-name>/version)
             prefix = "SecretUri="
             start = value.find(prefix) + len(prefix)
             end = value.find(")", start)
-            secret_uri = value[start:end]
-
+            uri = value[start:end]
             credential = DefaultAzureCredential()
-            client = SecretClient(
-                vault_url=secret_uri.split("/secrets/")[0],
-                credential=credential
-            )
-
-            secret_name = secret_uri.split("/secrets/")[1].split("/")[0]
-            secret = client.get_secret(secret_name)
-
-            print(f"ConfigLoader: Resolved KeyVault secret for {secret_name}")
-            return secret.value
-
-        except Exception as ex:
-            print(f"ConfigLoader: Failed to resolve KeyVault reference: {ex}")
+            client = SecretClient(vault_url=uri.split("/secrets/")[0], credential=credential)
+            secret_name = uri.split("/secrets/")[1].split("/")[0]
+            return client.get_secret(secret_name).value
+        except Exception:
             return None
 
-    # ------------------------------------------------------------------------------
-    # MERGING LOGIC
-    # ------------------------------------------------------------------------------
-
+    # ==========================================================================
+    # MAPPING YAML → Pydantic Settings Fields
+    # ==========================================================================
     @staticmethod
-    def _merge_sources(
-        file_env: Dict[str, Any],
-        app_config: Dict[str, Any],
-        os_env: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """
-        Merges configuration sources in precedence order:
-          1. OS environment variables
-          2. Azure App Configuration
-          3. .env.<env> file
-        """
+    def _extract_settings_fields(flat_yaml: Dict[str, Any], scalar_overrides: Dict[str, Any]) -> Dict[str, Any]:
+        allowed = set(FlotillaSettings.model_fields.keys())
+        final = {}
 
-        merged = {}
+        # YAML first
+        for key, value in flat_yaml.items():
+            if key in allowed:
+                final[key] = value
 
-        # 3rd priority → environment-specific .env
-        merged.update(file_env)
+        # Scalar overrides take precedence
+        for key, value in scalar_overrides.items():
+            key_upper = key.upper()
+            if key_upper in allowed:
+                final[key_upper] = value
 
-        # 2nd priority → Azure App Configuration
-        merged.update(app_config)
+        return final
 
-        # 1st priority → OS Environment Variables (highest)
-        merged.update(os_env)
+    # ==========================================================================
+    # AGENT OVERRIDE LOGIC (inherit flotilla defaults)
+    # ==========================================================================
+    @staticmethod
+    def _apply_agent_overrides(agents_yaml: Dict[str, Any], flotilla_defaults: FlotillaSettings) -> Dict[str, Any]:
 
-        return merged
+        final = {}
+        for agent_name, agent_cfg in agents_yaml.items():
+
+            base_llm = {
+                "temperature": float(flotilla_defaults.LLM__TEMPERATURE),
+                "model": flotilla_defaults.LLM__MODEL,
+                "type": flotilla_defaults.LLM__TYPE,
+            }
+
+            merged = {"llm": base_llm}
+            merged = ConfigLoader._deep_merge(merged, agent_cfg)
+
+            final[agent_name] = merged
+
+        return final
