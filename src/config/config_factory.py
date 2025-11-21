@@ -99,7 +99,8 @@ class ConfigFactory:
             agent_configuration=settings.application.agent_configs.get(agent_id, {})        
         )
     
+    @staticmethod
     def create_tool_config(tool_id:str, settings:Settings) -> ToolConfig:
         return ToolConfig(
-            tool_configuration=settings.application.agent_configs.get(tool_id, {})
+            tool_configuration=settings.application.tool_configs.get(tool_id, {})
         )

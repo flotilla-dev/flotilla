@@ -279,20 +279,13 @@ class TestEdgeCases:
 class TestIntegration:
     """Integration tests with real Settings object"""
     
-    @patch.dict('os.environ', {
-        'LLM__API_KEY': 'integration-test-key',
-        'LLM__MODEL': 'gpt-4',
-        'LLM__TEMPERATURE': '0.5'
-    })
-    def test_factory_with_real_settings(self):
+
+    def test_factory_with_real_settings(self, mock_settings):
         """Test factory works with actual Settings object"""
-        config_loader = ConfigLoader()
-        settings = config_loader.load()
-        
-        config = ConfigFactory.create_llm_config(settings)
+        config = ConfigFactory.create_llm_config(mock_settings)
         
         assert isinstance(config, OpenAIConfig)
-        assert config.model_name == 'gpt-4'
+        assert config.model_name == 'gpt-4o-mini'
     
     def test_multiple_config_creations(self, mock_settings):
         """Test that multiple config creations produce consistent results"""

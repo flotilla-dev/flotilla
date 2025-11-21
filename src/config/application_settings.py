@@ -1,18 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict, Any
 
 
 class ApplicationSettings(BaseModel):
     """
-    Application-level configuration owned by the application.
-    Contains domain configuration and per-agent config.
+    Application-level configuration loaded from YAML files
+    (agents.yml, tools.yml, feature_flags.yml) and merged
+    with environment-specific overrides.
     """
 
-    # Developer-defined config per agent
-    agent_configs: Dict[str, Dict[str, Any]] = {}
-
-    # Optional domain/business flags
-    feature_flags: Dict[str, bool] = {}
+    agent_configs: Dict[str, Any] = Field(default_factory=dict)
+    tool_configs: Dict[str, Any] = Field(default_factory=dict)
+    feature_flags: Dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         extra = "allow"  # allow additional arbitrary app config
