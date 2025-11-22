@@ -4,10 +4,11 @@ from pydantic import BaseModel, Field
 
 
 class ResponseStatus(Enum):
-    SUCCESS = "success"
-    ERROR = "error"
-    WARNING = "warning"
-    FAILURE = "failure"
+    SUCCESS = "success"                 # Agent completed normally
+    LLM_OUTPUT_ERROR = "llm_output_error"  # LLM returned bad JSON or missing fields
+    LLM_CALL_FAILED = "llm_call_failed"    # API error, timeout, connection issue
+    APP_MISCONFIGURED = "app_misconfigured" # Tool registry, env vars, missing config
+    INTERNAL_ERROR = "internal_error"       # Your own code crashed
 
 
 class ErrorResponse(BaseModel):

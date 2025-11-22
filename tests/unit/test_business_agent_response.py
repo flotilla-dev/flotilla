@@ -37,7 +37,7 @@ def test_business_agent_response_with_errors():
     )
 
     resp = BusinessAgentResponse(
-        status=ResponseStatus.ERROR,
+        status=ResponseStatus.LLM_CALL_FAILED,
         agent_name="WeatherAgent",
         query="Weather now",
         confidence=0.0,
@@ -45,7 +45,7 @@ def test_business_agent_response_with_errors():
         errors=[err]
     )
 
-    assert resp.status == ResponseStatus.ERROR
+    assert resp.status == ResponseStatus.LLM_CALL_FAILED
     assert len(resp.errors) == 1
     assert resp.errors[0].error_code == "API_TIMEOUT"
     assert resp.errors[0].error_details == {"timeout": 15}

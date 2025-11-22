@@ -30,21 +30,22 @@ class MockBusinessAgent(BaseBusinessAgent):
         ]
         return capabilities
     
-    def can_handle(self, query, context=None):
-        return self._match_keywords(query, self.test_keywords)
-    
-    def execute(self, query, context=None):
-        return self.build_success_response(
+    def execute(self, query, context = None) -> BusinessAgentResponse:
+        return BusinessAgentResponse(
+            status=ResponseStatus.SUCCESS,
+            agent_name=self.agent_name,
             query=query,
-            data={"result": f"Executed by {self.agent_name}"}
+            confidence=1,
+            data={},
+            actions=[],
+            errors=[]
         )
-
+        
 
 
 
 
 @pytest.mark.unit
-@pytest.mark.registry
 class TestBusinessAgentRegistry:
     """Test business agent registry functionality"""
 

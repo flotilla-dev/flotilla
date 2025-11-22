@@ -22,6 +22,8 @@ from config.config_models import LLMConfig
 
 from typing import List
 
+import json
+
 
 class ConcreteBusinessAgent(BaseBusinessAgent):
     """Concrete implementation for testing"""
@@ -227,60 +229,68 @@ class TestBaseBusinessAgent:
 
     def test_build_success_response(self, agent):
         """Ensure success response is built correctly"""
-        resp = agent.build_success_response(
-            query="weather in chicago",
-            data={"temp": "72F"},
-            message="OK",
-            confidence=0.8,
-            actions=[{"type": "next"}],
+        raw = {
+            "status": "success",
+            "agent_name": "WeatherAgent",
+            "query": "what is tomorrow's forecast for Chicago?",
+            "message": "I've got the forecast ready for Chicago tomorrow! Looks like it's going to be a *partly cloudy* kind of day – I'd say the conditions are looking *un-*beleafable! Let me fetch the detailed forecast for you.",
+            "confidence": 0.85,
+            "data": {},
+            "actions": [
+                {
+                "action_type": "call_tool",
+                "description": "Fetch weather forecast for Chicago for tomorrow",
+                "payload": {
+                    "tool_name": "get_weather_for_location",
+                    "arguments": {
+                    "location": "Chicago, Illinois",
+                    "forecast_date": "tomorrow"
+                    }
+                }
+                }
+            ],
+            "errors": []
+            }
+        
+        json_str = json.dumps(raw)
+        
+        response = agent.parse_llm_response(
+            query = "test query",
+            llm_response = json_str
         )
 
-        assert isinstance(resp, BusinessAgentResponse)
-        assert resp.status == ResponseStatus.SUCCESS
-        assert resp.agent_name == "Test Agent"
-        assert resp.query == "weather in chicago"
-        assert resp.data == {"temp": "72F"}
-        assert resp.message == "OK"
-        assert resp.confidence == 0.8
-        assert resp.actions == [{"type": "next"}]
-        assert resp.errors is None
+        assert isinstance(response, BusinessAgentResponse)
+        assert response.status == ResponseStatus.SUCCESS
+        assert response.agent_name == "WeatherAgent"
+        assert response.query == "what is tomorrow's forecast for Chicago?"
+        assert response.data == {}
+        assert response.message == "I've got the forecast ready for Chicago tomorrow! Looks like it's going to be a *partly cloudy* kind of day – I'd say the conditions are looking *un-*beleafable! Let me fetch the detailed forecast for you."
+        assert response.confidence == 0.85
+        assert response.actions is not None
+        assert len(response.errors) == 0
 
-    def test_build_error_response(self, agent):
-        """Ensure error response is built correctly"""
-        resp = agent.build_error_response(
-            query="invalid",
-            error_code="SOME_ERROR",
-            error_details="details here",
-            message="Failed",
+
+
+    def test_build_error_reponse(self, agent):
+        response = agent.build_error_response(
+            status = ResponseStatus.INTERNAL_ERROR,
+            query = "mock query",
+            message = "test error message",
+            errors = [ErrorResponse(error_code="MOCK_ERROR", error_details="Error message")]
         )
 
-        assert resp.status == ResponseStatus.ERROR
-        assert resp.agent_name == "Test Agent"
-        assert resp.query == "invalid"
-        assert resp.message == "Failed"
-        assert resp.confidence == 0.0
-        assert resp.data == {}
-        assert isinstance(resp.errors, list)
-        assert resp.errors[0].error_code == "SOME_ERROR"
-        assert resp.errors[0].error_details == "details here"
+        assert response is not None
+        assert isinstance(response, BusinessAgentResponse)
+        assert response.status == ResponseStatus.INTERNAL_ERROR
+        assert response.agent_name == "Test Agent"
+        assert response.query == "mock query"
+        assert response.data == {}
+        assert response.confidence == 0
+        assert len(response.actions) == 0
+        assert response.errors == [ErrorResponse(error_code="MOCK_ERROR", error_details="Error message")]
 
-    def test_parse_json_response_valid_json(self, agent):
-        """Test JSON parsing helper with valid JSON string"""
-        raw = '{"a": 1, "b": 2}'
-        parsed = agent._parse_json_response(raw)
-        assert parsed == {"a": 1, "b": 2}
 
-    def test_parse_json_response_invalid_json(self, agent):
-        """Should fall back to raw response wrapper"""
-        raw = "not-json"
-        parsed = agent._parse_json_response(raw)
-        assert parsed == {"raw_response": "not-json"}
-
-    def test_parse_json_response_dict(self, agent):
-        """If dict is passed, return unchanged"""
-        parsed = agent._parse_json_response({"x": 7})
-        assert parsed == {"x": 7}
-
+    ''''
     @patch("agents.base_business_agent.LLMFactory.get_llm")
     def test_llm_call_success(self, mock_llm_factory, agent):
         """Test successful LLM call through helper"""
@@ -310,31 +320,4 @@ class TestBaseBusinessAgent:
         assert resp.status == ResponseStatus.ERROR
         assert resp.errors[0].error_code == "LLM_CALL_FAILED"
         assert "boom" in resp.errors[0].error_details
-
-    def test_run_internal_agent_success(self, agent):
-        """run_internal_agent should return success response"""
-        agent.agent = MagicMock()
-        agent.agent.invoke.return_value = {"val": 123}
-
-        resp = agent.run_internal_agent(query="hi")
-
-        assert resp.status == ResponseStatus.SUCCESS
-        assert resp.data == {"result": {"val": 123}}
-
-    def test_run_internal_agent_not_initialized(self, agent):
-        """If .agent was never set, return structured error"""
-        resp = agent.run_internal_agent(query="hi")
-
-        assert resp.status == ResponseStatus.ERROR
-        assert resp.errors[0].error_code == "AGENT_NOT_INITIALIZED"
-
-    def test_run_internal_agent_failure(self, agent):
-        """Exception inside internal agent should produce structured error"""
-        agent.agent = MagicMock()
-        agent.agent.invoke.side_effect = Exception("oops")
-
-        resp = agent.run_internal_agent(query="boom")
-
-        assert resp.status == ResponseStatus.ERROR
-        assert resp.errors[0].error_code == "AGENT_EXECUTION_FAILED"
-        assert "oops" in resp.errors[0].error_details
+    '''

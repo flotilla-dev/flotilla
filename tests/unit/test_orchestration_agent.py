@@ -10,7 +10,6 @@ from config.config_models import OrchestrationConfig
 
 
 @pytest.mark.unit
-@pytest.mark.orchestration
 class TestOrchestrationAgent:
     """Test orchestration agent functionality"""
         

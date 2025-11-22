@@ -10,7 +10,7 @@ from agents.business_agent_response import BusinessAgentResponse
 @pytest.mark.integration
 def test_weather_agent_real_llm():
     # Arrange
-    settings = ConfigLoader.load("UAT")
+    settings = ConfigLoader.load("UAT", "example_app/src/config")
     agent = WeatherAgent()
 
     tool_registry_config = ConfigFactory.create_tool_registry_config(settings=settings)
@@ -24,7 +24,7 @@ def test_weather_agent_real_llm():
     agent.startup()
 
     # Act
-    query = "What's the forecast in Chicago tomorrow?"
+    query = "What's the forecast tomorrow?"
     result = agent.execute(query)
 
     # Assert structure

@@ -11,7 +11,9 @@ from llm.llm_factory import LLMFactory
 from utils.logger import get_logger
 from langchain_core.tools import StructuredTool
 from langchain.agents import create_agent
+from langchain.messages import AIMessage
 from agents.business_agent_response import BusinessAgentResponse, ResponseStatus, ErrorResponse
+import json
 
 logger = get_logger(__name__)
 
@@ -36,26 +38,62 @@ class BaseBusinessAgent(ABC):
     """
     
     DEFAULT_PROMPT = """
-You are a specialized Business Agent operating inside an orchestration system.
+You are a specialized Business Agent operating inside a multi-agent orchestration system.
 
 You MUST return output strictly in the following JSON schema:
 
 {
-  "status": "success" | "error" | "warning" | "failure",
+  "status": "success" | "error",
   "agent_name": "<your_agent_name>",
   "query": "<the original user query>",
-  "message": "<brief summary>",
+  "message": "<human-readable summary>",
   "confidence": 0.0 to 1.0,
   "data": {},
   "actions": [],
   "errors": []
 }
 
-Rules:
-- Return ONLY JSON.
-- Include a confidence score between 0.0 and 1.0.
-- Populate "data" with domain-specific structured content.
-- If a tool is needed, call it.
+FIELD RULES:
+
+- "message": A clear human-friendly summary of your result.
+- "data": Strictly structured JSON suitable for programmatic use.
+- "errors": A list of structured error entries if applicable.
+
+CONFIDENCE SCORING RULES:
+You MUST assign a confidence score between 0.0 and 1.0 based on how certain you are in your answer.
+
+- 1.0 = Full certainty with complete information
+- 0.7–0.9 = High confidence, minor assumptions
+- 0.4–0.6 = Medium confidence, moderate ambiguity
+- 0.1–0.3 = Low confidence, insufficient clarity or missing data
+- 0.0 = No valid answer; return an error
+
+Confidence MUST reflect:
+- clarity of the user query
+- completeness or accuracy of the data used
+- whether assumptions were necessary
+- whether additional steps are needed to complete the task
+
+MULTI-STEP WORKFLOWS:
+If the request cannot be fully completed in one step, you MUST populate the "actions" array with follow-up tasks.
+
+Each action MUST be a JSON object:
+
+{
+  "action_type": "<short identifier>",
+  "description": "<human-readable explanation of the next step>",
+  "payload": { ... }
+}
+
+Use actions for:
+- tool calls required to complete the task
+- clarification questions
+- multi-stage decision processes
+- workflows requiring additional data
+
+If no follow-up actions are required, return an empty list for "actions".
+
+Your final output MUST strictly match the JSON schema above.
 """
 
 
@@ -141,6 +179,7 @@ Rules:
             + "\n\n"
             + self.get_agent_domain_prompt()
         )
+        logger.debug(f"Final prompt {final_prompt} for agent {self.agent_name}")
 
         # Build the langchain agent
         self.agent = create_agent(
@@ -229,125 +268,180 @@ Rules:
     # -----------------------------------------------------------------------
     # Response Builders
     # -----------------------------------------------------------------------
-    def build_success_response(
-        self,
-        query: str,
-        data: dict,
-        message: str = "",
-        confidence: float = 1.0,
-        actions: Optional[List[Dict]] = None,
-    ) -> BusinessAgentResponse:
-        return BusinessAgentResponse(
-            status=ResponseStatus.SUCCESS,
-            agent_name=self.agent_name,
-            query=query,
-            confidence=confidence,
-            message=message,
-            data=data or {},
-            actions=actions,
-        )
+    
+    def parse_llm_response(self, query:str,  llm_response:Any) -> BusinessAgentResponse:
+        """
+        Builds a BusinessAgentResponse from the LLM response JSON.  If the JSON is parsable
+        then all vales in the response are mapped directly to thier corresponding fields
+        on the BusinessAgentResponse.  
 
-    def build_error_response(
-        self,
-        query: str,
-        error_code: str,
-        error_details: Any,
-        message: str = "",
-        confidence: float = 0.0,
-        actions: Optional[List[Dict]] = None,
-    ) -> BusinessAgentResponse:
-        return BusinessAgentResponse(
-            status=ResponseStatus.ERROR,
-            agent_name=self.agent_name,
-            query=query,
-            confidence=confidence,
-            message=message or "An error occurred",
-            errors=[ErrorResponse(error_code=error_code, error_details=error_details)],
-            actions=actions,
-            data={},
-        )
+        If there is a problem parsing the JSON or mapping to the response object then a 
+        BusinessAgentResponse with status of ResponseStatus.LLM_OUTPUT_ERROR is returned.
 
-    # -----------------------------------------------------------------------
-    # JSON Parsing Helper
-    # -----------------------------------------------------------------------
-    def _parse_json_response(self, content: Any) -> dict:
-        if content is None:
-            return {}
-        if isinstance(content, dict):
-            return content
+        Args:
+            query - The query for this LLM response
+            llm_response - The LLM response to parse
+        
+        Returns:
+            A valid BusinessAgentResponse 
+
+        """
+        try :
+            json_str = self.extract_ai_message(llm_response)
+            agent_json = json.loads(json_str)
+            return BusinessAgentResponse(
+                status=agent_json["status"],
+                query=agent_json["query"],
+                agent_name=agent_json["agent_name"],
+                confidence=agent_json["confidence"],
+                message=agent_json["message"],
+                data=agent_json["data"],
+                actions=agent_json["actions"],
+                errors=agent_json["errors"]
+            )
+        except Exception as e:
+            return self.build_error_response(
+                ResponseStatus.LLM_OUTPUT_ERROR,
+                query=query,
+                message="Error parsing LLM response",
+                errors=[ErrorResponse(error_code="LLM_RESPONSE_MALFORMED", error_details=str(e))]         
+            )
+    
+
+    def extract_ai_message(self, result: Any) -> str:
+        """
+        Safely extract the final AIMessage from a LangChain agent.invoke() result
+        and return its content as a JSON string.
+
+        If no AIMessage is found, returns "{}".
+        """
+        if isinstance(result, str):
+            return result
+        
+        if not isinstance(result, dict):
+            return "{}"
+
+        messages = result.get("messages", [])
+        if not isinstance(messages, list):
+            return "{}"
+
+        # Find the last AIMessage in the list
+        ai_messages = [m for m in messages if isinstance(m, AIMessage)]
+        if not ai_messages:
+            return "{}"
+
+        last_ai: AIMessage = ai_messages[-1]
+
+        # AIMessage.content may be str OR list[BaseMessageContent]
+        content = last_ai.content
+
+        # Normalize content into a JSON-serializable value
         try:
-            return json.loads(content)
-        except Exception:
-            return {"raw_response": content}
+            if isinstance(content, str):
+                # If it's already JSON, keep it; otherwise wrap it
+                try:
+                    parsed = json.loads(content)
+                    return json.dumps(parsed)
+                except json.JSONDecodeError:
+                    return json.dumps({"message": content})
 
+            # If content is structured (list of parts)
+            else:
+                return json.dumps(content)
+
+        except Exception:
+            return "{}"
+
+    
+    def build_error_response(self, status:ResponseStatus, query:str, message:str, errors:List[ErrorResponse] ) -> BusinessAgentResponse:
+        """
+        Function to build a valid BusinessAgentResponse when an exception occurs while calling the LLM
+
+        Args:
+            status - The ResponseStatus value for the response
+            query - The query that processed by the LLM 
+            message = The message for the user
+            errors - A list of ErrorResponse objects
+        
+        Returns:
+            A valid BusinessAgentResponse that encapsulates the error state of the application
+        """
+        return BusinessAgentResponse(
+            status=status,
+            query=query,
+            agent_name=self.agent_name,
+            confidence=0,
+            message=message,
+            data={},
+            actions=[],
+            errors=errors
+        )
+
+            
     # -----------------------------------------------------------------------
     # Direct LLM Call Helper
     # -----------------------------------------------------------------------
+    '''
     def llm_call(
         self,
         messages: list,
-        query: str,
-        confidence: float = 0.9,
-        extract_json: bool = True,
+        query: str
     ) -> BusinessAgentResponse:
+        """
+        Helper method to directly call the LLM with the provided messages and query.
+
+        Will attempt to map the LLM respnse to a valid BusinessAgentResponse
+        """
         try:
             result = self.llm.invoke(messages)
-            content = getattr(result, "content", result)
-
-            data = (
-                self._parse_json_response(content)
-                if extract_json
-                else {"raw_response": content}
-            )
-
-            return self.build_success_response(
-                query=query,
-                data=data,
-                message="LLM call succeeded",
-                confidence=confidence,
-            )
-
+            return self.parse_llm_response(self, query, result)
         except Exception as e:
             logger.exception(f"{self.agent_name} LLM call failed")
             return self.build_error_response(
+                status=ResponseStatus.LLM_CALL_FAILED,
                 query=query,
-                error_code="LLM_CALL_FAILED",
-                error_details=str(e),
-                message="LLM call failed",
+                message="Error while calling LLM",
+                errors=[ErrorResponse("AGENT_EXECUTION_FAILED", str(e))]
             )
-
+    '''
     # -----------------------------------------------------------------------
     # Internal LangChain Agent Helper
     # -----------------------------------------------------------------------
     def run_internal_agent(
         self,
         query: str,
-        context: Optional[dict] = None,
-        confidence: float = 0.9,
-    ) -> BusinessAgentResponse:
+        context: Optional[dict] = None
+        ) -> BusinessAgentResponse:
+        """
+        Convenience method for running an Agent.  This method assumes that a Langchain agnet has been 
+        created via create_agent() call and is assigned to self.agent.  IF this is not the case
+        then an BusinessAgentResponse with a status of ResponseStatus.APP_MISCONFIGURED will be returned.
+
+        If self.agent exists and correctly configured then it is invoked with the user query and the LLM's 
+        response is mapped to a valid BusinessAgentResponse.  If the call to the LLM fails then BusinessAgentResponse 
+        is returned with a status of ResponseStatus.LLM_CALL_FAILED
+
+        """
         if not hasattr(self, "agent") or self.agent is None:
             return self.build_error_response(
+                status=ResponseStatus.APP_MISCONFIGURED,
                 query=query,
-                error_code="AGENT_NOT_INITIALIZED",
-                error_details="startup() must initialize self.agent",
                 message="Agent was not properly initialized.",
+                errors=[ErrorResponse(error_code="AGENT_NOT_INITIALIZED", error_details="startup() must initialize self.agent")]
             )
 
         try:
             raw = self.agent.invoke({"input": query}, context=context)
-            return self.build_success_response(
-                query=query,
-                data={"result": raw},
-                message="Agent executed successfully.",
-                confidence=confidence,
-            )
+            return self.parse_llm_response(query=query, llm_response=raw)
         except Exception as e:
             logger.exception(f"Internal agent failed in {self.agent_name}")
             return self.build_error_response(
+                status=ResponseStatus.LLM_CALL_FAILED,
                 query=query,
-                error_code="AGENT_EXECUTION_FAILED",
-                error_details=str(e),
+                message="Error while calling LLM",
+                errors=[ErrorResponse(error_code="AGENT_EXECUTION_FAILED", error_details=str(e))]
             )
+  
         
     def execute(self, query: str, context: Optional[Dict[str, Any]] = None) -> BusinessAgentResponse:
         """

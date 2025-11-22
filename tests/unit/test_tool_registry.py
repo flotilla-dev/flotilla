@@ -28,7 +28,6 @@ class MockTool(BaseTool):
 
 
 @pytest.mark.unit
-@pytest.mark.registry
 class TestToolRegistry:
     def test_discover_tools_finds_valid_tools(self, mock_tool_registry_config):
         """Ensure _discover_tools() finds valid callable tool objects."""    

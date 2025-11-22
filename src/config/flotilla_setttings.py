@@ -18,7 +18,7 @@ class FlotillaSettings(BaseSettings):
     # LLM configuration
     LLM__API_KEY: str = Field(..., description="API Key for the LLM used by the application.  Should not be set in a config file")
     LLM__MODEL: str = Field(..., description="The type of the model to be used by the LLM")
-    LLM__TEMPERATURE: str = Field(..., description="The temperature value to use with LLM")
+    LLM__TEMPERATURE: float = Field(..., description="The temperature value to use with LLM")
     LLM__TYPE: LLMType = Field(..., description="The type of LLM to use")
 
     # Logging
