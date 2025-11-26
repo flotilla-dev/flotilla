@@ -6,9 +6,16 @@ from pydantic import BaseModel, Field
 from config.settings import Settings
 from langchain_core.tools import StructuredTool
 
+class FeatureConfig(BaseModel):
+    """
+    Base config object that should be extended by any config object that wishes to have feature flags set on it
+    """
+    feature_flags: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Feature flag toggles active for this environment"
+    )    
 
-
-class LLMConfig(BaseModel):
+class LLMConfig(FeatureConfig):
     """Configugration for LLM"""
     api_key: str = Field(..., description="LLM API key")
     temperature: float = Field(default=0.1, description="Temperature for LLM responses")
@@ -28,14 +35,14 @@ class AzureOpenAIConfig(LLMConfig):
 
 
 
-class ToolRegistryConfig(BaseModel):
+class ToolRegistryConfig(FeatureConfig):
     """Configuration for Tool Registry"""
     tool_discovery: bool = Field(default=True, description="Controls if Tools should be automatically discovered")
     tool_packages:List[str] | None = Field(default=[], description="A list of packages to load tools from")
     tool_recursive: bool = Field(default=True, description="If the Tool Registry should load recusrively")
     settings: Settings = Field(..., description="The full settings for the application")
 
-class AgentRegistryConfig(BaseModel):
+class AgentRegistryConfig(FeatureConfig):
     """Configuration for Agent Registry"""
     agent_discovery: bool = Field(default=True, description="Controls if Agents should automatcally be discovered")
     agent_packages:List[str] | None = Field(default=[], description="A list of packages to load agents from")
@@ -44,7 +51,7 @@ class AgentRegistryConfig(BaseModel):
     settings: Settings = Field(..., description="The full settings for the application")
     
 
-class BusinessAgentConfg(BaseModel):
+class BusinessAgentConfg(FeatureConfig):
     """Configuration for a BusinesAgent"""
     llm_config: LLMConfig = Field(default=None, description="The LLMConfig for use in the BusinessAgent")
     tools: List[StructuredTool] | None = Field(default = [], description="List of Tools that be passed to the Agent")
@@ -54,36 +61,7 @@ class BusinessAgentConfg(BaseModel):
     )
 
 
-
-'''
-class FabricWorkspaceConfig(BaseModel):
-    """Configuration for Microsoft Fabric workspace"""
-    workspace_id: str = Field(..., description="Fabric workspace ID")
-    lakehouse_id: str = Field(..., description="Lakehouse ID")
-    lakehouse_name: str = Field(..., description="Lakehouse name")
-    endpoint: str = Field(..., description="Fabric REST API endpoint")
-    tenant_id: str = Field(..., description="Azure tenant ID")
-
-
-class BlockMCPConfig(BaseModel):
-    """Configuration for Block MCP server"""
-    server_command: str = Field(
-        default="npx",
-        description="Command to run MCP server"
-    )
-    server_args: List[str] = Field(
-        default=["-y", "@modelcontextprotocol/server-square"],
-        description="Arguments for MCP server"
-    )
-    access_token: str = Field(..., description="Block/Square API access token")
-    environment: str = Field(
-        default="production",
-        description="Block environment (sandbox or production)"
-    )
-    timeout: int = Field(default=30, description="Request timeout in seconds")
-'''
-
-class ClientConfig(BaseModel):
+class ClientConfig(FeatureConfig):
     """Complete configuration for a single client"""
     client_id: str = Field(..., description="Unique client identifier")
     client_name: str = Field(..., description="Client name")
@@ -93,7 +71,7 @@ class ClientConfig(BaseModel):
     )
 
 
-class OrchestrationConfig(BaseModel):
+class OrchestrationConfig(FeatureConfig):
     """Master orchestration configuration"""
     client: ClientConfig = Field(..., description="Configuration for the current client")
     log_level: str = Field(default="INFO", description="Logging level")
@@ -101,7 +79,7 @@ class OrchestrationConfig(BaseModel):
     tool_registry_config:ToolRegistryConfig = Field(..., description="Configuration for the Tool Registry"),
     agent_registry_config:AgentRegistryConfig = Field(..., description="Configuratoin for the Agent Registry")
 
-class ToolConfig(BaseModel):
+class ToolConfig(FeatureConfig):
     """Configuration for a BaseTool class"""
     tool_configuration: Optional[Dict[str, Any]] = Field(
         default_factory=dict,

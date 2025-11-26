@@ -1,7 +1,6 @@
 """
 Configuration Factory for creating config models from settings
 """
-from typing import Dict, Any, List
 from config.config_models import (
     LLMConfig,
     OpenAIConfig,
@@ -45,7 +44,8 @@ class ConfigFactory:
         return OpenAIConfig(
             api_key=settings.flotilla.LLM__API_KEY,
             model_name=settings.flotilla.LLM__MODEL,
-            temperature=settings.flotilla.LLM__TEMPERATURE
+            temperature=settings.flotilla.LLM__TEMPERATURE,
+            feature_flags=settings.application.feature_flags
         )
     
     @staticmethod
@@ -59,6 +59,7 @@ class ConfigFactory:
             tool_packages = settings.flotilla.TOOL_REGISTRY__PACKAGES,
             tool_recursive = settings.flotilla.TOOL_REGISTRY__RECURISVE,
             tool_discovery = settings.flotilla.TOOL_REGISTRY__ENABLE_DISCOVERY,
+            feature_flags=settings.application.feature_flags,
             settings= settings
         )
     
@@ -70,6 +71,7 @@ class ConfigFactory:
             agent_recursive = settings.flotilla.AGENT_REGISTRY__RECURSIVE,
             agent_discovery = settings.flotilla.AGENT_REGISTRY__ENABLE_DISCOVERY,
             llm_config = ConfigFactory.create_llm_config(settings),
+            feature_flags=settings.application.feature_flags,
             settings=settings
         )
     
@@ -88,19 +90,39 @@ class ConfigFactory:
             log_level=settings.flotilla.LOG__LEVEL,
             client=ConfigFactory.create_client_config(settings),
             tool_registry_config=ConfigFactory.create_tool_registry_config(settings),
-            agent_registry_config=ConfigFactory.create_agent_registry_config(settings)
+            agent_registry_config=ConfigFactory.create_agent_registry_config(settings),
+            feature_flags=settings.application.feature_flags
         )
     
     @staticmethod
     def create_business_agent_config(agent_id:str, settings:Settings) -> BusinessAgentConfg:
         """Creates a BusinessAgentConfig for a specific BusinessAgent from the Settings"""
+        agent_config = settings.application.agent_configs.get(agent_id, {})
+        llm_config = ConfigFactory._override_llm_config(ConfigFactory.create_llm_config(settings), agent_config)
         return BusinessAgentConfg(
-            llm_config=ConfigFactory.create_llm_config(settings),
-            agent_configuration=settings.application.agent_configs.get(agent_id, {})        
+            agent_configuration=agent_config,
+            llm_config=llm_config,
+            feature_flags=settings.application.feature_flags        
         )
+    
+    @staticmethod
+    def _override_llm_config(llm_config:LLMConfig, config:dict) -> LLMConfig:
+        """Uses the parameters from the Agent config to override the standard LLMConfig"""
+        llm_config.temperature = config.get("llm", {}).get("temperature", llm_config.temperature)
+        llm_config.max_tokens = config.get("llm", {}).get("max_tokens", llm_config.max_tokens)
+        if isinstance(llm_config, OpenAIConfig):
+            llm_config = ConfigFactory._override_openai_llm_config(llm_config=llm_config, config=config)
+        return llm_config
+    
+    @staticmethod
+    def _override_openai_llm_config(llm_config:OpenAIConfig, config:dict) -> OpenAIConfig:
+        """Overrides the values on the OpenAIConfig oblect from the agent"""
+        llm_config.model_name = config.get("llm", {}).get("model", llm_config.model_name)
+        return llm_config
     
     @staticmethod
     def create_tool_config(tool_id:str, settings:Settings) -> ToolConfig:
         return ToolConfig(
-            tool_configuration=settings.application.tool_configs.get(tool_id, {})
+            tool_configuration=settings.application.tool_configs.get(tool_id, {}),
+            feature_flags=settings.application.feature_flags
         )
