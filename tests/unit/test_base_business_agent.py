@@ -249,6 +249,7 @@ class TestBaseBusinessAgent:
                 }
                 }
             ],
+            "reasoning": "",
             "errors": []
             }
         

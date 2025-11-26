@@ -5,7 +5,7 @@ from config.settings import Settings
 from config.config_loader import ConfigLoader
 from config.config_factory import ConfigFactory
 from tools.tool_registry import ToolRegistry
-from agents.business_agent_response import BusinessAgentResponse
+from agents.business_agent_response import BusinessAgentResponse, ResponseStatus
 
 @pytest.mark.integration
 def test_weather_agent_real_llm():
@@ -30,5 +30,6 @@ def test_weather_agent_real_llm():
     # Assert structure
     assert result is not None
     assert isinstance(result, BusinessAgentResponse)
+    assert result.status == ResponseStatus.SUCCESS
     print(f"Response from LLM {result}")
 

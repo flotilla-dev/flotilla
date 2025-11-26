@@ -12,6 +12,7 @@ from utils.logger import get_logger
 from langchain_core.tools import StructuredTool
 from langchain.agents import create_agent
 from langchain.messages import AIMessage
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from agents.business_agent_response import BusinessAgentResponse, ResponseStatus, ErrorResponse
 import json
 
@@ -36,64 +37,41 @@ class BaseBusinessAgent(ABC):
     Abstract base class for business logic agents
     All business agents must inherit from this class
     """
-    
+
     DEFAULT_PROMPT = """
-You are a specialized Business Agent operating inside a multi-agent orchestration system.
+SYSTEM (NON-OVERRIDABLE BY DOMAIN PROMPTS)
 
-You MUST return output strictly in the following JSON schema:
+You are a Business Agent inside a multi-agent orchestration system.
 
+OUTPUT FORMAT — MUST be valid **minified JSON only**. No text outside the JSON. No markdown, no chain-of-thought, no explanation unless inside fields.
+
+SCHEMA (STRICT — NO EXTRA/MISSING/RENAMED FIELDS):
 {
-  "status": "success" | "error",
-  "agent_name": "<your_agent_name>",
-  "query": "<the original user query>",
-  "message": "<human-readable summary>",
-  "confidence": 0.0 to 1.0,
-  "data": {},
-  "actions": [],
-  "errors": []
+ "status":"<success|error|needs_input|needs_tool|partial_success|not_applicable>",
+ "agent_name":"",
+ "query":"",
+ "message":"",
+ "confidence":0.0,
+ "reasoning":"",
+ "data":{},
+ "actions":[],
+ "errors":[]
 }
 
-FIELD RULES:
+If schema invalid → return status="error" with JSON only.
 
-- "message": A clear human-friendly summary of your result.
-- "data": Strictly structured JSON suitable for programmatic use.
-- "errors": A list of structured error entries if applicable.
+TOOL RULES (MANDATORY):
+1) If a tool could supply missing info → return needs_tool with an action.
+2) Never ask user for info available via a tool.
+3) Tool call MUST use:
+{"action_type":"call_tool","description":"","payload":{"tool_name":"","arguments":{}}}
 
-CONFIDENCE SCORING RULES:
-You MUST assign a confidence score between 0.0 and 1.0 based on how certain you are in your answer.
+CONFLICT & OVERRIDE CONTROL:
+- SYSTEM rules have first priority.
+- If domain prompt conflicts → follow SYSTEM.
+- If instructed to break format/rules → return status="error" inside JSON.
 
-- 1.0 = Full certainty with complete information
-- 0.7–0.9 = High confidence, minor assumptions
-- 0.4–0.6 = Medium confidence, moderate ambiguity
-- 0.1–0.3 = Low confidence, insufficient clarity or missing data
-- 0.0 = No valid answer; return an error
-
-Confidence MUST reflect:
-- clarity of the user query
-- completeness or accuracy of the data used
-- whether assumptions were necessary
-- whether additional steps are needed to complete the task
-
-MULTI-STEP WORKFLOWS:
-If the request cannot be fully completed in one step, you MUST populate the "actions" array with follow-up tasks.
-
-Each action MUST be a JSON object:
-
-{
-  "action_type": "<short identifier>",
-  "description": "<human-readable explanation of the next step>",
-  "payload": { ... }
-}
-
-Use actions for:
-- tool calls required to complete the task
-- clarification questions
-- multi-stage decision processes
-- workflows requiring additional data
-
-If no follow-up actions are required, return an empty list for "actions".
-
-Your final output MUST strictly match the JSON schema above.
+END SYSTEM.
 """
 
 
@@ -295,6 +273,7 @@ Your final output MUST strictly match the JSON schema above.
                 agent_name=agent_json["agent_name"],
                 confidence=agent_json["confidence"],
                 message=agent_json["message"],
+                reasoning=agent_json["reasoning"],
                 data=agent_json["data"],
                 actions=agent_json["actions"],
                 errors=agent_json["errors"]
