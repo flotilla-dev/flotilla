@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from config.config_factory import ConfigFactory
 from config.settings import Settings
 from config.flotilla_setttings import FlotillaSettings, LLMType
+from config.application_settings import ApplicationSettings
 from config.config_loader import ConfigLoader
 from config.config_models import (
     LLMConfig,
@@ -21,20 +22,26 @@ from config.config_models import (
 @pytest.fixture
 def mock_settings():
     """Create a mock Settings object with default values"""
-    settings = Mock(spec=Settings)
-    settings.flotilla = Mock(spec=FlotillaSettings)
-    settings.flotilla.LLM__API_KEY = "test-api-key"
-    settings.flotilla.LLM__MODEL = "gpt-4o-mini"
-    settings.flotilla.LLM__TEMPERATURE = "0.1"
-    settings.flotilla.LLM__TYPE = LLMType.OPENAI
-    settings.flotilla.LOG__LEVEL = "INFO"
-    settings.flotilla.TOOL_REGISTRY__PACKAGES = ["tools"]
-    settings.flotilla.TOOL_REGISTRY__RECURISVE = True
-    settings.flotilla.TOOL_REGISTRY__ENABLE_DISCOVERY = True
-    settings.flotilla.AGENT_REGISTRY__PACKAGES = ["agents.business_logic"]
-    settings.flotilla.AGENT_REGISTRY__RECURSIVE = True
-    settings.flotilla.AGENT_REGISTRY__ENABLE_DISCOVERY = True
-    return settings
+    flotilla_settings = FlotillaSettings(
+        LLM__API_KEY="test-api-key",
+        LLM__MODEL= "gpt-4o-mini",
+        LLM__TEMPERATURE=0.1,
+        LLM__TYPE=LLMType.OPENAI,
+        LOG__LEVEL="INFO",
+        TOOL_REGISTRY__ENABLE_DISCOVERY=True,
+        TOOL_REGISTRY__RECURISVE=True,
+        TOOL_REGISTRY__PACKAGES=["tools"],
+        AGENT_REGISTRY__ENABLE_DISCOVERY=True,
+        AGENT_REGISTRY__RECURSIVE=True,
+        AGENT_REGISTRY__PACKAGES=["agents.business_logic"]
+    )
+    application_settings = ApplicationSettings(
+        agent_configs={},
+        tool_configs={}, 
+        feature_flags={}
+    )
+    
+    return Settings(flotilla=flotilla_settings, application=application_settings)
 
 
 class TestLLMConfigCreation:
