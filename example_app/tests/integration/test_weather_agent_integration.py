@@ -1,6 +1,6 @@
 # tests/test_weather_agent_integration.py
 import pytest
-from example_app.src.agents.weather_agent import WeatherAgent
+from example_app.src.app_agents.weather_agent import WeatherAgent
 from config.settings import Settings
 from config.config_loader import ConfigLoader
 from config.config_factory import ConfigFactory
@@ -24,7 +24,7 @@ def test_weather_agent_real_llm():
     agent.startup()
 
     # Act
-    query = "What's the forecast tomorrow?"
+    query = "What's the forecast for Chicago?"
     result = agent.execute(query)
 
     # Assert structure

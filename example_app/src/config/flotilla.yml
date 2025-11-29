@@ -15,6 +15,6 @@ TOOL_REGISTRY:
 
 AGENT_REGISTRY:
   PACKAGES:
-    - "agents"
+    - "app_agents"
   RECURSIVE: true
   ENABLE_DISCOVERY: true

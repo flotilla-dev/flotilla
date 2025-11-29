@@ -1,1 +1,3 @@
-  
+weather_agent:
+  llm:
+    temperature: 1

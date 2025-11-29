@@ -1,0 +1,4 @@
+weather_tools:
+  WEATHER_API:
+    KEY: 6156d81302004b8e9ae223109252611
+    BASE_URL: https://api.weatherapi.com
