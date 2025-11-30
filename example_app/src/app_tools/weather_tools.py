@@ -2,6 +2,9 @@ from langchain.tools import tool, ToolRuntime
 from my_context import Context
 from tools.base_tool import BaseTool
 import requests
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class WeatherTools(BaseTool):
@@ -23,7 +26,7 @@ class WeatherTools(BaseTool):
     @tool
     def get_weather_for_location(self, city: str) -> str: 
         """Get weather for a given city"""
-        # https://api.weatherapi.com/v1/current.json?key=6156d81302004b8e9ae223109252611&q=Chicago&aqi=no
+        logger.info(f"Lookup the current weather for {city}")
         url = f"{self.base_url}/v1/current.json?key={self.api_key}&q={city}&aqi=no"
         return requests.get(url).text
         #return f"Its always sunny in {city}"
@@ -32,6 +35,7 @@ class WeatherTools(BaseTool):
     @tool
     def get_user_location(self, name:str) -> str:
         """Retrieve user informatoin based on user id"""
+        logger.info(f"Find location for name {name}")
         url = f"{self.base_url}/v1/search.json?key={self.api_key}&q={name}"
         return requests.get(url).text
         #return "Chicago" 
@@ -39,6 +43,7 @@ class WeatherTools(BaseTool):
     @tool
     def get_forecast_for_location(self, city:str) -> str:
         """Retrieves the 1 day forecast for a location"""
+        logger.info(f"Get forecast for city {city}")
         url = f"{self.base_url}/v1/forecast.json?key={self.api_key}&q={city}&days=1&aqi=no&alerts=no"
         return requests.get(url).text
         #return f"Its going to be sunny and warm tomorrow in {city}"
