@@ -11,10 +11,9 @@ from llm.llm_factory import LLMFactory
 from utils.logger import get_logger
 from langchain_core.tools import StructuredTool
 from langchain.agents import create_agent
-from langchain.messages import AIMessage
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain.messages import AIMessage, HumanMessage
 from agents.business_agent_response import BusinessAgentResponse, ResponseStatus, ErrorResponse
-import json
+
 
 logger = get_logger(__name__)
 
@@ -163,7 +162,8 @@ END SYSTEM.
         self.agent = create_agent(
             model=self.llm,
             system_prompt=final_prompt,
-            tools=self.tools
+            tools=self.tools,
+            checkpointer=self.config.checkpointer
         )
 
     def get_agent_domain_prompt(self) -> str:
@@ -410,7 +410,11 @@ END SYSTEM.
             )
 
         try:
-            raw = self.agent.invoke({"input": query}, context=context)
+            logger.info(f"Execute agent with query: '{query}'")
+            raw = self.agent.invoke(
+                {"messages": [HumanMessage(content=query)]},  # Just this, no cache_buster
+                config=context
+            )
             return self.parse_llm_response(query=query, llm_response=raw)
         except Exception as e:
             logger.exception(f"Internal agent failed in {self.agent_name}")

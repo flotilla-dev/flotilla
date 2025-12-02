@@ -7,7 +7,7 @@ import inspect
 
 logger = get_logger(__name__)
 
-class BaseTool(ABC):
+class ToolFactory(ABC):
     def __init__(self, id: str, name: str):
         self.tool_id = id
         self.tool_name = name
@@ -26,7 +26,8 @@ class BaseTool(ABC):
         """
         self.config = config
         self._configure_tools()
-        self.tools = self._register_tools()
+        if self.config.tool_discovery:
+            self.tools = self._register_tools()
 
     def _configure_tools(self):
         """Subclass override to configure tool (load API keys, URLs, etc.)."""

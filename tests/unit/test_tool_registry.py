@@ -8,11 +8,11 @@ import pkgutil
 
 from tools.tool_registry import ToolRegistry
 from config.settings import Settings
-from tools.base_tool import BaseTool
+from tools.tool_factory import ToolFactory
 from langchain_core.tools import tool
 
 
-class MockTool(BaseTool):
+class MockTool(ToolFactory):
     def __init__(self, id:str | None = "mock_1", name:str | None = "Mock Tool"):
         """COnstructor"""
         super().__init__(id, name)
@@ -117,7 +117,7 @@ class TestToolRegistry:
         registry = ToolRegistry(config=MagicMock())
 
         # Create mock BaseTool instance
-        mock_tool = MagicMock(spec=BaseTool)
+        mock_tool = MagicMock(spec=ToolFactory)
         mock_tool.tool_name = "MockTool"
 
         # Fake non-tool object

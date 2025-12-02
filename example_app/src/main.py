@@ -6,6 +6,7 @@ Demonstrates how to use the Flotilla framework from an external app.
 import sys
 import json
 from pathlib import Path
+import uuid
 
 import click
 from rich.console import Console
@@ -171,9 +172,11 @@ def interactive(ctx):
 
             try:
                 with console.status("[bold green]Processing…[/bold green]"):
-                    result = agent.execute(query)
+                    thread_id = uuid.uuid4()
+                    context = {"configurable": {"thread_id": thread_id}}
+                    result = agent.execute(query, context)
 
-                console.print(f"\n[bold green]{result}[/bold green]\n")
+                console.print(f"\n[bold green]{result.message}[/bold green]\n")
 
             except Exception as e:
                 console.print(f"[red]Error:[/red] {e}")

@@ -6,6 +6,7 @@ from typing import Dict, Any
 from datetime import datetime
 
 from langchain.agents import create_agent
+from langchain_core.globals import set_llm_cache
 from langgraph.types import Checkpointer
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -28,7 +29,9 @@ class OrchestrationAgent:
         self.config = config
         
         #TODO define a structure for creation and initialization of all tools & agents 
-        
+        logger.info(f"Set Langchain cahcing to None")
+        set_llm_cache(None)
+
         # load the LLM Provider
         self.llm = LLMFactory.get_llm(config.llm_config) 
 
@@ -55,7 +58,7 @@ class OrchestrationAgent:
     
 
     
-    def execute(self, query: str) -> Dict[str, Any]:
+    def execute(self, query: str, context:Dict) -> Dict[str, Any]:
         """
         Execute an orchestration query
         
@@ -68,9 +71,10 @@ class OrchestrationAgent:
         logger.info(f"Executing orchestration query: {query}")
 
         try:
-            return self.business_registry.execute_with_best_agent(query=query)
+            return self.business_registry.execute_with_best_agent(query=query, context=context)
     
         except Exception as e:
+            # TODO: Change this to return a proper BusinessAgentResponse object
             logger.error(f"Orchestration execution failed: {e}")
             return {
                 "success": False,

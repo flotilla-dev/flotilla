@@ -6,7 +6,7 @@ from typing import List, Callable
 from config.settings import Settings
 from langchain_core.tools import StructuredTool
 from config.config_models import ToolRegistryConfig
-from tools.base_tool import BaseTool
+from tools.tool_factory import ToolFactory
 from config.config_factory import ConfigFactory
 from utils.logger import get_logger
 
@@ -70,7 +70,7 @@ class ToolRegistry:
             return
 
         for _, obj in inspect.getmembers(module, inspect.isclass):
-            if issubclass(obj, BaseTool) and obj is not BaseTool:
+            if issubclass(obj, ToolFactory) and obj is not ToolFactory:
                 try:
                     tool_instance = obj()
                     self.register_tool(tool_instance)
@@ -82,7 +82,7 @@ class ToolRegistry:
     # Public API methods
     # --------------------------
 
-    def register_tool(self, tool:BaseTool):
+    def register_tool(self, tool:ToolFactory):
         """Adds a Tool the internal collection of tools"""
         logger.info(f"Register a new concrete Tool {tool.tool_name}")
         config = ConfigFactory.create_tool_config(tool.tool_id, self.config.settings)
@@ -114,7 +114,7 @@ class ToolRegistry:
         all_structured_tools: List[StructuredTool] = []
 
         for tool_instance in self._tools:  # each is a BaseTool
-            if isinstance(tool_instance, BaseTool):
+            if isinstance(tool_instance, ToolFactory):
                 all_structured_tools.extend(tool_instance.tools)
 
         return all_structured_tools
@@ -132,7 +132,7 @@ class ToolRegistry:
         """Lifecycle method to cleanup resources when the application is finished"""
         logger.info("Shutdown the ToolRegistry")
         for tool in self._tools:
-            if tool and isinstance(tool, BaseTool):
+            if tool and isinstance(tool, ToolFactory):
                 logger.debug(f"Calling shutdown on Tool {tool.tool_name}")
                 tool.shutdown()
             else:

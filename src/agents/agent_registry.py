@@ -254,7 +254,7 @@ class BusinessAgentRegistry:
             Execution results including agent selection info
         """
         # Select agent
-        selected_agent = self.select_agent(query, context, min_confidence=min_confidence)
+        selected_agent = self.select_agent(query=query, context=context, min_confidence=min_confidence)
         
         if not selected_agent:
             return {
