@@ -26,26 +26,32 @@ class WeatherTools(ToolFactory):
     @tool
     def get_weather_for_location(self, city: str) -> str: 
         """Get weather for a given city"""
-        logger.info(f"Lookup the current weather for {city}")
-        url = f"{self.base_url}/v1/current.json?key={self.api_key}&q={city}&aqi=no"
-        return requests.get(url).text
-        #return f"Its always sunny in {city}"
+        if self.config.feature_flags.get("weather_tools").get("use_api", True):
+            logger.info(f"Lookup the current weather for {city}")
+            url = f"{self.base_url}/v1/current.json?key={self.api_key}&q={city}&aqi=no"
+            return requests.get(url).text
+        else:
+            return f"Its always sunny in {city}"
          
 
     @tool
     def get_user_location(self, name:str) -> str:
         """Retrieve user informatoin based on user id"""
-        logger.info(f"Find location for name {name}")
-        url = f"{self.base_url}/v1/search.json?key={self.api_key}&q={name}"
-        return requests.get(url).text
-        #return "Chicago" 
+        if self.config.feature_flags.get("weather_tools").get("use_api", True):
+            logger.info(f"Find location for name {name}")
+            url = f"{self.base_url}/v1/search.json?key={self.api_key}&q={name}"
+            return requests.get(url).text
+        else:
+            return "Denver" 
 
     @tool
     def get_forecast_for_location(self, city:str) -> str:
         """Retrieves the 1 day forecast for a location"""
-        logger.info(f"Get forecast for city {city}")
-        url = f"{self.base_url}/v1/forecast.json?key={self.api_key}&q={city}&days=1&aqi=no&alerts=no"
-        return requests.get(url).text
-        #return f"Its going to be sunny and warm tomorrow in {city}"
+        if self.config.feature_flags.get("weather_tools").get("use_api", True):
+            logger.info(f"Get forecast for city {city}")
+            url = f"{self.base_url}/v1/forecast.json?key={self.api_key}&q={city}&days=1&aqi=no&alerts=no"
+            return requests.get(url).text
+        else:
+            return f"Its going to be sunny and warm tomorrow in {city}"
     
 
