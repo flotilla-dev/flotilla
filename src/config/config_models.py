@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 from config.settings import Settings
 from langchain_core.tools import StructuredTool
+from langgraph.types import Checkpointer
 
 class FeatureConfig(BaseModel):
     """
@@ -54,7 +55,7 @@ class AgentRegistryConfig(FeatureConfig):
 class BusinessAgentConfg(FeatureConfig):
     """Configuration for a BusinesAgent"""
     llm_config: LLMConfig = Field(default=None, description="The LLMConfig for use in the BusinessAgent")
-    tools: List[StructuredTool] | None = Field(default = [], description="List of Tools that be passed to the Agent")
+    checkpointer: Any = Field(..., description="Checkpointer that is passed to each individual agent", arbitrary_types_allowed=True)
     agent_configuration: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
         description="Additional agent configuration data"
@@ -81,6 +82,7 @@ class OrchestrationConfig(FeatureConfig):
 
 class ToolConfig(FeatureConfig):
     """Configuration for a BaseTool class"""
+    tool_discovery: bool = Field(default=True, description="Controls if the ToolFactory instance that receives this config will run autodiscovery of embeeded tools")
     tool_configuration: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
         description="Additional tool configuration data"

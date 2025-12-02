@@ -7,6 +7,7 @@ from datetime import datetime
 
 from agents.orchestration_agent import OrchestrationAgent
 from config.config_models import OrchestrationConfig
+import uuid
 
 
 @pytest.mark.unit
@@ -55,7 +56,9 @@ class TestOrchestrationAgent:
             "selected_agent": "mock_agent"
         }
         
-        result = agent.execute("test query")
+        thread_id = uuid.uuid4()
+        context = {"configurable": {"thread_id": thread_id}}
+        result = agent.execute(query="test query", context=context)
         
         assert result["success"] is True
         assert result["result"] == "Test response"
@@ -67,8 +70,9 @@ class TestOrchestrationAgent:
         orchestration_agent.business_registry = MagicMock()
         orchestration_agent.business_registry.execute_with_best_agent.side_effect = Exception("Test error")
 
-        
-        result = orchestration_agent.execute("test query")
+        thread_id = uuid.uuid4()
+        context = {"configurable": {"thread_id": thread_id}}
+        result = orchestration_agent.execute(query="test query", context=context)
         
         assert result["success"] is False
         assert result["query"] == "test query"

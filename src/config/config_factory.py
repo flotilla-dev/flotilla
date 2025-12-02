@@ -15,6 +15,8 @@ from config.config_models import (
 from config.settings import Settings, ApplicationSettings, FlotillaSettings
 from config.flotilla_setttings import LLMType
 from langchain_core.tools import StructuredTool
+from langgraph.types import Checkpointer
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 class ConfigFactory:
@@ -102,8 +104,14 @@ class ConfigFactory:
         return BusinessAgentConfg(
             agent_configuration=agent_config,
             llm_config=llm_config,
-            feature_flags=settings.application.feature_flags        
+            feature_flags=settings.application.feature_flags,
+            checkpointer=ConfigFactory._create_checkpointer(settings)
         )
+    
+    @staticmethod
+    def _create_checkpointer(settings:Settings) -> Checkpointer:
+        """Creates a Checkpointer instance based on the passed Settings"""
+        return InMemorySaver()
     
     @staticmethod
     def _override_llm_config(llm_config:LLMConfig, config:dict) -> LLMConfig:

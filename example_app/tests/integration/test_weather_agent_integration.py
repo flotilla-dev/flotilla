@@ -6,9 +6,15 @@ from config.config_loader import ConfigLoader
 from config.config_factory import ConfigFactory
 from tools.tool_registry import ToolRegistry
 from agents.business_agent_response import BusinessAgentResponse, ResponseStatus
+import uuid
+from utils.logger import get_logger
+from langchain_core.globals import set_debug
+
+logger = get_logger(__name__)
 
 @pytest.mark.integration
 def test_weather_agent_real_llm():
+    #set_debug(True)
     # Arrange
     settings = ConfigLoader.load("UAT", "example_app/src/config")
     agent = WeatherAgent()
@@ -24,12 +30,16 @@ def test_weather_agent_real_llm():
     agent.startup()
 
     # Act
-    query = "What's the forecast for Chicago?"
-    result = agent.execute(query)
+    thread_id = uuid.uuid4()
+    context = {"configurable": {"thread_id": thread_id}}
+    query = "What is current weather in Denver??"
+    result = agent.execute(query, context=context)
+    #result = agent.execute(query)
 
     # Assert structure
     assert result is not None
     assert isinstance(result, BusinessAgentResponse)
     assert result.status == ResponseStatus.SUCCESS
-    print(f"Response from LLM {result}")
+    assert "Denver" in result.message
+    #logger.info(f"Response from LLM {result}")
 

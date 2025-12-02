@@ -6,6 +6,7 @@ import sys
 import pytest
 from unittest.mock import Mock, MagicMock
 from pathlib import Path
+from langgraph.checkpoint.memory import InMemorySaver
 
 from config.settings import Settings, FlotillaSettings, ApplicationSettings
 
@@ -88,6 +89,7 @@ def dummy_agent_registry_config() -> AgentRegistryConfig:
 def mock_business_agent_config():
     return BusinessAgentConfg(
         llm_config=OpenAIConfig(api_key="test-key", temperature=0.1, model_name="gpt-4"),
+        checkpointer=InMemorySaver(),
         agent_configuration={}
     )
 

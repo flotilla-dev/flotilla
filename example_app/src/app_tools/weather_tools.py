@@ -1,13 +1,13 @@
 from langchain.tools import tool, ToolRuntime
 from my_context import Context
-from tools.base_tool import BaseTool
+from tools.tool_factory import ToolFactory
 import requests
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class WeatherTools(BaseTool):
+class WeatherTools(ToolFactory):
 
     def __init__(self):
         super().__init__("weather_tools", "Weather Tools")

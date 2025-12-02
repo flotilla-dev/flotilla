@@ -1,7 +1,7 @@
 LLM:
   API_KEY: "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"
   MODEL: "gpt-4o-mini"
-  TEMPERATURE: 0
+  TEMPERATURE: 1.0
   TYPE: "openai"
 
 LOG:
