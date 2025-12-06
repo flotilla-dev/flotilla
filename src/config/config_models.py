@@ -2,10 +2,14 @@
 Configuration models for the orchestration system
 """
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from config.settings import Settings
 from langchain_core.tools import StructuredTool
 from langgraph.types import Checkpointer
+from langchain_core.embeddings import Embeddings
+
+
+
 
 class FeatureConfig(BaseModel):
     """
@@ -15,6 +19,10 @@ class FeatureConfig(BaseModel):
         default_factory=dict,
         description="Feature flag toggles active for this environment"
     )    
+
+# --------------------------------
+# LLM Configs
+# --------------------------------
 
 class LLMConfig(FeatureConfig):
     """Configugration for LLM"""
@@ -35,6 +43,9 @@ class AzureOpenAIConfig(LLMConfig):
     deployment_name: str = Field(default="gpt-4", description="GPT-4 deployment name")
 
 
+# --------------------------------
+# TOol Configs
+# --------------------------------
 
 class ToolRegistryConfig(FeatureConfig):
     """Configuration for Tool Registry"""
@@ -42,6 +53,18 @@ class ToolRegistryConfig(FeatureConfig):
     tool_packages:List[str] | None = Field(default=[], description="A list of packages to load tools from")
     tool_recursive: bool = Field(default=True, description="If the Tool Registry should load recusrively")
     settings: Settings = Field(..., description="The full settings for the application")
+
+class ToolConfig(FeatureConfig):
+    """Configuration for a BaseTool class"""
+    tool_discovery: bool = Field(default=True, description="Controls if the ToolFactory instance that receives this config will run autodiscovery of embeeded tools")
+    tool_configuration: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Additional tool configuration data"
+    ) 
+
+# --------------------------------
+# Agent Configs
+# --------------------------------
 
 class AgentRegistryConfig(FeatureConfig):
     """Configuration for Agent Registry"""
@@ -60,6 +83,32 @@ class BusinessAgentConfg(FeatureConfig):
         default_factory=dict,
         description="Additional agent configuration data"
     )
+
+class AgentSelectorConfig(FeatureConfig):
+    """Base class for AgentSelectorConfig instances"""
+    min_confidence: float = Field(default=0.7, description="Default minimal confidenc score that needs to be achieved for an AgentSelector to select an Agent")
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    selector_type: str = Field(default="embedding", description="The type of AgentSelector to use in the application, defaults to 'embedding'")
+
+class VectorAgentSelectorConfig(AgentSelectorConfig):
+    """Concrete AgentSelectConfig for use with embedding"""
+    embedding_model: Embeddings = Field(...,  description="The Embeddings model to use with the VectorAgentSelector")
+    
+
+class KeywordAgentSelectorConfig(AgentSelectorConfig):
+    """Concrete AgentSelectorConfig to use with keyword matching"""
+    pass
+
+class LLMAgentSeletorConfig(AgentRegistryConfig):
+    """Concrete AgentSelectorConfig that is """
+    llm_config: LLMConfig = Field(..., description="The LLM Config to incldue in the LLMAgentSelectorConfig")
+
+
+
+
+# --------------------------------
+# Engine Configs
+# --------------------------------
 
 
 class ClientConfig(FeatureConfig):
@@ -80,10 +129,4 @@ class OrchestrationConfig(FeatureConfig):
     tool_registry_config:ToolRegistryConfig = Field(..., description="Configuration for the Tool Registry"),
     agent_registry_config:AgentRegistryConfig = Field(..., description="Configuratoin for the Agent Registry")
 
-class ToolConfig(FeatureConfig):
-    """Configuration for a BaseTool class"""
-    tool_discovery: bool = Field(default=True, description="Controls if the ToolFactory instance that receives this config will run autodiscovery of embeeded tools")
-    tool_configuration: Optional[Dict[str, Any]] = Field(
-        default_factory=dict,
-        description="Additional tool configuration data"
-    )   
+  
