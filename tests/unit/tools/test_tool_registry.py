@@ -65,7 +65,7 @@ class TestToolRegistry:
 
         tools = registry.get_all_tools()
         assert tools
-        assert len(tools) == 2
+        assert len(tools) == 3
 
     def test_tool_names_returns_tool_names(self, mock_tool_registry_config):
         registry = ToolRegistry(mock_tool_registry_config)
@@ -73,8 +73,8 @@ class TestToolRegistry:
         tool_names = registry.get_tool_names()
 
         assert tool_names
-        assert len(tool_names) == 2
-        assert tool_names == ["my_tool_1", "my_tool_2"]
+        assert len(tool_names) == 3
+        assert tool_names == ["my_tool_1", "my_tool_2", "mock_tool"]
 
 
     def test_tool_registration(self, mock_tool_registry_config):
@@ -94,6 +94,7 @@ class TestToolRegistry:
         
 
     def test_get_tools_by_filter(self, mock_tool_registry_config):
+        mock_tool_registry_config.tool_discovery = False
         # load standard test tools
         registry = ToolRegistry(mock_tool_registry_config)
         # add mock tools
