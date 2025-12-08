@@ -12,7 +12,7 @@ from config.config_models import (
     BusinessAgentConfg,
     AgentSelectorConfig,
     VectorAgentSelectorConfig,
-    LLMAgentSeletorConfig,
+    LLMAgentSelectorConfig,
     KeywordAgentSelectorConfig,
     ToolConfig
 )
@@ -140,11 +140,11 @@ class ConfigFactory:
     
 
     def create_agent_selector_config(settings: Settings) -> AgentSelectorConfig:
-        if settings.flotilla.AGENT_SELECTOR__TYPE is "vector":
+        if settings.flotilla.AGENT_SELECTOR__TYPE == "vector":
             return ConfigFactory._create_vector_agent_select_config(settings)
-        elif settings.flotilla.AGENT_SELECTOR__TYPE is "keyword":
+        elif settings.flotilla.AGENT_SELECTOR__TYPE == "keyword":
             return ConfigFactory._create_keyword_agent_selector_config(settings)
-        elif settings.flotilla.AGENT_SELECTOR__TYPE is "llm":
+        elif settings.flotilla.AGENT_SELECTOR__TYPE == "llm":
             return ConfigFactory._create_llm_agent_selector_config(settings)
         else:
             raise TypeError(f"Cannot create AgentSelector for unknown type {settings.flotilla.AGENT_SELECTOR__TYPE}")
@@ -162,8 +162,8 @@ class ConfigFactory:
             settings=settings
         )
 
-    def _create_llm_agent_selector_config(settings:Settings) -> LLMAgentSeletorConfig:
-        return LLMAgentSeletorConfig(
+    def _create_llm_agent_selector_config(settings:Settings) -> LLMAgentSelectorConfig:
+        return LLMAgentSelectorConfig(
             min_confidence=settings.flotilla.AGENT_SELECTOR__MIN_CONFIDENCE,
             llm_config=ConfigFactory.create_llm_config(settings)
         )

@@ -2,7 +2,7 @@ from agents.agent_selector import AgentSelector
 from agents.base_business_agent import BaseBusinessAgent
 from config.config_models import VectorAgentSelectorConfig
 from utils.logger import get_logger
-from typing import Optional, List
+from typing import Optional, List, Dict
 import numpy as np
 from numpy import ndarray
 
@@ -16,7 +16,7 @@ class VectorAgentSelector(AgentSelector):
         super().__init__("VectorAgentSelector", config)
         self.embeddings = config.embedding_model
 
-    def select_agent(self, query: str, agents: List[BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
+    def select_agent(self, query: str, agents: Dict[str, BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
         """Select the best agent using vector similarity"""
         # Vectorize the query
         query_vector = self._vectorize_text(query)  # Fixed typo
@@ -25,7 +25,7 @@ class VectorAgentSelector(AgentSelector):
         selected_score = -1.0
         selected_agent = None
 
-        for agent in agents:
+        for agent in agents.values():
             # Build combined text and vectorize - PASS AS LIST
             agent_text = self._build_combined_agent_text(agent)
             agent_vectors = self._vectorize_texts([agent_text])  # FIX: Wrap in list!

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from agents.base_business_agent import BaseBusinessAgent
 from config.config_models import AgentSelectorConfig
-from typing import List, Optional
+from typing import List, Optional,Dict
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -15,14 +15,14 @@ class AgentSelector(ABC):
 
     def __init__(self, seletor_name:str, config: AgentSelectorConfig):
         """
-        Configures 
+        Configures the AgentSelector
         """
         self.config = config
         self.selector_name = seletor_name
     
 
     @abstractmethod
-    def select_agent(self, query: str, agents: List[BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
+    def select_agent(self, query: str, agents: Dict[str, BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
         """
         The primary Agent selection logic for the concrete AgentSelector implementation.  A conrete AgentSelector
         will process the provided query and match it to the BaseBusinessAgent that it determines

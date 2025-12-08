@@ -79,7 +79,7 @@ class KeywordAgentSelectorConfig(AgentSelectorConfig):
     """Concrete AgentSelectorConfig to use with keyword matching"""
     pass
 
-class LLMAgentSeletorConfig(AgentSelectorConfig):
+class LLMAgentSelectorConfig(AgentSelectorConfig):
     """Concrete AgentSelectorConfig that is """
     llm_config: LLMConfig = Field(..., description="The LLM Config to incldue in the LLMAgentSelectorConfig")
 

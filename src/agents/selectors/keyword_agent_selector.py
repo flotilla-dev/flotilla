@@ -1,21 +1,21 @@
 from agents.agent_selector import AgentSelector
 from agents.base_business_agent import BaseBusinessAgent
 from config.config_models import KeywordAgentSelectorConfig
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 class KeywordAgentSelector(AgentSelector):
 
     def __init__(self, config:KeywordAgentSelectorConfig):
         super().__init__("KeywordAgentSelector", config)
 
-    def select_agent(self, query:str, agents:List[BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
+    def select_agent(self, query:str, agents:Dict[str, BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
         """
         Concrete AgentSelector that matches the keywords for each agent against the query
         """
         max_score = -1.0
         selected_agent = None
 
-        for agent in agents:
+        for agent in agents.values():
             capabilities = agent.get_capabilities()
             for capability in capabilities:
                 score = self._match_keywords(query, capability.keywords)
