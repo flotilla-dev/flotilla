@@ -34,5 +34,10 @@ class FlotillaSettings(BaseSettings):
     AGENT_REGISTRY__RECURSIVE: bool = Field(default=True, description="If Agent discovery should recursively search for folders")
     AGENT_REGISTRY__ENABLE_DISCOVERY: bool = Field(default=True, description="Controls if the Agent Regisry should automatically search for agents in the packages list")
 
+    # Agent selector 
+    AGENT_SELECTOR__TYPE: str = Field(default="vector", description="The type of AgentSelector to be built by the ConfigFactory")
+    AGENT_SELECTOR__MIN_CONFIDENCE: float = Field(default=0.7, description="The minimium confidence score that must be met for an Agnet to be selected")
+    AGENT_SELECTOR__EMBEDDING_MODEL: str = Field(default="huggingface:all-MiniLM-L6-v2", description="The Embedding model to use with the vector agent match")
+
     class ConfigDict:
         env_file = ".env"

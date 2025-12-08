@@ -33,7 +33,9 @@ def mock_settings():
         TOOL_REGISTRY__PACKAGES=["tools"],
         AGENT_REGISTRY__ENABLE_DISCOVERY=True,
         AGENT_REGISTRY__RECURSIVE=True,
-        AGENT_REGISTRY__PACKAGES=["agents.business_logic"]
+        AGENT_REGISTRY__PACKAGES=["agents.business_logic"],
+        AGENT_SELECTOR__TYPE="keyword",
+        AGENT_SELECTOR__MIN_CONFIDENCE=0.2
     )
     application_settings = ApplicationSettings(
         agent_configs={},

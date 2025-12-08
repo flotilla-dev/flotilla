@@ -187,12 +187,9 @@ END SYSTEM.
         Returns:
             Confidence score between 0.0 and 1.0
         """
+        return 1
 
-        max_score = 0.0
-        for capability in self._capabilities:
-            score = self._match_keywords(query, capability.keywords)
-            max_score = max(max_score, score)
-        return max_score
+
     
 
     def get_keywords(self) -> List[str]:
@@ -229,19 +226,7 @@ END SYSTEM.
             ]
         }
     
-    def _match_keywords(self, query: str, keywords: List[str]) -> float:
-        """
-        Helper method to match keywords in query
-        
-        Returns:
-            Match score between 0.0 and 1.0
-        """
-        query_lower = query.lower()
-        matches = sum(1 for keyword in keywords if keyword.lower() in query_lower)
-        return min(matches / max(len(keywords), 1), 1.0) if keywords else 0.0    
-    
-    
-
+   
             
     # -----------------------------------------------------------------------
     # Direct LLM Call Helper

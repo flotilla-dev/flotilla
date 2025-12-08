@@ -7,12 +7,15 @@ from datetime import datetime
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from agents.base_business_agent import BaseBusinessAgent
+from agents.agent_selector import AgentSelector
+from agents.agent_selector_factory import AgentSelectorFactory
 from llm.llm_factory import LLMFactory
 from config.config_models import AgentRegistryConfig
 from config.config_factory import ConfigFactory
 from utils.logger import get_logger
 from tools.tool_registry import ToolRegistry
-from agents.business_agent_response import BusinessAgentResponse, ResponseStatus, ErrorResponse
+from agents.business_agent_response import BusinessAgentResponse,ResponseStatus,ErrorResponse
+from agents.response_factory import ResponseFactory
 
 import importlib
 import inspect
@@ -33,6 +36,7 @@ class BusinessAgentRegistry:
         self.tool_registry = tool_registry
         
         self.llm = LLMFactory.get_llm(self.config.llm_config)
+        self.agent_selector: AgentSelector = AgentSelectorFactory.create_agent_selector(self.config.agent_selector_config)
         self.agents: Dict[str, BaseBusinessAgent] = {}
         if (self.config.agent_discovery):
             self._discover_agents()
@@ -129,19 +133,16 @@ class BusinessAgentRegistry:
     
     def select_agent(
         self,
-        query: str,
-        context: Optional[Dict[str, Any]] = None,
-        use_llm_router: bool = True,
-        min_confidence: float = 0.3
-    ) -> Optional[BaseBusinessAgent]:
+        query: str
+        ) -> Optional[BaseBusinessAgent]:
         """
-        Select the most appropriate agent for a query
+        Select the most appropriate agent for a query.  This method will leverage the AgentSelector that 
+        was created during startup to select the best agent that meets the minimum confidence score.  If 
+        an agent cannot be found that meets the criteria then None is returned
         
         Args:
             query: User query
             context: Optional context information
-            use_llm_router: Whether to use LLM for routing (fallback to keyword matching)
-            min_confidence: Minimum confidence threshold
             
         Returns:
             Selected agent or None if no suitable agent found
@@ -149,99 +150,17 @@ class BusinessAgentRegistry:
         if not self.agents:
             logger.warning("No agents registered")
             return None
-        
-        # Method 1: Use keyword-based confidence scores from agents
-        agent_scores = {}
-        for agent_id, agent in self.agents.items():
-            score = agent.can_handle(query, context)
-            agent_scores[agent_id] = score
-        
-        # Get best agent from keyword matching
-        best_keyword_agent_id = max(agent_scores, key=agent_scores.get)
-        best_keyword_score = agent_scores[best_keyword_agent_id]
-        
-        logger.info(f"Keyword-based scores: {agent_scores}")
-        
-        # Method 2: Use LLM for intelligent routing
-        if use_llm_router and len(self.agents) > 1:
-            llm_selected_agent_id = self._llm_select_agent(query, context)
-            
-            if llm_selected_agent_id and llm_selected_agent_id in self.agents:
-                # If LLM selected an agent with reasonable keyword score, use it
-                if agent_scores.get(llm_selected_agent_id, 0) >= min_confidence * 0.5:
-                    logger.info(f"LLM selected agent: {llm_selected_agent_id}")
-                    return self.agents[llm_selected_agent_id]
-        
-        # Fallback to keyword-based selection
-        if best_keyword_score >= min_confidence:
-            logger.info(f"Selected agent based on keywords: {best_keyword_agent_id} (score: {best_keyword_score})")
-            return self.agents[best_keyword_agent_id]
-        
-        logger.warning(f"No agent met confidence threshold. Best score: {best_keyword_score}")
-        return None
+        # Convert dict values to list for selector
+        agents_list = list(self.agents.values())
+        return self.agent_selector.select_agent(query, agents_list)
     
-    def _llm_select_agent(self, query: str, context: Optional[Dict[str, Any]]) -> Optional[str]:
-        """
-        Use LLM to intelligently select the best agent
-        
-        Returns:
-            Agent ID or None
-        """
-        # Build agent descriptions
-        agent_descriptions = []
-        for agent_id, agent in self.agents.items():
-            capabilities = "\n".join([
-                f"  - {cap.name}: {cap.description}"
-                for cap in agent.get_capabilities()
-            ])
-            agent_descriptions.append(
-                f"Agent ID: {agent_id}\n"
-                f"Name: {agent.agent_name}\n"
-                f"Capabilities:\n{capabilities}"
-            )
-        
-        system_prompt = """You are an intelligent query router. Based on the user query and available agents, 
-        select the MOST APPROPRIATE agent to handle the request. Consider the query intent, keywords, and 
-        which agent's capabilities best match the user's needs.
-        
-        Respond with ONLY the agent ID, nothing else."""
-        
-        user_prompt = f"""
-        User Query: {query}
-        
-        {f"Context: {context}" if context else ""}
-        
-        Available Agents:
-        {chr(10).join(agent_descriptions)}
-        
-        Select the best agent ID:
-        """
-        
-        try:
-            response = self.llm.invoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ])
-            
-            selected_id = response.content.strip()
-            
-            # Validate the response is a known agent ID
-            if selected_id in self.agents:
-                return selected_id
-            else:
-                logger.warning(f"LLM returned unknown agent ID: {selected_id}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"LLM agent selection failed: {e}")
-            return None
+    
     
     def execute_with_best_agent(
         self,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
-        min_confidence: float = 0.3
-    ) -> BusinessAgentResponse:
+        context: Optional[Dict[str, Any]] = None
+        ) -> BusinessAgentResponse:
         """
         Select and execute with the best agent for the query
         
@@ -254,52 +173,21 @@ class BusinessAgentRegistry:
             Execution results including agent selection info
         """
         # Select agent
-        selected_agent = self.select_agent(query=query, context=context, min_confidence=min_confidence)
+        selected_agent = self.select_agent(query=query)
         
         if not selected_agent:
-            return {
-                "success": False,
-                "error": "No suitable business logic agent found for this query",
-                "available_agents": [agent.agent_name for agent in self.agents.values()],
-                "timestamp": datetime.now().isoformat()
-            }
+            return ResponseFactory.build_error_response(
+                status=ResponseStatus.NO_VALID_AGENT,
+                query=query,
+                agent_name="",
+                message="No suitable business logic agent found for this query",
+                errors=[ErrorResponse(error_code="NO_VALID_AGENT", error_details="There are no valid agents for the user query")]
+            )
         
         # Execute with selected agent
         logger.info(f"Executing query with agent: {selected_agent.agent_name}")
         return selected_agent.execute(query, context)
     
-    '''
-    def execute_with_multiple_agents(
-        self,
-        query: str,
-        context: Optional[Dict[str, Any]] = None,
-        min_confidence: float = 0.3
-    ) -> BusinessAgentResponse:
-        """
-        Execute query with all agents that meet confidence threshold
-        Useful for getting multiple perspectives
-        
-        Args:
-            query: User query
-            context: Optional context
-            min_confidence: Minimum confidence threshold
-            
-        Returns:
-            List of results from all qualifying agents
-        """
-        results = []
-        
-        for agent_id, agent in self.agents.items():
-            confidence = agent.can_handle(query, context)
-            
-            if confidence >= min_confidence:
-                logger.info(f"Executing with {agent.agent_name} (confidence: {confidence})")
-                result = agent.execute(query, context)
-                result["confidence"] = confidence
-                results.append(result)
-        
-        return results
-        '''
 
     def shutdown(self):
         """

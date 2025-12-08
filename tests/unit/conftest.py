@@ -7,7 +7,6 @@ import pytest
 from unittest.mock import Mock, MagicMock
 from pathlib import Path
 from langgraph.checkpoint.memory import InMemorySaver
-
 from config.settings import Settings, FlotillaSettings, ApplicationSettings
 
 # Add parent directory to path for imports
@@ -20,7 +19,9 @@ from config.config_models import (
     ClientConfig,
     OrchestrationConfig,
     OpenAIConfig,
-    BusinessAgentConfg
+    BusinessAgentConfg,
+    KeywordAgentSelectorConfig,
+    AgentSelectorConfig
 )
 
 
@@ -50,7 +51,6 @@ def dummy_tool_registry_config() -> ToolRegistryConfig:
 def mock_settings():
     return dummy_settings()
 
-
 def dummy_settings() -> Settings:
     return Settings(
         flotilla=dummy_flotilla_settings(),
@@ -69,7 +69,19 @@ def dummy_flotilla_settings() -> FlotillaSettings:
         LLM__TEMPERATURE="1",
         LLM__TYPE="openai",
         TOOL_REGISTRY__PACKAGES=["tools"],
-        AGENT_REGISTRY__PACKAGES=["agents"]
+        AGENT_REGISTRY__PACKAGES=["agents"],
+        AGENT_SELECTOR__TYPE="keyword",
+        AGENT_SELECTOR__MIN_CONFIDENCE=0.2
+    )
+
+@pytest.fixture
+def mock_agent_selector_config() -> AgentSelectorConfig:
+    return dummy_agent_selector_config()
+
+def dummy_agent_selector_config() -> AgentSelectorConfig:
+    return KeywordAgentSelectorConfig(
+        min_confidence=0.2,
+        selector_type="keyword"
     )
 
 @pytest.fixture
@@ -82,6 +94,7 @@ def dummy_agent_registry_config() -> AgentRegistryConfig:
         agent_packages=["tests.unit.agents"],
         agent_recursive=False,
         llm_config=OpenAIConfig(api_key="test-key", model_name="gpt"),
+        agent_selector_config=dummy_agent_selector_config(),
         settings = dummy_settings()
     )
 

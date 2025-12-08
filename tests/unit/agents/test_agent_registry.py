@@ -179,8 +179,7 @@ class TestBusinessAgentRegistry:
         
         # Query with pricing keywords
         selected = registry.select_agent(
-            query="What is the best price for this item?",
-            use_llm_router=False  # Use only keyword matching
+            query="What is the best price for this item?"
         )
         
         assert selected is not None
@@ -196,9 +195,7 @@ class TestBusinessAgentRegistry:
         registry = BusinessAgentRegistry(config=mock_agent_registry_config, tool_registry=mock_tool_registry)
 
         selected = registry.select_agent(
-            query = "What is the weather in Chicago?",
-            use_llm_router=False
-        )
+            query = "What is the weather in Chicago?"        )
 
         #TODO: Turn on asserts after config to agent is working
         assert selected is not None
@@ -213,9 +210,7 @@ class TestBusinessAgentRegistry:
         registry.register_agent(agent)
         
         selected = registry.select_agent(
-            query="completely unrelated query",
-            use_llm_router=False,
-            min_confidence=0.5
+            query="completely unrelated query"
         )
         
         assert selected is None
@@ -223,19 +218,18 @@ class TestBusinessAgentRegistry:
 
     def test_select_agent_with_min_confidence(self, mock_agent_registry_config, mock_tool_registry):
         """Test agent selection respects minimum confidence threshold"""
+        mock_agent_registry_config.agent_selector_config.min_confidence = 0.9
         registry = BusinessAgentRegistry(mock_agent_registry_config, mock_tool_registry)
         agent = MockBusinessAgent("test", "Test", ["price"])
         registry.register_agent(agent)
         
         # High confidence requirement - should fail
         selected = registry.select_agent(
-            query="price",
-            use_llm_router=False,
-            min_confidence=0.9  # Very high threshold
+            query="price"
         )
+
+        assert selected is not None
         
-        # Might be None depending on keyword matching score
-        # The important thing is it respects the threshold
 
     '''
     def test_select_agent_llm_returns_invalid_id(self, mock_agent_registry_config):
@@ -278,8 +272,7 @@ class TestBusinessAgentRegistry:
 
         with patch("langchain_openai.ChatOpenAI.invoke", return_value=mock_response):
             selected = registry.select_agent(
-                query="What is the price?",
-                use_llm_router=True
+                query="What is the price?"
             )
         
         assert selected is not None
@@ -298,8 +291,7 @@ class TestBusinessAgentRegistry:
         mock_response.content = "invalid_agent_id"
         with patch("langchain_openai.ChatOpenAI.invoke", return_value=mock_response):
             selected = registry.select_agent(
-                query="what are you doing today?",
-                use_llm_router=True
+                query="what are you doing today?"
             )
         
         assert selected is None
@@ -315,8 +307,7 @@ class TestBusinessAgentRegistry:
         registry.register_agent(agent)
         
         result = registry.execute_with_best_agent(
-            query="What is the price?",
-            min_confidence=0.1  # Low threshold to ensure match
+            query="What is the price?"
         )
         
         assert result is not None
@@ -335,13 +326,12 @@ class TestBusinessAgentRegistry:
         registry.register_agent(agent)
         
         result = registry.execute_with_best_agent(
-            query="unrelated query",
-            min_confidence=0.9  # High threshold
+            query="unrelated query"
         )
-        
-        assert result["success"] is False
-        assert "error" in result
-        assert "available_agents" in result
+
+        assert isinstance(result, BusinessAgentResponse)
+        assert result.status is ResponseStatus.NO_VALID_AGENT
+
 
 
     ''''
@@ -378,26 +368,10 @@ class TestBusinessAgentRegistry:
         assert agents_list == []
 
 
-    def test_agent_selection_with_context(self, mock_agent_registry_config, mock_tool_registry):
-        """Test agent selection considers context"""
-        registry = BusinessAgentRegistry(mock_agent_registry_config, mock_tool_registry)
-
-        agent = MockBusinessAgent("test", "Test", ["price"])
-        registry.register_agent(agent)
-        
-        context = {"pricing_data": {"current_price": 29.99}}
-        
-        selected = registry.select_agent(
-            query="optimize",
-            context=context,
-            use_llm_router=False
-        )
-        
-        # Agent should receive context for scoring
-        # Behavior depends on agent implementation
+    
 
 
-    def test_register_agent_lifecycle(self, mock_tool_registry, mock_llm_config, mock_settings):
+    def test_register_agent_lifecycle(self, mock_tool_registry, mock_llm_config, mock_agent_selector_config, mock_settings):
         """Ensure register_agent() triggers configure → attach_tools → startup in that order."""
 
         config = AgentRegistryConfig(
@@ -405,6 +379,7 @@ class TestBusinessAgentRegistry:
             agent_discovery=False,
             agent_recursive=False,
             llm_config=mock_llm_config,
+            agent_selector_config=mock_agent_selector_config,
             settings=mock_settings,
         )
         registry = BusinessAgentRegistry(config=config, tool_registry=mock_tool_registry)
@@ -486,7 +461,7 @@ class TestBusinessAgentRegistry:
             assert passed_config.agent_configuration == {"foo": "bar"}
 
 
-    def test_agent_specific_config_default_empty(self, mock_tool_registry, mock_llm_config, mock_settings):
+    def test_agent_specific_config_default_empty(self, mock_tool_registry, mock_llm_config, mock_agent_selector_config, mock_settings):
         """Agents not present in settings.application.agent_configs should get {}."""
 
         mock_settings.application.agent_configs = {
@@ -499,7 +474,8 @@ class TestBusinessAgentRegistry:
             agent_discovery=False,
             agent_recursive=False,
             llm_config=mock_llm_config,
-            settings=mock_settings,
+            agent_selector_config=mock_agent_selector_config,
+            settings=mock_settings
         )
         
         registry = BusinessAgentRegistry(config=config, tool_registry=mock_tool_registry)

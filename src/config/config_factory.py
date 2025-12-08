@@ -10,14 +10,16 @@ from config.config_models import (
     OrchestrationConfig,
     ClientConfig,
     BusinessAgentConfg,
+    AgentSelectorConfig,
+    VectorAgentSelectorConfig,
+    LLMAgentSeletorConfig,
+    KeywordAgentSelectorConfig,
     ToolConfig
 )
 from config.settings import Settings, ApplicationSettings, FlotillaSettings
 from config.flotilla_setttings import LLMType
-from langchain_core.tools import StructuredTool
 from langgraph.types import Checkpointer
 from langgraph.checkpoint.memory import InMemorySaver
-
 
 class ConfigFactory:
     """Factory class for creating configuration models from settings"""
@@ -74,6 +76,7 @@ class ConfigFactory:
             agent_discovery = settings.flotilla.AGENT_REGISTRY__ENABLE_DISCOVERY,
             llm_config = ConfigFactory.create_llm_config(settings),
             feature_flags=settings.application.feature_flags,
+            agent_selector_config=ConfigFactory.create_agent_selector_config(settings),
             settings=settings
         )
     
@@ -133,4 +136,34 @@ class ConfigFactory:
         return ToolConfig(
             tool_configuration=settings.application.tool_configs.get(tool_id, {}),
             feature_flags=settings.application.feature_flags
+        )
+    
+
+    def create_agent_selector_config(settings: Settings) -> AgentSelectorConfig:
+        if settings.flotilla.AGENT_SELECTOR__TYPE is "vector":
+            return ConfigFactory._create_vector_agent_select_config(settings)
+        elif settings.flotilla.AGENT_SELECTOR__TYPE is "keyword":
+            return ConfigFactory._create_keyword_agent_selector_config(settings)
+        elif settings.flotilla.AGENT_SELECTOR__TYPE is "llm":
+            return ConfigFactory._create_llm_agent_selector_config(settings)
+        else:
+            raise TypeError(f"Cannot create AgentSelector for unknown type {settings.flotilla.AGENT_SELECTOR__TYPE}")
+
+    def _create_vector_agent_select_config(settings:Settings) -> VectorAgentSelectorConfig:
+        return VectorAgentSelectorConfig(
+            min_confidence=settings.flotilla.AGENT_SELECTOR__MIN_CONFIDENCE,
+            embedding_model=settings.flotilla.AGENT_SELECTOR__EMBEDDING_MODEL,
+            settings=settings
+        )
+
+    def _create_keyword_agent_selector_config(settings:Settings) -> KeywordAgentSelectorConfig:
+        return KeywordAgentSelectorConfig(
+            min_confidence=settings.flotilla.AGENT_SELECTOR__MIN_CONFIDENCE,
+            settings=settings
+        )
+
+    def _create_llm_agent_selector_config(settings:Settings) -> LLMAgentSeletorConfig:
+        return LLMAgentSeletorConfig(
+            min_confidence=settings.flotilla.AGENT_SELECTOR__MIN_CONFIDENCE,
+            llm_config=ConfigFactory.create_llm_config(settings)
         )
