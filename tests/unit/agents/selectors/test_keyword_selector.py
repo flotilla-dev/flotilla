@@ -139,7 +139,10 @@ def test_constructor_sets_name():
 def test_select_agent_finds_weather_agent(keyword_selector, weather_agent, calculator_agent, calendar_agent):
     keyword_selector.config
     """Test that weather query selects weather agent"""
-    agents = [weather_agent, calculator_agent, calendar_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent, 
+        calculator_agent.agent_id: calculator_agent, 
+        calendar_agent.agent_id: calendar_agent}
     query = "What's the weather like today?"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -149,9 +152,13 @@ def test_select_agent_finds_weather_agent(keyword_selector, weather_agent, calcu
 
 def test_select_agent_finds_calculator_agent(keyword_selector, weather_agent, calculator_agent, calendar_agent):
     """Test that math query selects calculator agent"""
-    agents = [weather_agent, calculator_agent, calendar_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent, 
+        calculator_agent.agent_id: calculator_agent, 
+        calendar_agent.agent_id: calendar_agent
+    }    
+
     query = "Calculate 15 times 23"
-    
     selected = keyword_selector.select_agent(query, agents)
     
     assert selected == calculator_agent
@@ -159,7 +166,11 @@ def test_select_agent_finds_calculator_agent(keyword_selector, weather_agent, ca
 
 def test_select_agent_finds_calendar_agent(keyword_selector, weather_agent, calculator_agent, calendar_agent):
     """Test that schedule query selects calendar agent"""
-    agents = [weather_agent, calculator_agent, calendar_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent, 
+        calculator_agent.agent_id: calculator_agent, 
+        calendar_agent.agent_id: calendar_agent
+    }
     query = "Schedule a meeting for tomorrow"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -169,7 +180,9 @@ def test_select_agent_finds_calendar_agent(keyword_selector, weather_agent, calc
 
 def test_select_agent_multiple_keyword_matches(keyword_selector, weather_agent):
     """Test query with multiple matching keywords"""
-    agents = [weather_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent
+    }
     query = "What's the weather and temperature forecast today?"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -179,7 +192,9 @@ def test_select_agent_multiple_keyword_matches(keyword_selector, weather_agent):
 
 def test_select_agent_case_insensitive(keyword_selector, weather_agent):
     """Test that keyword matching is case insensitive"""
-    agents = [weather_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent
+    }
     query = "WEATHER FORECAST"  # All caps
     
     selected = keyword_selector.select_agent(query, agents)
@@ -189,7 +204,9 @@ def test_select_agent_case_insensitive(keyword_selector, weather_agent):
 
 def test_select_agent_partial_keyword_match(keyword_selector, calculator_agent):
     """Test that partial keyword matches work"""
-    agents = [calculator_agent]
+    agents = {
+        calculator_agent.agent_id: calculator_agent
+    }
     query = "I need to calculate something"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -202,7 +219,10 @@ def test_select_agent_returns_none_below_threshold(keyword_selector, weather_age
     # Set high threshold
     keyword_selector.config.min_confidence = 0.99
     
-    agents = [weather_agent, calculator_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent, 
+        calculator_agent.agent_id: calculator_agent
+    }
     query = "Some unrelated query about quantum physics"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -212,7 +232,10 @@ def test_select_agent_returns_none_below_threshold(keyword_selector, weather_age
 
 def test_select_agent_returns_none_no_keyword_matches(keyword_selector, weather_agent, calculator_agent):
     """Test that no agent selected when query has no matching keywords"""
-    agents = [weather_agent, calculator_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent, 
+        calculator_agent.agent_id: calculator_agent
+    }
     query = "xyz abc def"  # No keywords match
     
     selected = keyword_selector.select_agent(query, agents)
@@ -222,7 +245,7 @@ def test_select_agent_returns_none_no_keyword_matches(keyword_selector, weather_
 
 def test_select_agent_with_empty_agent_list(keyword_selector):
     """Test select_agent with empty agent list"""
-    agents = []
+    agents = {}
     query = "Any query"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -232,7 +255,9 @@ def test_select_agent_with_empty_agent_list(keyword_selector):
 
 def test_select_agent_with_single_agent(keyword_selector, weather_agent):
     """Test select_agent with single agent"""
-    agents = [weather_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent
+    }
     query = "What's the weather?"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -242,7 +267,10 @@ def test_select_agent_with_single_agent(keyword_selector, weather_agent):
 
 def test_select_agent_selects_highest_score(keyword_selector, weather_agent, calculator_agent):
     """Test that the agent with highest score is selected"""
-    agents = [weather_agent, calculator_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent, 
+        calculator_agent.agent_id: calculator_agent
+    }
     query = "weather weather weather calculate"  # More weather keywords
     
     selected = keyword_selector.select_agent(query, agents)
@@ -253,7 +281,7 @@ def test_select_agent_selects_highest_score(keyword_selector, weather_agent, cal
 
 def test_select_agent_with_multi_capability_agent(keyword_selector, multi_capability_agent):
     """Test agent selection with multiple capabilities"""
-    agents = [multi_capability_agent]
+    agents = {multi_capability_agent.agent_id: multi_capability_agent}
     query = "What time is it?"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -264,7 +292,7 @@ def test_select_agent_with_multi_capability_agent(keyword_selector, multi_capabi
 
 def test_select_agent_best_capability_wins(keyword_selector, multi_capability_agent):
     """Test that best capability score is used for agent"""
-    agents = [multi_capability_agent]
+    agents = {multi_capability_agent.agent_id: multi_capability_agent}
     query = "weather temperature time"  # Matches both capabilities
     
     selected = keyword_selector.select_agent(query, agents)
@@ -275,7 +303,9 @@ def test_select_agent_best_capability_wins(keyword_selector, multi_capability_ag
 
 def test_select_agent_empty_query(keyword_selector, weather_agent):
     """Test with empty query string"""
-    agents = [weather_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent
+    }
     query = ""
     
     selected = keyword_selector.select_agent(query, agents)
@@ -285,7 +315,9 @@ def test_select_agent_empty_query(keyword_selector, weather_agent):
 
 def test_select_agent_whitespace_query(keyword_selector, weather_agent):
     """Test with whitespace-only query"""
-    agents = [weather_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent
+    }
     query = "   "
     
     selected = keyword_selector.select_agent(query, agents)
@@ -416,7 +448,11 @@ def test_match_keywords_special_characters(keyword_selector):
 def test_end_to_end_agent_selection(mock_config, weather_agent, calculator_agent, calendar_agent):
     """Test complete end-to-end agent selection flow"""
     selector = KeywordAgentSelector(mock_config)
-    agents = [weather_agent, calculator_agent, calendar_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent, 
+        calculator_agent.agent_id: calculator_agent, 
+        calendar_agent.agent_id: calendar_agent
+    }
     
     # Test multiple queries
     test_cases = [
@@ -437,7 +473,10 @@ def test_confidence_threshold_filtering(mock_config, weather_agent, calculator_a
     mock_config.min_confidence = 0.8  # High threshold
     selector = KeywordAgentSelector(mock_config)
     
-    agents = [weather_agent, calculator_agent]
+    agents = {
+        weather_agent.agent_id: weather_agent, 
+        calculator_agent.agent_id: calculator_agent
+    }
     
     # Query with weak match (only 1 of 5 keywords)
     query = "weather"  # Matches 1/5 keywords = 0.2 score
@@ -463,7 +502,10 @@ def test_multiple_agents_same_score(keyword_selector):
         AgentCapability(name="C2", description="D2", keywords=["weather"], examples=[])
     ])
     
-    agents = [agent1, agent2]
+    agents = {
+        agent1.agent_id: agent1,
+        agent2.agent_id: agent2
+    }
     query = "weather"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -480,9 +522,10 @@ def test_agent_with_no_capabilities(keyword_selector):
     """Test handling agent with no capabilities"""
     agent = Mock(spec=BaseBusinessAgent)
     agent.agent_name = "Empty Agent"
+    agent.agent_id = "empty_agent"
     agent.get_capabilities = Mock(return_value=[])
     
-    agents = [agent]
+    agents = {agent.agent_id: agent}
     query = "any query"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -494,11 +537,12 @@ def test_agent_with_capability_no_keywords(keyword_selector):
     """Test agent with capability that has no keywords"""
     agent = Mock(spec=BaseBusinessAgent)
     agent.agent_name = "No Keywords Agent"
+    agent.agent_id = "no_keywords_agent"
     agent.get_capabilities = Mock(return_value=[
         AgentCapability(name="Cap", description="Desc", keywords=[], examples=[])
     ])
     
-    agents = [agent]
+    agents = {agent.agent_id: agent}
     query = "any query"
     
     selected = keyword_selector.select_agent(query, agents)
@@ -510,7 +554,7 @@ def test_confidence_threshold_boundary(keyword_selector, weather_agent):
     """Test selection at exact confidence threshold"""
     keyword_selector.config.min_confidence = 0.2  # 1/5 keywords
     
-    agents = [weather_agent]
+    agents = {weather_agent.agent_id: weather_agent}
     query = "weather"  # Matches 1/5 keywords = 0.2
     
     selected = keyword_selector.select_agent(query, agents)
@@ -523,11 +567,12 @@ def test_unicode_handling(keyword_selector):
     """Test handling of unicode characters"""
     agent = Mock(spec=BaseBusinessAgent)
     agent.agent_name = "Unicode Agent"
+    agent.agent_id = "unicode_agent"
     agent.get_capabilities = Mock(return_value=[
         AgentCapability(name="C", description="D", keywords=["café", "naïve"], examples=[])
     ])
     
-    agents = [agent]
+    agents = {agent.agent_id: agent}
     query = "café naïve"
     
     selected = keyword_selector.select_agent(query, agents)

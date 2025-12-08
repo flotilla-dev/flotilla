@@ -150,9 +150,9 @@ class BusinessAgentRegistry:
         if not self.agents:
             logger.warning("No agents registered")
             return None
-        # Convert dict values to list for selector
+        # Convert dict values to list for se lector
         agents_list = list(self.agents.values())
-        return self.agent_selector.select_agent(query, agents_list)
+        return self.agent_selector.select_agent(query, self.agents)
     
     
     

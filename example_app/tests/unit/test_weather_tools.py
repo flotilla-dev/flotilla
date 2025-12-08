@@ -15,6 +15,12 @@ def valid_config():
                 "BASE_URL": "https://api.weatherapi.com/v1"
             }
         }
+    config.feature_flags = {
+        "weather_tools": {
+            "use_api": False
+        }
+
+    }
     return config
 
 

@@ -142,7 +142,10 @@ def test_constructor_with_invalid_config():
 
 def test_select_agent_finds_weather_agent(vector_selector, weather_agent, calculator_agent, calendar_agent):
     """Test that weather query selects weather agent"""
-    agents = [weather_agent, calculator_agent, calendar_agent]
+    agents = {weather_agent.agent_id: weather_agent, 
+              calculator_agent.agent_id: calculator_agent, 
+              calendar_agent.agent_id: calendar_agent
+    }
     query = "What's the weather like today?"
     
     selected = vector_selector.select_agent(query, agents)
@@ -153,7 +156,10 @@ def test_select_agent_finds_weather_agent(vector_selector, weather_agent, calcul
 
 def test_select_agent_finds_calculator_agent(vector_selector, weather_agent, calculator_agent, calendar_agent):
     """Test that math query selects calculator agent"""
-    agents = [weather_agent, calculator_agent, calendar_agent]
+    agents = {weather_agent.agent_id: weather_agent, 
+              calculator_agent.agent_id: calculator_agent, 
+              calendar_agent.agent_id: calendar_agent
+    }
     query = "Calculate 15 times 23"
     
     selected = vector_selector.select_agent(query, agents)
@@ -163,7 +169,10 @@ def test_select_agent_finds_calculator_agent(vector_selector, weather_agent, cal
 
 def test_select_agent_finds_calendar_agent(vector_selector, weather_agent, calculator_agent, calendar_agent):
     """Test that schedule query selects calendar agent"""
-    agents = [weather_agent, calculator_agent, calendar_agent]
+    agents = {weather_agent.agent_id: weather_agent, 
+              calculator_agent.agent_id: calculator_agent, 
+              calendar_agent.agent_id: calendar_agent
+    }
     query = "Schedule a meeting for tomorrow"
     
     selected = vector_selector.select_agent(query, agents)
@@ -176,7 +185,9 @@ def test_select_agent_returns_none_below_threshold(vector_selector, weather_agen
     # Set high threshold
     vector_selector.config.min_confidence = 0.99
     
-    agents = [weather_agent, calculator_agent]
+    agents = {weather_agent.agent_id: weather_agent, 
+              calculator_agent.agent_id: calculator_agent
+    }
     query = "Some unrelated query about quantum physics"
     
     selected = vector_selector.select_agent(query, agents)
@@ -186,7 +197,7 @@ def test_select_agent_returns_none_below_threshold(vector_selector, weather_agen
 
 def test_select_agent_with_empty_agent_list(vector_selector):
     """Test select_agent with empty agent list"""
-    agents = []
+    agents = {}
     query = "Any query"
     
     selected = vector_selector.select_agent(query, agents)
@@ -196,7 +207,7 @@ def test_select_agent_with_empty_agent_list(vector_selector):
 
 def test_select_agent_with_single_agent(vector_selector, weather_agent):
     """Test select_agent with single agent"""
-    agents = [weather_agent]
+    agents = {weather_agent.agent_id: weather_agent    }
     query = "What's the weather?"
     
     selected = vector_selector.select_agent(query, agents)
@@ -221,7 +232,8 @@ def test_select_agent_selects_highest_score(vector_selector, mock_embeddings):
         AgentCapability(name="Cap2", description="other stuff", keywords=["other"], examples=[])
     ])
     
-    agents = [agent1, agent2]
+    agents = {agent1.agent_id: agent1, 
+              agent2.agent_id: agent2}
     query = "What's the weather?"  # Should match agent1 better
     
     selected = vector_selector.select_agent(query, agents)
@@ -390,7 +402,10 @@ def test_vectorize_texts_empty_list(vector_selector):
 def test_end_to_end_agent_selection(mock_config, weather_agent, calculator_agent, calendar_agent):
     """Test complete end-to-end agent selection flow"""
     selector = VectorAgentSelector(mock_config)
-    agents = [weather_agent, calculator_agent, calendar_agent]
+    agents = {weather_agent.agent_id: weather_agent, 
+              calculator_agent.agent_id: calculator_agent, 
+              calendar_agent.agent_id: calendar_agent
+    }
     
     # Test multiple queries
     test_cases = [
@@ -409,17 +424,21 @@ def test_similarity_scores_are_compared_correctly(vector_selector, mock_embeddin
     # Create agents with known embeddings
     agent_high = Mock(spec=BaseBusinessAgent)
     agent_high.agent_name = "High Match"
+    agent_high.agent_id = "high"
     agent_high.get_capabilities = Mock(return_value=[
         AgentCapability(name="C", description="weather stuff", keywords=["weather"], examples=[])
     ])
     
     agent_low = Mock(spec=BaseBusinessAgent)
     agent_low.agent_name = "Low Match"
+    agent_low.agent_id = "low"
     agent_low.get_capabilities = Mock(return_value=[
         AgentCapability(name="C", description="other stuff", keywords=["other"], examples=[])
     ])
     
-    agents = [agent_low, agent_high]  # Low first to ensure comparison works
+    agents = {agent_low.agent_id: agent_low, 
+              agent_high.agent_id: agent_high
+    }  # Low first to ensure comparison works
     query = "What's the weather?"
     
     selected = vector_selector.select_agent(query, agents)
@@ -448,7 +467,7 @@ def test_confidence_threshold_boundary(vector_selector, weather_agent):
     # Set threshold to exact match value
     vector_selector.config.min_confidence = 1.0
     
-    agents = [weather_agent]
+    agents = {weather_agent.agent_id: weather_agent}
     query = "weather"  # Should be exact match
     
     selected = vector_selector.select_agent(query, agents)
