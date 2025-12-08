@@ -104,12 +104,13 @@ class TestToolRegistryConfig:
 
 
 class TestAgentRegistryConfig:
-    def test_valid_config_creation(self, mock_settings, mock_llm_config):
+    def test_valid_config_creation(self, mock_settings, mock_agent_selector_config, mock_llm_config):
         """Should create a valid AgentRegistryConfig with all required fields."""
         config = AgentRegistryConfig(
             agent_packages=["agents.sales", "agents.marketing"],
             agent_recursive=True,
             llm_config=mock_llm_config,
+            agent_selector_config=mock_agent_selector_config,
             settings=mock_settings
         )
 
@@ -120,7 +121,7 @@ class TestAgentRegistryConfig:
         assert config.settings is not None
         assert config.llm_config.api_key == "test-key"
 
-    def test_default_recursive_true(self, mock_settings):
+    def test_default_recursive_true(self, mock_settings, mock_agent_selector_config):
         """Should default agent_recursive to True when not specified."""
         llm_cfg = LLMConfig(
             endpoint="https://example.com/llm",
@@ -130,6 +131,7 @@ class TestAgentRegistryConfig:
         config = AgentRegistryConfig(
             agent_packages=["agents.customer"],
             llm_config=llm_cfg,
+            agent_selector_config=mock_agent_selector_config,
             settings=mock_settings
         )
 
@@ -144,7 +146,7 @@ class TestAgentRegistryConfig:
                 llm_config="not-an-llm-config"
             )
 
-    def test_nested_llm_config_defaults_apply(self, mock_settings):
+    def test_nested_llm_config_defaults_apply(self, mock_settings, mock_agent_selector_config):
         """Should preserve LLMConfig defaults when nested inside AgentRegistryConfig."""
         llm_cfg = LLMConfig(
             api_key="sk-123"
@@ -153,6 +155,7 @@ class TestAgentRegistryConfig:
         config = AgentRegistryConfig(
             agent_packages=["agents.test"],
             llm_config=llm_cfg,
+            agent_selector_config=mock_agent_selector_config,
             settings=mock_settings
         )
 

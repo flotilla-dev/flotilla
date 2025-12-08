@@ -66,12 +66,30 @@ class ToolConfig(FeatureConfig):
 # Agent Configs
 # --------------------------------
 
+class AgentSelectorConfig(FeatureConfig):
+    """Base class for AgentSelectorConfig instances"""
+    min_confidence: float = Field(..., description="Default minimal confidenc score that needs to be achieved for an AgentSelector to select an Agent")
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+class VectorAgentSelectorConfig(AgentSelectorConfig):
+    """Concrete AgentSelectConfig for use with embedding"""
+    embedding_model: str = Field(...,  description="The Embeddings model to use with the VectorAgentSelector")
+    
+class KeywordAgentSelectorConfig(AgentSelectorConfig):
+    """Concrete AgentSelectorConfig to use with keyword matching"""
+    pass
+
+class LLMAgentSeletorConfig(AgentSelectorConfig):
+    """Concrete AgentSelectorConfig that is """
+    llm_config: LLMConfig = Field(..., description="The LLM Config to incldue in the LLMAgentSelectorConfig")
+
 class AgentRegistryConfig(FeatureConfig):
     """Configuration for Agent Registry"""
     agent_discovery: bool = Field(default=True, description="Controls if Agents should automatcally be discovered")
     agent_packages:List[str] | None = Field(default=[], description="A list of packages to load agents from")
     agent_recursive: bool = Field(default=True, description="If the Agent Registry should load recurisvely")
     llm_config: LLMConfig | None = Field(default=None, description="The LLMConfig to use with the AgentRegistry")
+    agent_selector_config: AgentSelectorConfig = Field(..., description="The AgentSelectorConfig to use with the AgentRegistry")
     settings: Settings = Field(..., description="The full settings for the application")
     
 
@@ -84,24 +102,7 @@ class BusinessAgentConfg(FeatureConfig):
         description="Additional agent configuration data"
     )
 
-class AgentSelectorConfig(FeatureConfig):
-    """Base class for AgentSelectorConfig instances"""
-    min_confidence: float = Field(default=0.7, description="Default minimal confidenc score that needs to be achieved for an AgentSelector to select an Agent")
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    selector_type: str = Field(default="embedding", description="The type of AgentSelector to use in the application, defaults to 'embedding'")
 
-class VectorAgentSelectorConfig(AgentSelectorConfig):
-    """Concrete AgentSelectConfig for use with embedding"""
-    embedding_model: Embeddings = Field(...,  description="The Embeddings model to use with the VectorAgentSelector")
-    
-
-class KeywordAgentSelectorConfig(AgentSelectorConfig):
-    """Concrete AgentSelectorConfig to use with keyword matching"""
-    pass
-
-class LLMAgentSeletorConfig(AgentRegistryConfig):
-    """Concrete AgentSelectorConfig that is """
-    llm_config: LLMConfig = Field(..., description="The LLM Config to incldue in the LLMAgentSelectorConfig")
 
 
 

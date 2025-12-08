@@ -21,6 +21,7 @@ class ResponseStatus(Enum):
     LLM_CALL_FAILED = "llm_call_failed"       # API error, timeout, model failure
     APP_MISCONFIGURED = "app_misconfigured"   # Registry/config/env problems
     INTERNAL_ERROR = "internal_error"         # Uncaught exceptions in your code
+    NO_VALID_AGENT = "no_valid_agent"         # Couldn't find a valid agent for the query
 
 
 class ErrorResponse(BaseModel):
