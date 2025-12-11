@@ -3,10 +3,9 @@ import inspect
 import pkgutil
 import pathlib
 from typing import List, Callable
-from config.settings import Settings
 from langchain_core.tools import StructuredTool
 from config.config_models import ToolRegistryConfig
-from tools.tool_factory import ToolFactory
+from tools.base_tool_provider import BaseToolProvider
 from config.config_factory import ConfigFactory
 from utils.logger import get_logger
 
@@ -26,7 +25,7 @@ class ToolRegistry:
             config:  The ToolRegistryConfig to use with this ToolRegistry
         """
         self.config = config
-        self._tools = []
+        self._providers = []
         self._loaded = False
         if self.config.tool_discovery:
             self._discover_tools()
@@ -70,10 +69,10 @@ class ToolRegistry:
             return
 
         for _, obj in inspect.getmembers(module, inspect.isclass):
-            if issubclass(obj, ToolFactory) and obj is not ToolFactory:
+            if issubclass(obj, BaseToolProvider) and obj is not BaseToolProvider:
                 try:
                     tool_instance = obj()
-                    self.register_tool(tool_instance)
+                    self.register_provider(tool_instance)
                 except Exception as e:
                     logger.error(f"Failed to initialize tool {obj.__name__}: {e}")
 
@@ -82,20 +81,20 @@ class ToolRegistry:
     # Public API methods
     # --------------------------
 
-    def register_tool(self, tool:ToolFactory):
+    def register_provider(self, provider:BaseToolProvider):
         """Adds a Tool the internal collection of tools"""
-        logger.info(f"Register a new concrete Tool {tool.tool_name}")
-        config = ConfigFactory.create_tool_config(tool.tool_id, self.config.settings)
-        tool.configure(config=config)
-        self._tools.append(tool)
+        logger.info(f"Register a new concrete Tool {provider.provider_name}")
+        config = ConfigFactory.create_tool_config(provider.provider_id, self.config.settings)
+        provider.configure(config=config)
+        self._providers.append(provider)
         if not self._loaded:
             self._loaded = True
 
-    def unregister_tool(self, name:str):
+    def unregister_provider(self, name:str):
         """Removes a tool from the internal collection if its name matches the tools name"""
         logger.info(f"Remove tool {name} from ToolRegistry")
-        filtered_toools = [tool for tool in self._tools if tool.name != name]
-        self._tools = filtered_toools
+        filtered_toools = [tool for tool in self._providers if tool.name != name]
+        self._providers = filtered_toools
 
 
     def load_tools(self, force_reload: bool = False):
@@ -103,19 +102,19 @@ class ToolRegistry:
         if self._loaded and not force_reload:
             return
         self._discover_tools()
-        logger.info(f"Loaded {len(self._tools)} tools from {self.config.tool_packages}")
+        logger.info(f"Loaded {len(self._providers)} tools from {self.config.tool_packages}")
 
 
-    def get_all_tools(self) -> List:
+    def get_all_tools(self) -> List[StructuredTool]:
         """
         Returns a flattened list of all StructuredTool objects provided
-        by every registered BaseTool instance.
+        by every registered ToolProvider instance.
         """
         all_structured_tools: List[StructuredTool] = []
 
-        for tool_instance in self._tools:  # each is a BaseTool
-            if isinstance(tool_instance, ToolFactory):
-                all_structured_tools.extend(tool_instance.tools)
+        for provider in self._providers:  # each is a BaseTool
+            if isinstance(provider, BaseToolProvider):
+                all_structured_tools.extend(provider.tools)
 
         return all_structured_tools
     
@@ -131,8 +130,8 @@ class ToolRegistry:
     def shutdown(self):
         """Lifecycle method to cleanup resources when the application is finished"""
         logger.info("Shutdown the ToolRegistry")
-        for tool in self._tools:
-            if tool and isinstance(tool, ToolFactory):
+        for tool in self._providers:
+            if tool and isinstance(tool, BaseToolProvider):
                 logger.debug(f"Calling shutdown on Tool {tool.tool_name}")
                 tool.shutdown()
             else:

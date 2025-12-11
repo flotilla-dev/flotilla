@@ -1,10 +1,10 @@
 from langchain.tools import tool
-from tools.tool_factory import ToolFactory
+from tools.base_tool_provider import BaseToolProvider
 from typing import List
 from langchain_core.tools import StructuredTool
 
 
-class TestTool(ToolFactory):
+class TestTool(BaseToolProvider):
     def __init__(self):
         super().__init__("test_tool", "Test Tool")
         self.configure_count = 0
