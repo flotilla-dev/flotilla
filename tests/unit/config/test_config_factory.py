@@ -124,16 +124,16 @@ class TestToolRegistryConfigCreation:
         config = ConfigFactory.create_tool_registry_config(mock_settings)
         
         assert isinstance(config, ToolRegistryConfig)
-        assert config.tool_discovery is True
-        assert config.tool_packages == ["tools"]
-        assert config.tool_recursive is True
+        assert config.provider_discovery is True
+        assert config.provider_packages == ["tools"]
+        assert config.provider_recursive is True
     
 
     def test_tool_registry_config_disabled_discovery(self, mock_settings):
         """Test tool registry config with discovery disabled"""
         mock_settings.flotilla.TOOL_REGISTRY__ENABLE_DISCOVERY = False
         config = ConfigFactory.create_tool_registry_config(mock_settings)
-        assert config.tool_discovery is False
+        assert config.provider_discovery is False
 
     
     def test_tool_registry_config_multiple_packages(self, mock_settings):
@@ -142,8 +142,8 @@ class TestToolRegistryConfigCreation:
         
         config = ConfigFactory.create_tool_registry_config(mock_settings)
         
-        assert len(config.tool_packages) == 3
-        assert "custom_tools" in config.tool_packages
+        assert len(config.provider_packages) == 3
+        assert "custom_tools" in config.provider_packages
 
 
 class TestAgentRegistryConfigCreation:
@@ -260,7 +260,7 @@ class TestEdgeCases:
         
         config = ConfigFactory.create_tool_registry_config(mock_settings)
         
-        assert config.tool_packages == []
+        assert config.provider_packages == []
     
     def test_empty_agent_packages(self, mock_settings):
         """Test behavior with empty agent packages list"""

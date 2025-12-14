@@ -41,9 +41,9 @@ def mock_tool_registry_config():
 
 def dummy_tool_registry_config() -> ToolRegistryConfig:
     return ToolRegistryConfig(
-        tool_packages=["tests.unit.tools"],
-        tool_discovery=True,
-        tool_recursive=True,
+        provider_packages=["tests.unit.tools"],
+        provider_discovery=True,
+        provider_recursive=True,
         settings=dummy_settings()
     )
 

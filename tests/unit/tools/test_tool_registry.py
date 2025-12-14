@@ -8,11 +8,11 @@ import pkgutil
 
 from tools.tool_registry import ToolRegistry
 from config.settings import Settings
-from tools.tool_factory import ToolFactory
+from tools.base_tool_provider import BaseToolProvider
 from langchain_core.tools import tool
 
 
-class MockTool(ToolFactory):
+class MockTool(BaseToolProvider):
     def __init__(self, id:str | None = "mock_1", name:str | None = "Mock Tool"):
         """COnstructor"""
         super().__init__(id, name)
@@ -20,6 +20,9 @@ class MockTool(ToolFactory):
     def _register_tools(self):
         """Returns the list of tools"""
         return [self.mock_tool]
+    
+    def _configure_tools(self):
+        return super()._configure_tools()
     
     @tool
     def mock_tool(self):
@@ -33,10 +36,10 @@ class TestToolRegistry:
         """Ensure _discover_tools() finds valid callable tool objects."""    
         registry = ToolRegistry(mock_tool_registry_config)
 
-        tools = registry._tools
+        tools = registry._providers
         # Assertions
         assert len(tools) >= 1, "Expected at least one tool to be discovered"
-        tool_names = [t.tool_name for t in tools]
+        tool_names = [t.provider_name for t in tools]
         assert "Test Tool" in tool_names, f"Discovered tools: {tool_names}"
         
 
@@ -44,12 +47,12 @@ class TestToolRegistry:
     def test_loadTools_sets_loaded_flag(self, mocker, mock_tool_registry_config):
         """Ensure loadTools loads tools only once unless forced."""
         # disable automatic discovery to test properly
-        mock_tool_registry_config.tool_discovery = False
+        mock_tool_registry_config.provider_discovery = False
         registry = ToolRegistry(mock_tool_registry_config)
         spy = mocker.spy(registry, "_discover_tools")
 
         assert registry._loaded is False
-        assert len(registry._tools) == 0
+        assert len(registry._providers) == 0
         # First load
         registry.load_tools(force_reload=True)
         assert registry._loaded is True
@@ -78,28 +81,28 @@ class TestToolRegistry:
 
 
     def test_tool_registration(self, mock_tool_registry_config):
-        mock_tool_registry_config.tool_discovery = False
+        mock_tool_registry_config.provider_discovery = False
         registry = ToolRegistry(mock_tool_registry_config)
         tool = MockTool()
 
         assert registry
         assert not registry._loaded
-        assert registry._tools is not None
-        assert len(registry._tools) == 0
+        assert registry._providers is not None
+        assert len(registry._providers) == 0
 
-        registry.register_tool(tool)
+        registry.register_provider(tool)
 
         assert registry._loaded
-        assert len(registry._tools) == 1
+        assert len(registry._providers) == 1
         
 
     def test_get_tools_by_filter(self, mock_tool_registry_config):
-        mock_tool_registry_config.tool_discovery = False
+        mock_tool_registry_config.provider_discovery = False
         # load standard test tools
         registry = ToolRegistry(mock_tool_registry_config)
         # add mock tools
         mock_tool = MockTool("tool_1", "Tool1")
-        registry.register_tool(mock_tool)
+        registry.register_provider(mock_tool)
 
 
         filtered_tools = registry.get_tools(self.filter_tools)
@@ -118,14 +121,14 @@ class TestToolRegistry:
         registry = ToolRegistry(config=MagicMock())
 
         # Create mock BaseTool instance
-        mock_tool = MagicMock(spec=ToolFactory)
+        mock_tool = MagicMock(spec=BaseToolProvider)
         mock_tool.tool_name = "MockTool"
 
         # Fake non-tool object
         non_tool = "not-a-tool"
 
         # Inject both into registry
-        registry._tools = [mock_tool, non_tool]
+        registry._providers = [mock_tool, non_tool]
 
         # --- Run shutdown ---
         with caplog.at_level("DEBUG"):

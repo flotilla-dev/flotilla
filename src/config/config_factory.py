@@ -60,9 +60,9 @@ class ConfigFactory:
     def create_tool_registry_config(settings:Settings) -> ToolRegistryConfig:
         """Creates a Tool Registry Config"""
         return ToolRegistryConfig(
-            tool_packages = settings.flotilla.TOOL_REGISTRY__PACKAGES,
-            tool_recursive = settings.flotilla.TOOL_REGISTRY__RECURISVE,
-            tool_discovery = settings.flotilla.TOOL_REGISTRY__ENABLE_DISCOVERY,
+            provider_packages = settings.flotilla.TOOL_REGISTRY__PACKAGES,
+            provider_recursive = settings.flotilla.TOOL_REGISTRY__RECURISVE,
+            provider_discovery = settings.flotilla.TOOL_REGISTRY__ENABLE_DISCOVERY,
             feature_flags=settings.application.feature_flags,
             settings= settings
         )
