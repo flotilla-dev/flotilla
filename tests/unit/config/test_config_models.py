@@ -83,24 +83,24 @@ class TestToolRegistryConfig:
     def test_valid_config_creation(self, mock_settings):
         """Should create a valid ToolRegistryConfig with required fields."""
         config = ToolRegistryConfig(
-            tool_packages=["tools.common", "tools.math"],
-            tool_recursive=True,
+            provider_packages=["tools.common", "tools.math"],
+            provider_recursive=True,
             settings=mock_settings
         )
 
-        assert config.tool_packages == ["tools.common", "tools.math"]
-        assert config.tool_recursive is True
+        assert config.provider_packages == ["tools.common", "tools.math"]
+        assert config.provider_recursive is True
 
     def test_default_recursive_is_true(self, mock_settings):
         """Should default tool_recursive to True when not specified."""
-        config = ToolRegistryConfig(tool_packages=["tools.ai"], settings=mock_settings)
-        assert config.tool_recursive is True  # pydantic should coerce "true" → True
+        config = ToolRegistryConfig(provider_packages=["tools.ai"], settings=mock_settings)
+        assert config.provider_recursive is True  # pydantic should coerce "true" → True
 
 
     def test_tool_packages_must_be_list_of_strings(self):
         """Should raise ValidationError if tool_packages is not a list of strings."""
         with pytest.raises(ValidationError):
-            ToolRegistryConfig(tool_packages="not-a-list")  # invalid type
+            ToolRegistryConfig(provider_packages="not-a-list")  # invalid type
 
 
 class TestAgentRegistryConfig:

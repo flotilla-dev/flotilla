@@ -44,14 +44,14 @@ class AzureOpenAIConfig(LLMConfig):
 
 
 # --------------------------------
-# TOol Configs
+# Provider Configs
 # --------------------------------
 
 class ToolRegistryConfig(FeatureConfig):
     """Configuration for Tool Registry"""
-    tool_discovery: bool = Field(default=True, description="Controls if Tools should be automatically discovered")
-    tool_packages:List[str] | None = Field(default=[], description="A list of packages to load tools from")
-    tool_recursive: bool = Field(default=True, description="If the Tool Registry should load recusrively")
+    provider_discovery: bool = Field(default=True, description="Controls if ToolProviders should be automatically discovered")
+    provider_packages:List[str] | None = Field(default=[], description="A list of packages to search for ToolProviders")
+    provider_recursive: bool = Field(default=True, description="If the Tool Registry should search recusrively through the list of packages")
     settings: Settings = Field(..., description="The full settings for the application")
 
 class ToolConfig(FeatureConfig):

@@ -47,7 +47,7 @@ class TestToolRegistry:
     def test_loadTools_sets_loaded_flag(self, mocker, mock_tool_registry_config):
         """Ensure loadTools loads tools only once unless forced."""
         # disable automatic discovery to test properly
-        mock_tool_registry_config.tool_discovery = False
+        mock_tool_registry_config.provider_discovery = False
         registry = ToolRegistry(mock_tool_registry_config)
         spy = mocker.spy(registry, "_discover_tools")
 
@@ -81,7 +81,7 @@ class TestToolRegistry:
 
 
     def test_tool_registration(self, mock_tool_registry_config):
-        mock_tool_registry_config.tool_discovery = False
+        mock_tool_registry_config.provider_discovery = False
         registry = ToolRegistry(mock_tool_registry_config)
         tool = MockTool()
 
@@ -97,7 +97,7 @@ class TestToolRegistry:
         
 
     def test_get_tools_by_filter(self, mock_tool_registry_config):
-        mock_tool_registry_config.tool_discovery = False
+        mock_tool_registry_config.provider_discovery = False
         # load standard test tools
         registry = ToolRegistry(mock_tool_registry_config)
         # add mock tools

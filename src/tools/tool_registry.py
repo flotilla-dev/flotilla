@@ -27,7 +27,7 @@ class ToolRegistry:
         self.config = config
         self._providers = []
         self._loaded = False
-        if self.config.tool_discovery:
+        if self.config.provider_discovery:
             self._discover_tools()
 
     # -------------------------
@@ -38,13 +38,13 @@ class ToolRegistry:
         """Internal: scans configured packages and loads @tool objects."""
         all_tools = []
 
-        for package_name in self.config.tool_packages:
+        for package_name in self.config.provider_packages:
             package = importlib.import_module(package_name)
             package_path = pathlib.Path(package.__file__).parent
 
             iterator = (
                 pkgutil.walk_packages([str(package_path)], f"{package_name}.")
-                if self.config.tool_recursive
+                if self.config.provider_recursive
                 else pkgutil.iter_modules([str(package_path)])
             )
 
@@ -52,16 +52,16 @@ class ToolRegistry:
                         # Scan submodules
             for _, full_module_name, is_pkg in iterator:
                 if not is_pkg:
-                    self._load_tools_from_module(full_module_name)
+                    self._load_providers_from_module(full_module_name)
 
             # Also check the package’s __init__.py
-            self._load_tools_from_module(package_name)
+            self._load_providers_from_module(package_name)
 
         self._loaded = True
 
 
-    def _load_tools_from_module(self, module_name: str):
-        """Import a module and load all BaseTool subclasses inside it."""
+    def _load_providers_from_module(self, module_name: str):
+        """Import a module and load all ToolProvider subclasses inside it."""
         try:
             module = importlib.import_module(module_name)
         except Exception as e:
@@ -71,8 +71,8 @@ class ToolRegistry:
         for _, obj in inspect.getmembers(module, inspect.isclass):
             if issubclass(obj, BaseToolProvider) and obj is not BaseToolProvider:
                 try:
-                    tool_instance = obj()
-                    self.register_provider(tool_instance)
+                    provider_instance = obj()
+                    self.register_provider(provider_instance)
                 except Exception as e:
                     logger.error(f"Failed to initialize tool {obj.__name__}: {e}")
 
@@ -83,7 +83,7 @@ class ToolRegistry:
 
     def register_provider(self, provider:BaseToolProvider):
         """Adds a Tool the internal collection of tools"""
-        logger.info(f"Register a new concrete Tool {provider.provider_name}")
+        logger.info(f"Register a new concrete ToolProvider {provider.provider_name}")
         config = ConfigFactory.create_tool_config(provider.provider_id, self.config.settings)
         provider.configure(config=config)
         self._providers.append(provider)
@@ -91,18 +91,18 @@ class ToolRegistry:
             self._loaded = True
 
     def unregister_provider(self, name:str):
-        """Removes a tool from the internal collection if its name matches the tools name"""
-        logger.info(f"Remove tool {name} from ToolRegistry")
-        filtered_toools = [tool for tool in self._providers if tool.name != name]
+        """Removes a ToolProvider from the internal collection if its name matches the provider name"""
+        logger.info(f"Remove provider {name} from ToolRegistry")
+        filtered_toools = [provider for provider in self._providers if provider.provider_name != name]
         self._providers = filtered_toools
 
 
     def load_tools(self, force_reload: bool = False):
-        """Load or reload tools from configured packages."""
+        """Load or reload providers from configured packages."""
         if self._loaded and not force_reload:
             return
         self._discover_tools()
-        logger.info(f"Loaded {len(self._providers)} tools from {self.config.tool_packages}")
+        logger.info(f"Loaded {len(self._providers)} tools from {self.config.provider_packages}")
 
 
     def get_all_tools(self) -> List[StructuredTool]:
