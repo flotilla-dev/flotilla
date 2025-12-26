@@ -11,6 +11,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability, ToolDependency
 from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.agents.agent_selector import AgentSelector
+from flotilla.config.settings import FlotillaSettings
 from flotilla.agents.selectors.keyword_agent_selector import KeywordAgentSelector
 
 
@@ -95,3 +96,7 @@ def agent_factory(mock_llm, mock_checkpointer):
             dependencies=dependencies
         )
     return _factory
+
+@pytest.fixture
+def minimal_settings():
+    return FlotillaSettings.from_dict({})
