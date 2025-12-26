@@ -114,19 +114,20 @@ class FlotillaContainer:
         )
 
 
-    def build(self) -> FlotillaContainer:
-        logger.info("Building Flotilla container")
+    def build(self):
+        logger.info("Building Flotilla DI container")
 
-        for contributor in sorted(
-            self._contributors, key=lambda c: c.priority
-        ):
+        ordered = sorted(self._contributors, key=lambda c: c.priority)
+
+        for contributor in ordered:
             contributor.contribute(self)
 
-        for contributor in self._contributors:
+        for contributor in ordered:
             contributor.validate(self)
 
         logger.info("✓ Flotilla container build complete")
         return self
+
 
 
 
