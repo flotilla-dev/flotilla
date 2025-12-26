@@ -35,7 +35,7 @@ sys.path.insert(0, str(framework_src))
 from config.settings import Settings
 from config.config_loader import ConfigLoader
 from config.config_factory import ConfigFactory
-from agents.orchestration_agent import OrchestrationAgent
+from flotilla.orchestration_engine import OrchestrationEngine
 from utils.logger import setup_logging, get_logger
 
 
@@ -84,7 +84,7 @@ def query(ctx, query):
 
     try:
         orchestration_config = ConfigFactory.create_orchestration_config(settings=settings)
-        agent = OrchestrationAgent(orchestration_config)
+        agent = OrchestrationEngine(orchestration_config)
 
         with console.status("[bold green]Executing query...[/bold green]"):
             result = agent.execute(query)
@@ -114,7 +114,7 @@ def test(ctx):
 
     try:
         orchestration_config = ConfigFactory.create_orchestration_config(settings=settings)
-        agent = OrchestrationAgent(orchestration_config)
+        agent = OrchestrationEngine(orchestration_config)
 
         console.print("[green]✓[/green] Orchestration agent initialized")
 
@@ -157,7 +157,7 @@ def interactive(ctx):
 
     try:
         orchestration_config = ConfigFactory.create_orchestration_config(settings=settings)
-        agent = OrchestrationAgent(orchestration_config)
+        agent = OrchestrationEngine(orchestration_config)
 
         console.print("[green]✓ Ready for queries[/green]\n")
 

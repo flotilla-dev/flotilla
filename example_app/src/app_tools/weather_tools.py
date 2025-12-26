@@ -1,8 +1,7 @@
 from langchain.tools import tool, ToolRuntime
-from my_context import Context
-from tools.base_tool_provider import BaseToolProvider
+from flotilla.tools.base_tool_provider import BaseToolProvider
 import requests
-from utils.logger import get_logger
+from flotilla.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

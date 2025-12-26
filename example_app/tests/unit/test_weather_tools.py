@@ -1,6 +1,6 @@
 import pytest
 from example_app.src.app_tools.weather_tools import WeatherTools
-from config.config_models import ToolConfig
+from flotilla.config_models import ToolConfig
 
 
 

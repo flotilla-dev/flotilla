@@ -1,8 +1,8 @@
-from agents.base_business_agent import (
+from flotilla.agents.base_business_agent import (
     BaseBusinessAgent,
     AgentCapability
 )
-from utils.logger import get_logger
+from flotilla.utils.logger import get_logger
 
 
 
@@ -28,7 +28,7 @@ class WeatherAgent(BaseBusinessAgent):
             )]
         return capabilities
     
-    def get_agent_domain_prompt(self):
+    def _get_agent_domain_prompt(self):
         return """
 You are an expert weather forecaster who speaks in clever, lighthearted puns.
 Your personality MUST appear ONLY in the "message" field and NEVER inside "data".

@@ -1,171 +1,97 @@
-"""
-Pytest configuration and shared fixtures
-"""
-import os
-import sys
+# tests/conftest.py
 import pytest
-from unittest.mock import Mock, MagicMock
+import yaml
 from pathlib import Path
+from typing import List
 from langgraph.checkpoint.memory import InMemorySaver
-from config.settings import Settings, FlotillaSettings, ApplicationSettings
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from config.config_models import (
-    LLMConfig,
-    ToolRegistryConfig,
-    AgentRegistryConfig,
-    ClientConfig,
-    OrchestrationConfig,
-    OpenAIConfig,
-    BusinessAgentConfg,
-    KeywordAgentSelectorConfig,
-    AgentSelectorConfig
-)
+from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability, ToolDependency
+from flotilla.tools.tool_registry import ToolRegistry
+from flotilla.agents.agent_selector import AgentSelector
+from flotilla.agents.selectors.keyword_agent_selector import KeywordAgentSelector
 
 
-
-@pytest.fixture
-def mock_llm_config():
-    return OpenAIConfig(
-        api_key="test-key",
-        model_name="gpt-4o-mini",
-        temperature=0.3,
-        max_tokens=1000
-    )
-
-@pytest.fixture
-def mock_tool_registry_config():
-    return dummy_tool_registry_config()
-
-def dummy_tool_registry_config() -> ToolRegistryConfig:
-    return ToolRegistryConfig(
-        provider_packages=["tests.unit.tools"],
-        provider_discovery=True,
-        provider_recursive=True,
-        settings=dummy_settings()
-    )
-
-@pytest.fixture
-def mock_settings():
-    return dummy_settings()
-
-def dummy_settings() -> Settings:
-    return Settings(
-        flotilla=dummy_flotilla_settings(),
-        application=ApplicationSettings(
-            agent_configs={
-                "Test Agent": {"foo": "bar"},
-                "Agent 1": {"threshold": 0.7},
-            }
-        ),
-    )
-
-def dummy_flotilla_settings() -> FlotillaSettings:
-    return FlotillaSettings(
-        LLM__API_KEY="mock-key",
-        LLM__MODEL="mock-model",
-        LLM__TEMPERATURE="1",
-        LLM__TYPE="openai",
-        TOOL_REGISTRY__PACKAGES=["tools"],
-        AGENT_REGISTRY__PACKAGES=["agents"],
-        AGENT_SELECTOR__TYPE="keyword",
-        AGENT_SELECTOR__MIN_CONFIDENCE=0.2
-    )
-
-@pytest.fixture
-def mock_agent_selector_config() -> AgentSelectorConfig:
-    return dummy_agent_selector_config()
-
-def dummy_agent_selector_config() -> AgentSelectorConfig:
-    return KeywordAgentSelectorConfig(
-        min_confidence=0.2,
-        selector_type="keyword"
-    )
-
-@pytest.fixture
-def mock_agent_registry_config():
-    return dummy_agent_registry_config()
-
-def dummy_agent_registry_config() -> AgentRegistryConfig:
-    return AgentRegistryConfig( 
-        agent_discovery=False,
-        agent_packages=["tests.unit.agents"],
-        agent_recursive=False,
-        llm_config=OpenAIConfig(api_key="test-key", model_name="gpt"),
-        agent_selector_config=dummy_agent_selector_config(),
-        settings = dummy_settings()
-    )
-
-@pytest.fixture
-def mock_business_agent_config():
-    return BusinessAgentConfg(
-        llm_config=OpenAIConfig(api_key="test-key", temperature=0.1, model_name="gpt-4"),
-        checkpointer=InMemorySaver(),
-        agent_configuration={}
-    )
-
-@pytest.fixture
-def mock_orchestration_config():
-    return OrchestrationConfig(
-        llm_config=OpenAIConfig(api_key="test-key", temperature=0.1, model_name="gpt-4"),
-        client=ClientConfig(client_id="test_client", client_name="Test Client"),
-        tool_registry_config=dummy_tool_registry_config(),
-        agent_registry_config=dummy_agent_registry_config()
-    )
-
-@pytest.fixture
-def mock_llm():
-    """Mock LangChain LLM"""
-    llm = MagicMock()
-    llm.invoke = Mock(return_value=MagicMock(content='{"test": "response"}'))
-    return llm
+class MockBusinessAgent(BaseBusinessAgent):
+    def __init__(self, *, agent_id, agent_name, llm, checkpointer, capabilities:List[AgentCapability], dependencies:List[ToolDependency]):
+        self.capabilities = capabilities
+        self.tool_dependencies = dependencies
+        super().__init__(agent_id=agent_id, agent_name=agent_name, llm=llm, checkpointer=checkpointer)
 
 
-@pytest.fixture
-def mock_llm_with_text():
-    """Mock LLM that returns plain text"""
-    llm = MagicMock()
-    llm.invoke = Mock(return_value=MagicMock(content="Test response"))
-    return llm
-
-@pytest.fixture
-def mock_tool_registry():
-    """Mock Tool Registry that does nothing"""
-    tool_registry = MagicMock()
-    tool_registry.get_all_tools.return_value = []
-    tool_registry.get_tools.side_effect = lambda fn: list(filter(fn, tool_registry.get_all_tools()))
-    return tool_registry
-
-
-
-@pytest.fixture(autouse=True, scope="session")
-def reset_environment():
-    """Reset environment variables before each test"""
-    # Store original env vars
-    original_env = os.environ.copy()
+    def _initialize_capabilities(self):
+        return self.capabilities
     
-    # Clear test-related env vars
-    test_vars = [
-        "AZURE_OPENAI_ENDPOINT",
-        "AZURE_OPENAI_API_KEY",
-        "BLOCK_ACCESS_TOKEN",
-        "LOG_LEVEL"
-    ]
-    for var in test_vars:
-        os.environ.pop(var, None)
-    
-    yield
-    
-    # Restore original environment
-    os.environ.clear()
-    os.environ.update(original_env)
+    def _initialize_dependencies(self):
+        return self.tool_dependencies
 
 
 @pytest.fixture
-def temp_config_dir(tmp_path):
-    """Create temporary config directory"""
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    return config_dir
+def tmp_config_dir(tmp_path: Path) -> Path:
+    """Creates a temporary config directory with empty default files."""
+    for name in ["flotilla", "agents", "tools", "feature_flags"]:
+        (tmp_path / f"{name}.yml").write_text("{}")
+    return tmp_path
+
+
+@pytest.fixture
+def write_yaml():
+    """Helper to write YAML files inside tests."""
+    def _write(path: Path, data: dict):
+        with open(path, "w") as f:
+            yaml.safe_dump(data, f)
+    return _write
+
+
+@pytest.fixture
+def mock_checkpointer():
+    return InMemorySaver
+
+class MockChatModel(BaseChatModel):
+    """Minimal mock LLM for testing"""
+
+    response: str = "mock response"   # ← pydantic field
+
+    def _generate(self, messages, stop=None, **kwargs):
+        return ChatResult(
+            generations=[
+                ChatGeneration(
+                    message=AIMessage(content=self.response)
+                )
+            ]
+        )
+
+    @property
+    def _llm_type(self) -> str:
+        return "mock-chat-model"
+
+
+@pytest.fixture
+def mock_llm() -> BaseChatModel:
+    """
+    Fixture providing a mock BaseChatModel-compatible LLM.
+    """
+    return MockChatModel()
+
+@pytest.fixture
+def mock_tool_registry() -> ToolRegistry:
+    return ToolRegistry(tool_providers=[])
+
+@pytest.fixture
+def mock_agent_selector() -> AgentSelector:
+    return KeywordAgentSelector(min_confidence=0.2)
+
+@pytest.fixture
+def agent_factory(mock_llm, mock_checkpointer):
+    def _factory(*, agent_id:str, capabilities: List[AgentCapability] | None, dependencies: List[ToolDependency] | None):
+        return MockBusinessAgent(
+            agent_id=agent_id,
+            agent_name=agent_id,
+            llm=mock_llm,
+            checkpointer=mock_checkpointer,
+            capabilities=capabilities,
+            dependencies=dependencies
+        )
+    return _factory
