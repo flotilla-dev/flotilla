@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dependency_injector import containers, providers
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 from flotilla.config.settings import FlotillaSettings
 from flotilla.container.contributors.base_contributors import WiringContributor
@@ -47,6 +47,11 @@ class FlotillaContainer:
         logger.info(f"Register builder '{builder_name}'")
         self._builders[builder_name] = builder
 
+    def get_builder(self, builder_name:str) -> Optional[Callable]:
+        logger.info(f"Get builder for {builder_name}")
+        return self._builders[builder_name]
+
+
     def register_contributor(self, contributor: WiringContributor):
         self._contributors.append(contributor)
 
@@ -85,6 +90,17 @@ class FlotillaContainer:
             config=data,
             **kwargs,
         )
+
+    def register_infra_singleton(self, *, name: str, builder: Callable, **kwargs):
+        setattr(self.di, name,
+            providers.Singleton(
+                builder,
+                container=self.di,
+                config={},          # explicit, even if empty
+                **kwargs,
+            ),
+        )
+
 
     def register_component_provider(
         self,

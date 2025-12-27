@@ -22,17 +22,6 @@ class BaseToolProvider(ABC):
         self.tools = self._register_tools()
         logger.info(f"Provider '{self.provider_name}' registered {len(self.tools)} tools")
 
-
-    def configure(self, config: ToolConfig):
-        """
-        Called when the provider is registered.
-        Saves config, runs subclass configuration, and registers tools.
-        """
-        self.config = config
-        self._configure_tools()
-        self.tools = self._register_tools()
-        logger.info(f"Provider '{self.provider_name}' registered {len(self.tools)} tools")
-
     # ------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------

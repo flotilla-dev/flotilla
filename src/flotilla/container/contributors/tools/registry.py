@@ -1,19 +1,24 @@
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.container.contributors.tools.context import ToolsContext
+from flotilla.flotilla_configuration_error import FlotillaConfigurationError
 
 
 class ToolRegistryContributor:
     def contribute(self, container: FlotillaContainer, context: ToolsContext) -> None:
-        if not context.tool_names:
+        builder = container.get_builder("tool_registry")
+        if not builder:
+            raise FlotillaConfigurationError("ToolRegistry builder not registered")
+
+        container.register_infra_singleton(
+            name="tool_registry",
+            builder=builder,
+            tool_provider_names=context.tool_provider_names
+)
+        
+
+    def validate(self, container:FlotillaContainer, context:ToolsContext):
+        if not context.tool_provider_names:
             return
 
-        container.register_section_singleton(
-            section="core",
-            name="tool_registry",
-            config_path="tool_registry",
-            tool_providers=context.tool_names,
-        )
-
-    def validate(self, container, context):
-        if context.tool_names and not hasattr(container.di, "tool_registry"):
+        if not hasattr(container.di, "tool_registry"):
             raise RuntimeError("ToolRegistry not wired")

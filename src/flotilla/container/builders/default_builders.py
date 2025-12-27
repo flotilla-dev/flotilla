@@ -19,8 +19,28 @@ def memory_checkpointer_builder(*, container: containers.DeclarativeContainer, c
     return InMemorySaver()
 
 
-def default_tool_registry_builder(*, container: containers.DeclarativeContainer, config:Optional[dict], tool_provider_factories:List[BaseToolProvider] ) -> ToolRegistry:
-    tool_providers = [factory() for factory in tool_provider_factories]
+def default_tool_registry_builder(*, container: containers.DeclarativeContainer, config:Optional[dict], tool_provider_names:List[BaseToolProvider] ) -> ToolRegistry:
+    tool_providers: List[BaseToolProvider] = []
+
+    for attr_name in tool_provider_names:
+        if not hasattr(container, attr_name):
+            raise ValueError(
+                f"Tool provider '{attr_name}' is not wired on the container"
+            )
+
+        provider = getattr(container, attr_name)
+
+        # If it's a DI provider, calling it returns the instance.
+        instance = provider() if callable(provider) else provider
+
+        if not isinstance(instance, BaseToolProvider):
+            raise TypeError(
+                f"Container attribute '{attr_name}' did not resolve to a BaseToolProvider "
+                f"(got {type(instance).__name__})"
+            )
+
+        tool_providers.append(instance)
+
     return ToolRegistry(tool_providers=tool_providers)
     
 def keyword_agent_selector_builder(*, container: containers.DeclarativeContainer, config: Optional[dict]) -> KeywordAgentSelector:
