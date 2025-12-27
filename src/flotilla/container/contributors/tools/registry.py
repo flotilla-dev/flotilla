@@ -9,7 +9,7 @@ class ToolRegistryContributor:
         if not builder:
             raise FlotillaConfigurationError("ToolRegistry builder not registered")
 
-        container.register_infra_singleton(
+        container.wire_infrastructure(
             name="tool_registry",
             builder=builder,
             tool_provider_names=context.tool_provider_names

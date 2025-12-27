@@ -7,24 +7,19 @@ class ToolProvidersContributor:
         tools_cfg_opt = getattr(container.di.config, "tools", None)
         if not tools_cfg_opt:
             return
-        
+
         tools_cfg = tools_cfg_opt()
         if not tools_cfg:
             return
 
-        for name, cfg in tools_cfg.items():
-            builder_name = cfg.get("builder")
-            builder = container._builders.get(builder_name)
-            if not builder:
-                raise ValueError(
-                    f"No builder registered for tool type '{builder_name}'"
-                )
-
-            container.register_component_provider(
+        for name in tools_cfg.keys():
+            # Delegate all config + builder resolution to the container
+            container.wire_from_config(
                 section="tools",
                 name=name,
-                builder=builder,
+                config_path=name,
             )
+
             context.tool_provider_names.append(name)
 
     def validate(self, container, context):

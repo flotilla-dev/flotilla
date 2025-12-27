@@ -9,13 +9,13 @@ class CoreSingletonsContributor(WiringContributor):
         if not cfg:
             return
 
-        container.register_section_singleton(
+        container.wire_from_config(
             section="core",
             name="agent_selector",
             config_path="agent_selector",
         )
 
-        container.register_section_singleton(
+        container.wire_from_config(
             section="core",
             name="checkpointer",
             config_path="checkpointer",

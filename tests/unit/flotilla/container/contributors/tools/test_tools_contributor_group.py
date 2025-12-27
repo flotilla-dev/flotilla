@@ -3,7 +3,7 @@ import pytest
 from flotilla.config.settings import FlotillaSettings
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.container.contributors.tools.group import ToolsContributorGroup
-from flotilla.container.builders.default_builders import default_tool_registry_builder
+from flotilla.builders.default_builders import default_tool_registry_builder
 
 
 pytestmark = pytest.mark.unit
@@ -21,7 +21,7 @@ def test_tools_contributor_group_registers_tools(tool_provider_factory, tool_fac
     container.register_builder("tool_registry", default_tool_registry_builder)
     # register mock builder
     mock_tool = tool_factory(name="mock_tool")
-    def mock_tool_builder(name, config, container):
+    def mock_tool_builder(config, container):
         return tool_provider_factory(provider_id="mock_provider", config= None, tools= [mock_tool])
 
     container.register_builder("mock", mock_tool_builder)

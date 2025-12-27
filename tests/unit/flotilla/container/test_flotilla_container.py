@@ -106,39 +106,7 @@ def test_build_executes_contributors_in_priority_order(flotilla_container):
         "B_validate", "A_validate",
     ]
 
-def test_register_singleton_registers_provider(flotilla_container):
-    def dummy_builder():
-        return "value"
-
-    flotilla_container.register_singleton("test_singleton", dummy_builder)
-
-    assert hasattr(flotilla_container.di, "test_singleton")
-    assert flotilla_container.di.test_singleton() == "value"
-
-def test_register_component_provider_registers_factory(flotilla_container):
-    def dummy_builder(name, config, container):
-        return f"{name}-built"
-
-    # Simulate config section
-    flotilla_container.di.config.from_dict(
-        {
-            "tools": {
-                "tool_a": {"type": "dummy"}
-            }
-        }
-    )
-
-    flotilla_container.register_component_provider(
-        section="tools",
-        name="tool_a",
-        builder=dummy_builder,
-    )
-
-    assert hasattr(flotilla_container.di, "tool_a")
-    assert flotilla_container.di.tool_a() == "tool_a-built"
-
-
-def test_register_section_singleton_happy_path(flotilla_container):
+def test_wire_from_config_happy_path(flotilla_container):
     def dummy_builder(container, config):
         return config["value"]
 
@@ -155,7 +123,7 @@ def test_register_section_singleton_happy_path(flotilla_container):
         }
     )
 
-    flotilla_container.register_section_singleton(
+    flotilla_container.wire_from_config(
         section="core",
         name="thing",
         config_path="thing",
@@ -164,7 +132,7 @@ def test_register_section_singleton_happy_path(flotilla_container):
     assert flotilla_container.di.thing() == 42
 
 
-def test_register_section_singleton_raises_if_builder_missing(flotilla_container):
+def test_wire_from_config_raises_if_builder_missing(flotilla_container):
     flotilla_container.di.config.from_dict(
         {
             "core": {
@@ -176,7 +144,7 @@ def test_register_section_singleton_raises_if_builder_missing(flotilla_container
     )
 
     with pytest.raises(ValueError, match="No builder registered"):
-        flotilla_container.register_section_singleton(
+        flotilla_container.wire_from_config(
             section="core",
             name="thing",
             config_path="thing",
