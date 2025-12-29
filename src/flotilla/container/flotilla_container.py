@@ -3,7 +3,7 @@ from __future__ import annotations
 from dependency_injector import containers, providers
 from typing import Callable, List, Optional
 
-from flotilla.config.settings import FlotillaSettings
+from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.builders.component_builder import ComponentBuilder
 from flotilla.container.contributors.base_contributors import WiringContributor
 from flotilla.utils.logger import get_logger
@@ -24,9 +24,7 @@ class FlotillaContainer:
 
         self.di = containers.DeclarativeContainer()
         self.di.config = providers.Configuration()
-        self.di.config.from_dict(
-            settings.model_dump(exclude_none=True)
-        )
+        self.di.config.from_dict(settings.config)
 
         self._builders: dict[str, ComponentBuilder] = {}
         self._contributors: List[WiringContributor] = []

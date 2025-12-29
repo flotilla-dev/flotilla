@@ -1,4 +1,4 @@
-from flotilla.config_models import ToolConfig
+from flotilla.tools.tool_config import ToolConfig
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from langchain_core.tools import StructuredTool

@@ -1,6 +1,5 @@
 from flotilla.agents.agent_selector import AgentSelector
 from flotilla.agents.base_business_agent import BaseBusinessAgent
-from flotilla.config_models import VectorAgentSelectorConfig
 from flotilla.utils.logger import get_logger
 from typing import Optional, List, Dict
 import numpy as np

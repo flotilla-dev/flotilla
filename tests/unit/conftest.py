@@ -12,10 +12,10 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability, ToolDependency
 from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.agents.agent_selector import AgentSelector
-from flotilla.config.settings import FlotillaSettings
+from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.agents.selectors.keyword_agent_selector import KeywordAgentSelector
 from flotilla.tools.base_tool_provider import BaseToolProvider
-from flotilla.config_models import ToolConfig
+from flotilla.tools.tool_config import ToolConfig
 
 
 class MockBusinessAgent(BaseBusinessAgent):

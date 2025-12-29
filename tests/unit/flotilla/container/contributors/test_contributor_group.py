@@ -2,7 +2,7 @@ import pytest
 
 from flotilla.container.contributors.base_contributors import ContributorGroup
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.config.settings import FlotillaSettings
+from flotilla.config.flotilla_settings import FlotillaSettings
 
 class TestContext:
     def __init__(self):
@@ -47,7 +47,7 @@ def test_contributor_group_creates_single_context():
 def test_contributor_group_passes_shared_context():
     group = TestContributorGroup()
     container = FlotillaContainer(
-        FlotillaSettings.from_dict({})
+        FlotillaSettings({})
     )
 
     group.contribute(container)
@@ -57,7 +57,7 @@ def test_contributor_group_passes_shared_context():
 def test_contributor_group_validation_order():
     group = TestContributorGroup()
     container = FlotillaContainer(
-        FlotillaSettings.from_dict({})
+        FlotillaSettings({})
     )
 
     group.contribute(container)
@@ -74,7 +74,7 @@ def test_contributor_group_validation_order():
 def test_contributor_group_does_not_leak_context_to_container():
     group = TestContributorGroup()
     container = FlotillaContainer(
-        FlotillaSettings.from_dict({})
+        FlotillaSettings({})
     )
 
     group.contribute(container)

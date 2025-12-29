@@ -1,5 +1,4 @@
 from flotilla.agents.agent_selector import AgentSelector
-from flotilla.config_models import LLMAgentSelectorConfig
 from typing import Dict
 from flotilla.agents.base_business_agent import BaseBusinessAgent
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage

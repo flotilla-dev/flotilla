@@ -1,7 +1,7 @@
 import pytest
 
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.config.settings import FlotillaSettings
+from flotilla.config.flotilla_settings import FlotillaSettings
 
 
 @pytest.fixture
@@ -10,7 +10,7 @@ def minimal_settings():
     Minimal FlotillaSettings used to verify container initialization.
     No YAML, no env, no wiring assumptions.
     """
-    return FlotillaSettings.from_dict(
+    return FlotillaSettings(
         {
             "core": {
                 "agent_selector": {

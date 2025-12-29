@@ -9,7 +9,7 @@ from typing import List
 from langchain_core.tools import StructuredTool
 
 from flotilla.tools.mcp_tool_provider import MCPToolProvider   # unified version
-from flotilla.config_models import ToolConfig
+from flotilla.tools.tool_config import ToolConfig
 
 
 # ================================================================

@@ -3,15 +3,60 @@ from typing import Dict, List
 from flotilla.builders.component_builder import ComponentBuilder
 from flotilla.builders.builder_group import BuilderGroup
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.config.settings import FlotillaSettings
+from flotilla.config.flotilla_settings import FlotillaSettings
+from flotilla.config.secret_resolver import SecretResolver
+from flotilla.config.configuration_source import ConfigurationSource
 from flotilla.container.contributors.base_contributors import WiringContributor
+from flotilla.config.config_loader import ConfigLoader
 
 
 class FlotillaApplication:
-    def __init__(self, settings: FlotillaSettings):
-        self.settings = settings
+    """
+    Top-level lifecycle owner for a Flotilla application.
+
+    FlotillaApplication is responsible for:
+      - orchestrating configuration loading via ConfigLoader
+      - constructing and building the FlotillaContainer
+      - registering application-owned builders and contributors
+      - managing application startup and shutdown state
+
+    This class intentionally does NOT:
+      - perform dependency injection directly
+      - expose configuration loading internals
+      - own framework wiring logic
+
+    Configuration is supplied declaratively via ConfigurationSource and
+    SecretResolver instances. The resolved configuration is materialized
+    as a FlotillaSettings object during startup and passed into the container.
+
+    A FlotillaApplication instance is single-start and single-container:
+      - start() builds exactly one container
+      - container access is only valid after start()
+      - shutdown() invalidates the container
+
+    This class serves as the primary integration point for real runtimes
+    (CLI, FastAPI, workers, etc.).
+    """
+        
+    def __init__(self, sources:List[ConfigurationSource], secrets:List[SecretResolver]):
+        """
+        Create a new FlotillaApplication.
+
+        Args:
+            sources:
+                Ordered configuration sources used to load application
+                configuration. Later sources override earlier ones.
+            secrets:
+                Ordered secret resolvers used during configuration loading.
+                Later resolvers override earlier ones when resolving the
+                same secret key.
+
+        The application is created in a non-started state. No configuration
+        is loaded and no container is built until start() is called.
+        """
         self._contributors: List[WiringContributor] = []
         self._builders: Dict[str, ComponentBuilder] = {}
+        self._loader:ConfigLoader = ConfigLoader(sources=sources, secrets=secrets)
         self._container = None
         self._started = False
 
@@ -20,21 +65,38 @@ class FlotillaApplication:
     # ----------------------------
 
     def register_builder(self, builder_name: str, builder: ComponentBuilder):
+        """
+        Register a named component builder with the application.
+
+        Registered builders are applied to the container during startup
+        before contributors are executed.
+        """
         self._builders[builder_name] = builder
 
     def register_builder_group(self, group:BuilderGroup):
+        """
+        Register a group of component builders.
+
+        All builders provided by the group are registered individually
+        under their declared names.
+        """
         for name, builder in group.builders().items():
             self.register_builder(name, builder)
 
     def register_contributor(self, contributor: WiringContributor):
+        """
+        Register a wiring contributor to participate in container build.
+
+        Contributors are executed in priority order during startup.
+        """
         self._contributors.append(contributor)
 
     # ----------------------------
     # Build lifecycle
     # ----------------------------
 
-    def _build_container(self) -> FlotillaContainer:
-        container = FlotillaContainer(self.settings)
+    def _build_container(self, settings:FlotillaSettings) -> FlotillaContainer:
+        container = FlotillaContainer(settings)
 
         # Apply builders
         for name, builder in self._builders.items():
@@ -45,9 +107,30 @@ class FlotillaApplication:
             container.register_contributor(contributor)
 
         return container.build()
+    
+
+
 
     def start(self):
-        self._container = self._build_container()
+        """
+        Start the application and build the Flotilla container.
+
+        This method performs the full startup lifecycle:
+        1. Load and merge configuration from the provided ConfigurationSources
+        2. Resolve secret references using the provided SecretResolvers
+        3. Construct a FlotillaSettings snapshot
+        4. Build and validate the FlotillaContainer
+        5. Mark the application as started
+
+        After this method completes successfully:
+        - the application is considered started
+        - the container property becomes accessible
+        - all registered builders and contributors have been applied
+
+        Calling start() more than once is not supported.
+        """
+        settings = self._loader.load()
+        self._container = self._build_container(settings=settings)
         self._started = True
 
 
@@ -66,6 +149,16 @@ class FlotillaApplication:
     
     @property
     def container(self) -> FlotillaContainer:
+        """
+        Access the built FlotillaContainer.
+
+        Returns:
+            The active FlotillaContainer instance.
+
+        Raises:
+            RuntimeError:
+                If the application has not been started or has been shut down.
+        """
         if not self._started:
             raise RuntimeError("Application not started")
         return self._container

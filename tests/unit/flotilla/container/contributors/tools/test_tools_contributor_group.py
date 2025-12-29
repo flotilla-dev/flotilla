@@ -1,6 +1,6 @@
 import pytest
 
-from flotilla.config.settings import FlotillaSettings
+from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.container.contributors.tools.group import ToolsContributorGroup
 from flotilla.builders.default_builders import default_tool_registry_builder
@@ -9,7 +9,7 @@ from flotilla.builders.default_builders import default_tool_registry_builder
 pytestmark = pytest.mark.unit
 
 def test_tools_contributor_group_registers_tools(tool_provider_factory, tool_factory):
-    settings = FlotillaSettings.from_dict({
+    settings = FlotillaSettings({
         "tools": {
             "mock_tool": {
                 "builder": "mock"
@@ -35,7 +35,7 @@ def test_tools_contributor_group_registers_tools(tool_provider_factory, tool_fac
     assert registry.get_tool_by_name("mock_tool") == mock_tool
 
 def test_tools_contributor_group_missing_builder_raises():
-    settings = FlotillaSettings.from_dict({
+    settings = FlotillaSettings({
         "tools": {
             "bad_tool": {
                 "builder": "missing"
@@ -51,7 +51,7 @@ def test_tools_contributor_group_missing_builder_raises():
 
 
 def test_tools_contributor_group_with_no_tools_is_noop():
-    settings = FlotillaSettings.from_dict({})
+    settings = FlotillaSettings({})
 
     container = FlotillaContainer(settings)
     group = ToolsContributorGroup()
@@ -65,7 +65,7 @@ def test_tools_contributor_group_with_no_tools_is_noop():
 
 
 def test_tools_contributor_group_context_is_not_on_container():
-    settings = FlotillaSettings.from_dict({})
+    settings = FlotillaSettings({})
 
     container = FlotillaContainer(settings)
     group = ToolsContributorGroup()

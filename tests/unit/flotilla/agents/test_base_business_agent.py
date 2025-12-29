@@ -18,9 +18,6 @@ from flotilla.agents.business_agent_response import (
     ErrorResponse,
     ResponseStatus
 )
-
-from flotilla.config_models import LLMConfig
-
 from typing import List
 
 import json

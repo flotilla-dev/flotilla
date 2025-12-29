@@ -6,7 +6,6 @@ import numpy as np
 from unittest.mock import Mock, MagicMock, patch
 from flotilla.agents.selectors.vector_agent_selector import VectorAgentSelector
 from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability
-from flotilla.config_models import VectorAgentSelectorConfig
 
 
 # ==========================================

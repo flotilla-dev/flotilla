@@ -1,0 +1,168 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://flotilla.ai/schema/flotilla.schema.yml
+title: Flotilla Configuration Schema
+type: object
+required:
+  - flotilla
+
+properties:
+  flotilla:
+    type: object
+    description: Application-level runtime services and lifecycle policies.
+    additionalProperties:
+      oneOf:
+        - $ref: "#/$defs/runtimeService"
+        - $ref: "#/$defs/lifecycleConfig"
+
+  llm:
+    type: object
+    description: LLM defaults and provider configuration.
+    required:
+      - defaults
+      - providers
+    properties:
+      defaults:
+        $ref: "#/$defs/llmDefaults"
+
+      providers:
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/llmProvider"
+
+  agents:
+    type: object
+    description: Agent definitions and configuration.
+    additionalProperties:
+      $ref: "#/$defs/agentConfig"
+
+  tools:
+    type: object
+    description: Tool definitions and configuration.
+    additionalProperties:
+      $ref: "#/$defs/toolConfig"
+
+additionalProperties: false
+
+# -------------------------------------------------------------------
+# Definitions
+# -------------------------------------------------------------------
+$defs:
+
+  # -----------------------
+  # Runtime Services
+  # -----------------------
+  runtimeService:
+    type: object
+    description: Shared application runtime service.
+    required:
+      - type
+    properties:
+      type:
+        type: string
+        description: Builder type name used to construct the service.
+    additionalProperties: true
+
+  lifecycleConfig:
+    type: object
+    description: Application lifecycle policies.
+    properties:
+      fail_fast:
+        type: boolean
+        default: true
+
+      validate_on_start:
+        type: boolean
+        default: true
+    additionalProperties: false
+
+  # -----------------------
+  # LLM Configuration
+  # -----------------------
+  llmDefaults:
+    type: object
+    required:
+      - provider
+      - model
+    properties:
+      provider:
+        type: string
+        description: Default LLM provider name.
+
+      model:
+        type: string
+        description: Default model identifier.
+
+      temperature:
+        type: number
+        minimum: 0
+        maximum: 1
+
+      max_tokens:
+        type: integer
+        minimum: 1
+
+      timeout_seconds:
+        type: integer
+        minimum: 1
+    additionalProperties: false
+
+  llmProvider:
+    type: object
+    required:
+      - type
+    properties:
+      type:
+        type: string
+        description: Provider adapter type (e.g. openai, anthropic).
+
+      api_key:
+        type: string
+        description: API key (may be secret-resolved).
+
+      base_url:
+        type: string
+        format: uri
+
+      endpoint:
+        type: string
+        format: uri
+
+      version:
+        type: string
+    additionalProperties: true
+
+  # -----------------------
+  # Agent Configuration
+  # -----------------------
+  agentConfig:
+    type: object
+    required:
+      - class
+    properties:
+      class:
+        type: string
+        description: Fully qualified agent class path.
+
+      llm:
+        type: object
+        description: Partial LLM override for this agent.
+        additionalProperties: true
+
+      tools:
+        type: array
+        items:
+          type: string
+    additionalProperties: true
+
+  # -----------------------
+  # Tool Configuration
+  # -----------------------
+  toolConfig:
+    type: object
+    required:
+      - class
+    properties:
+      class:
+        type: string
+        description: Fully qualified tool class path.
+    additionalProperties: true
