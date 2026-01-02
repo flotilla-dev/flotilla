@@ -1,12 +1,17 @@
 from flotilla.container.flotilla_container import FlotillaContainer, WiringContributor
+from flotilla.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class CoreSingletonsContributor(WiringContributor):
     name = "core-singletons"
     priority = 100
 
     def contribute(self, container: FlotillaContainer):
-        cfg = container.di.config.core if hasattr(container.di.config, "core") else None
+        cfg = container.di.config.core if hasattr(container.di.config, "flotilla") else None
         if not cfg:
+            logger.warn("No configuration exists for 'flotilla' section")
             return
 
         container.wire_from_config(

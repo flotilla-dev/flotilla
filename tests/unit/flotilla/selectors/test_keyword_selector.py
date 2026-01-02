@@ -3,7 +3,7 @@ PyTest suite for KeywordAgentSelector
 """
 import pytest
 from unittest.mock import Mock
-from flotilla.agents.selectors.keyword_agent_selector import KeywordAgentSelector
+from flotilla.selectors.keyword_agent_selector import KeywordAgentSelector
 from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability
 
 

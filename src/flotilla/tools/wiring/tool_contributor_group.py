@@ -1,7 +1,7 @@
-from flotilla.container.contributors.base_contributors import ContributorGroup
-from flotilla.container.contributors.tools.context import ToolsContext
-from flotilla.container.contributors.tools.providers import ToolProvidersContributor
-from flotilla.container.contributors.tools.registry import ToolRegistryContributor
+from flotilla.container.base_contributors import ContributorGroup
+from flotilla.tools.wiring.tool_context import ToolsContext
+from flotilla.tools.wiring.tool_provider_contributor import ToolProvidersContributor
+from flotilla.tools.wiring.tool_registry_contributor import ToolRegistryContributor
 
 
 class ToolsContributorGroup(ContributorGroup[ToolsContext]):

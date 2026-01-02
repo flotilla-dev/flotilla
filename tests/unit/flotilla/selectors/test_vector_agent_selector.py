@@ -4,7 +4,7 @@ PyTest suite for VectorAgentSelector
 import pytest
 import numpy as np
 from unittest.mock import Mock, MagicMock, patch
-from flotilla.agents.selectors.vector_agent_selector import VectorAgentSelector
+from flotilla.selectors.vector_agent_selector import VectorAgentSelector
 from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability
 
 

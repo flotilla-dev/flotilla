@@ -6,8 +6,7 @@ from dependency_injector import providers
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.agents.agent_registry import BusinessAgentRegistry
-from flotilla.agents.selectors.keyword_agent_selector import KeywordAgentSelector
-from flotilla.agents.selectors.vector_agent_selector import VectorAgentSelector
+from flotilla.selectors.keyword_agent_selector import KeywordAgentSelector
 from flotilla.tools.base_tool_provider import BaseToolProvider
 
 from typing import Any, List, Optional
@@ -20,29 +19,6 @@ def memory_checkpointer_builder(*, container: FlotillaContainer, config: Optiona
     return InMemorySaver()
 
 
-def default_tool_registry_builder(*, container: FlotillaContainer, config:Optional[dict], tool_provider_names:List[BaseToolProvider] ) -> ToolRegistry:
-    tool_providers: List[BaseToolProvider] = []
-
-    for attr_name in tool_provider_names:
-        if not hasattr(container, attr_name):
-            raise ValueError(
-                f"Tool provider '{attr_name}' is not wired on the container"
-            )
-
-        provider = getattr(container, attr_name)
-
-        # If it's a DI provider, calling it returns the instance.
-        instance = provider() if callable(provider) else provider
-
-        if not isinstance(instance, BaseToolProvider):
-            raise TypeError(
-                f"Container attribute '{attr_name}' did not resolve to a BaseToolProvider "
-                f"(got {type(instance).__name__})"
-            )
-
-        tool_providers.append(instance)
-
-    return ToolRegistry(tool_providers=tool_providers)
     
 def keyword_agent_selector_builder(*, container: FlotillaContainer, config: Optional[dict]) -> KeywordAgentSelector:
     """

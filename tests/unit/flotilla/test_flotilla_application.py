@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from flotilla.flotilla_application import FlotillaApplication
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.container.contributors.base_contributors import WiringContributor
+from flotilla.container.base_contributors import WiringContributor
 from flotilla.config.sources.dict_configuration_source import DictConfigurationSource
 
 

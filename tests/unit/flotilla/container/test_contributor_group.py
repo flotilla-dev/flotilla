@@ -1,6 +1,6 @@
 import pytest
 
-from flotilla.container.contributors.base_contributors import ContributorGroup
+from flotilla.container.base_contributors import ContributorGroup
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
 

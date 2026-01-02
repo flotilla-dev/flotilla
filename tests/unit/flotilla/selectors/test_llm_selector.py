@@ -4,7 +4,7 @@ from langchain_core.messages import AIMessage
 
 from typing import List
 from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability
-from flotilla.agents.selectors.llm_agent_selector import LLMAgentSelector
+from flotilla.selectors.llm_agent_selector import LLMAgentSelector
 from flotilla.agents.business_agent_response import BusinessAgentResponse, ErrorResponse, ResponseStatus
 
 '''

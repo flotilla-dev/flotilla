@@ -11,7 +11,7 @@ class ResponseFactory:
     # Response Builders
     # -----------------------------------------------------------------------
     @staticmethod
-    def parse_llm_response(query:str,  llm_response:Any) -> BusinessAgentResponse:
+    def parse_llm_response(*, query:str, agent_name:str, llm_response:Any) -> BusinessAgentResponse:
         """
         Builds a BusinessAgentResponse from the LLM response JSON.  If the JSON is parsable
         then all vales in the response are mapped directly to thier corresponding fields
@@ -46,6 +46,7 @@ class ResponseFactory:
             return ResponseFactory.build_error_response(
                 ResponseStatus.LLM_OUTPUT_ERROR,
                 query=query,
+                agent_name=agent_name,
                 message="Error parsing LLM response",
                 errors=[ErrorResponse(error_code="LLM_RESPONSE_MALFORMED", error_details=str(e))]         
             )

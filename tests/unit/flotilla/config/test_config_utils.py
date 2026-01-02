@@ -160,3 +160,123 @@ def test_walk_and_replace_does_not_mutate_input():
     assert data == {"a": {"b": 1}}
     assert result == {"a": {"b": 2}}
 
+# ---------------------------------------------------------------------------
+# resolve_flattened_config
+# ---------------------------------------------------------------------------
+
+def test_resolve_flattened_config_returns_none_if_base_missing():
+    config = {
+        "llm": {
+            "openai": {
+                "model": "gpt-4",
+            }
+        }
+    }
+
+    result = ConfigUtils.resolve_flattened_config(
+        config=config,
+        base_path="llm.anthropic",
+    )
+
+    assert result is None
+
+
+def test_resolve_flattened_config_returns_none_if_base_not_mapping():
+    config = {
+        "llm": {
+            "openai": "gpt-4",
+        }
+    }
+
+    result = ConfigUtils.resolve_flattened_config(
+        config=config,
+        base_path="llm.openai",
+    )
+
+    assert result is None
+
+
+def test_resolve_flattened_config_ignores_missing_override():
+    config = {
+        "llm": {
+            "openai": {
+                "model": "gpt-4",
+                "temperature": 0.7,
+            }
+        }
+    }
+
+    result = ConfigUtils.resolve_flattened_config(
+        config=config,
+        base_path="llm.openai",
+        override_path="agents.missing.llm",
+    )
+
+    assert result == {
+        "model": "gpt-4",
+        "temperature": 0.7,
+    }
+
+
+def test_resolve_flattened_config_ignores_non_mapping_override():
+    config = {
+        "llm": {
+            "openai": {
+                "model": "gpt-4",
+                "temperature": 0.7,
+            }
+        },
+        "agents": {
+            "agent_a": {
+                "llm": "override",
+            }
+        }
+    }
+
+    result = ConfigUtils.resolve_flattened_config(
+        config=config,
+        base_path="llm.openai",
+        override_path="agents.agent_a.llm",
+    )
+
+    assert result == {
+        "model": "gpt-4",
+        "temperature": 0.7,
+    }
+
+
+def test_resolve_flattened_config_deep_merges_override():
+    config = {
+        "llm": {
+            "openai": {
+                "model": "gpt-4",
+                "params": {
+                    "temperature": 0.7,
+                    "max_tokens": 2048,
+                },
+            }
+        },
+        "agents": {
+            "agent_a": {
+                "llm": {
+                    "params": {
+                        "temperature": 0.3,
+                    }
+                }
+            }
+        }
+    }
+
+    result = ConfigUtils.resolve_flattened_config(
+        config=config,
+        base_path="llm.openai",
+        override_path="agents.agent_a.llm",
+    )
+
+    assert result == {
+        "model": "gpt-4",
+        "params": {
+            "temperature": 0.3,
+            "max_tokens": 2048,
+        },
+    }

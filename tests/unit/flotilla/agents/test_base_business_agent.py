@@ -10,6 +10,8 @@ from flotilla.agents.base_business_agent import (
     ToolDependency
 )
 
+from langchain.messages import AIMessage
+
 from unittest.mock import Mock, MagicMock, patch
 
 
@@ -95,134 +97,183 @@ class TestToolDependency:
         
 
 
-@pytest.mark.unit
-class TestBaseBusinessAgent:
-    """Test base business agent functionality"""
+
+
+def test_initialization(mock_llm, mock_checkpointer):
+    """Test agent initializes correctly"""
+    agent = ConcreteBusinessAgent(
+        agent_id="test_id",
+        agent_name="Test Name", 
+        llm=mock_llm, checkpointer=mock_checkpointer
+        )
     
-    def test_initialization(self, mock_llm, mock_checkpointer):
-        """Test agent initializes correctly"""
-        agent = ConcreteBusinessAgent(
-            agent_id="test_id",
-            agent_name="Test Name", 
-            llm=mock_llm, checkpointer=mock_checkpointer
+    assert agent.agent_id == "test_id"
+    assert agent.agent_name == "Test Name"
+    assert agent._checkpointer is mock_checkpointer
+    assert agent._llm is mock_llm
+
+def test_get_capabilities(mock_llm, mock_checkpointer):
+    """Test retrieving agent capabilities"""
+    agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm=mock_llm, checkpointer=mock_checkpointer)
+
+    capabilities = agent.get_capabilities()
+    
+    assert isinstance(capabilities, list)
+    assert len(capabilities) == 1
+    assert all(isinstance(cap, AgentCapability) for cap in capabilities)
+
+def test_get_dependencies(mock_llm, mock_checkpointer):
+    agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm=mock_llm, checkpointer=mock_checkpointer)
+    dependencies = agent.get_tool_dependencis()
+
+    assert isinstance(dependencies, list)
+    assert len(dependencies) == 1
+    assert all(isinstance(dep, ToolDependency) for dep in dependencies)
+
+def test_get_info(mock_checkpointer, mock_llm):
+    """Test getting agent information"""
+    agent = ConcreteBusinessAgent(
+        agent_id="test_id",
+        agent_name="Test Agent", llm=mock_llm, checkpointer=mock_checkpointer
+        )
+    
+    info = agent.get_info()
+    
+    assert info["agent_id"] == "test_id"
+    assert info["agent_name"] == "Test Agent"
+    assert "capabilities" in info
+    assert isinstance(info["capabilities"], list)
+
+def test_agent_cannot_be_instantiated_directly():
+    """Test that BaseBusinessAgent cannot be instantiated"""
+    with pytest.raises(TypeError):
+        BaseBusinessAgent("id", "name")
+
+def test_startup_initializes_agent_and_sets_started(mock_llm, mock_checkpointer):
+    agent = ConcreteBusinessAgent(
+        agent_id="test_id",
+        agent_name="Test Agent",
+        llm=mock_llm,
+        checkpointer=mock_checkpointer,
+    )
+
+    with patch.object(agent, "_create_internal_agent") as mock_create:
+        agent.startup()
+
+        mock_create.assert_called_once()
+        assert agent.started is True
+
+def test_shutdown_sets_started_false(mock_llm, mock_checkpointer):
+    agent = ConcreteBusinessAgent(
+        agent_id="test_id",
+        agent_name="Test Agent",
+        llm=mock_llm,
+        checkpointer=mock_checkpointer,
+    )
+
+    agent.started = True
+    agent.shutdown()
+
+    assert agent.started is False
+
+
+def test_attach_tools_sets_tools(mock_llm, mock_checkpointer):
+    agent = ConcreteBusinessAgent(
+        agent_id="test_id",
+        agent_name="Test Agent",
+        llm=mock_llm,
+        checkpointer=mock_checkpointer,
+    )
+
+    tools = [Mock(), Mock()]
+    agent.attach_tools(tools)
+
+    assert agent.tools == tools
+
+def test_execute_returns_error_when_agent_not_initialized(mock_llm, mock_checkpointer):
+    agent = ConcreteBusinessAgent(
+        agent_id="test_id",
+        agent_name="Test Agent",
+        llm=mock_llm,
+        checkpointer=mock_checkpointer,
+    )
+
+    response = agent.execute("test query")
+
+    assert isinstance(response, BusinessAgentResponse)
+    assert response.status == ResponseStatus.APP_MISCONFIGURED
+    assert any(
+        err.error_code == "AGENT_NOT_INITIALIZED"
+        for err in response.errors
+    )
+
+def test_execute_returns_error_when_llm_raises_exception(mock_llm, mock_checkpointer):
+    agent = ConcreteBusinessAgent(
+        agent_id="test_id",
+        agent_name="Test Agent",
+        llm=mock_llm,
+        checkpointer=mock_checkpointer,
+    )
+
+    # Fake internal agent with failing invoke
+    agent.agent = Mock()
+    agent.agent.invoke.side_effect = RuntimeError("LLM failure")
+
+    response = agent.execute("test query")
+
+    assert response.status == ResponseStatus.LLM_CALL_FAILED
+    assert any(
+        err.error_code == "AGENT_EXECUTION_FAILED"
+        for err in response.errors
+    )
+
+
+def test_execute_success_path_returns_business_response(mock_llm, mock_checkpointer):
+    agent = ConcreteBusinessAgent(
+        agent_id="test_id",
+        agent_name="Test Agent",
+        llm=mock_llm,
+        checkpointer=mock_checkpointer,
+    )
+
+    # Simulate startup lifecycle
+    agent.tools = []
+    agent.startup()
+
+    # Mock the internal LangChain agent
+    mock_internal_agent = Mock()
+    agent.agent = mock_internal_agent
+
+    # Valid SYSTEM-compliant JSON response
+    valid_llm_response = {
+        "messages": [
+            AIMessage(
+                content=json.dumps(
+                    {
+                        "status": "success",
+                        "agent_name": "Test Agent",
+                        "query": "test query",
+                        "message": "Success!",
+                        "confidence": 0.95,
+                        "reasoning": "Test reasoning",
+                        "data": {"key": "value"},
+                        "actions": [],
+                        "errors": []
+                    }
+                )
             )
-        
-        assert agent.agent_id == "test_id"
-        assert agent.agent_name == "Test Name"
-        assert agent._checkpointer is mock_checkpointer
-        assert agent._llm is mock_llm
-    
-    def test_get_capabilities(self, mock_llm, mock_checkpointer):
-        """Test retrieving agent capabilities"""
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm=mock_llm, checkpointer=mock_checkpointer)
+        ]
+    }
 
-        capabilities = agent.get_capabilities()
-        
-        assert isinstance(capabilities, list)
-        assert len(capabilities) == 1
-        assert all(isinstance(cap, AgentCapability) for cap in capabilities)
+    mock_internal_agent.invoke.return_value = valid_llm_response
 
-    def test_get_dependencies(self, mock_llm, mock_checkpointer):
-        agent = ConcreteBusinessAgent(agent_id="test_id", agent_name="Test Agent", llm=mock_llm, checkpointer=mock_checkpointer)
-        dependencies = agent.get_tool_dependencis()
+    response = agent.execute("test query")
 
-        assert isinstance(dependencies, list)
-        assert len(dependencies) == 1
-        assert all(isinstance(dep, ToolDependency) for dep in dependencies)
-    
-    def test_get_info(self, mock_checkpointer, mock_llm):
-        """Test getting agent information"""
-        agent = ConcreteBusinessAgent(
-            agent_id="test_id",
-            agent_name="Test Agent", llm=mock_llm, checkpointer=mock_checkpointer
-            )
-        
-        info = agent.get_info()
-        
-        assert info["agent_id"] == "test_id"
-        assert info["agent_name"] == "Test Agent"
-        assert "capabilities" in info
-        assert isinstance(info["capabilities"], list)
-    
-    def test_agent_cannot_be_instantiated_directly(self):
-        """Test that BaseBusinessAgent cannot be instantiated"""
-        with pytest.raises(TypeError):
-            BaseBusinessAgent("id", "name")
-
-    def test_startup_initializes_agent_and_sets_started(self, mock_llm, mock_checkpointer):
-        agent = ConcreteBusinessAgent(
-            agent_id="test_id",
-            agent_name="Test Agent",
-            llm=mock_llm,
-            checkpointer=mock_checkpointer,
-        )
-
-        with patch.object(agent, "_create_internal_agent") as mock_create:
-            agent.startup()
-
-            mock_create.assert_called_once()
-            assert agent.started is True
-
-    def test_shutdown_sets_started_false(self, mock_llm, mock_checkpointer):
-        agent = ConcreteBusinessAgent(
-            agent_id="test_id",
-            agent_name="Test Agent",
-            llm=mock_llm,
-            checkpointer=mock_checkpointer,
-        )
-
-        agent.started = True
-        agent.shutdown()
-
-        assert agent.started is False
-
-
-    def test_attach_tools_sets_tools(self, mock_llm, mock_checkpointer):
-        agent = ConcreteBusinessAgent(
-            agent_id="test_id",
-            agent_name="Test Agent",
-            llm=mock_llm,
-            checkpointer=mock_checkpointer,
-        )
-
-        tools = [Mock(), Mock()]
-        agent.attach_tools(tools)
-
-        assert agent.tools == tools
-
-    def test_execute_returns_error_when_agent_not_initialized(self, mock_llm, mock_checkpointer):
-        agent = ConcreteBusinessAgent(
-            agent_id="test_id",
-            agent_name="Test Agent",
-            llm=mock_llm,
-            checkpointer=mock_checkpointer,
-        )
-
-        response = agent.execute("test query")
-
-        assert isinstance(response, BusinessAgentResponse)
-        assert response.status == ResponseStatus.APP_MISCONFIGURED
-        assert any(
-            err.error_code == "AGENT_NOT_INITIALIZED"
-            for err in response.errors
-        )
-
-    def test_execute_returns_error_when_llm_raises_exception(self, mock_llm, mock_checkpointer):
-        agent = ConcreteBusinessAgent(
-            agent_id="test_id",
-            agent_name="Test Agent",
-            llm=mock_llm,
-            checkpointer=mock_checkpointer,
-        )
-
-        # Fake internal agent with failing invoke
-        agent.agent = Mock()
-        agent.agent.invoke.side_effect = RuntimeError("LLM failure")
-
-        response = agent.execute("test query")
-
-        assert response.status == ResponseStatus.LLM_CALL_FAILED
-        assert any(
-            err.error_code == "AGENT_EXECUTION_FAILED"
-            for err in response.errors
-        )
+    assert isinstance(response, BusinessAgentResponse)
+    assert response.status == ResponseStatus.SUCCESS
+    assert response.agent_name == "Test Agent"
+    assert response.query == "test query"
+    assert response.message == "Success!"
+    assert response.confidence == 0.95
+    assert response.data == {"key": "value"}
+    assert response.errors == []

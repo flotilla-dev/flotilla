@@ -1,5 +1,5 @@
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.container.contributors.tools.context import ToolsContext
+from flotilla.tools.wiring.tool_context import ToolsContext
 from flotilla.flotilla_configuration_error import FlotillaConfigurationError
 
 
@@ -21,4 +21,4 @@ class ToolRegistryContributor:
             return
 
         if not hasattr(container.di, "tool_registry"):
-            raise RuntimeError("ToolRegistry not wired")
+            raise FlotillaConfigurationError("ToolRegistry not wired")

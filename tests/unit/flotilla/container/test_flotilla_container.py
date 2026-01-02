@@ -2,6 +2,7 @@ import pytest
 
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
+from flotilla.container.base_contributors import WiringContributor
 
 
 @pytest.fixture
@@ -149,5 +150,9 @@ def test_wire_from_config_raises_if_builder_missing(flotilla_container):
             name="thing",
             config_path="thing",
         )
+
+
+
+
 
 

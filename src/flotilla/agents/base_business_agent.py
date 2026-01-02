@@ -198,7 +198,7 @@ END SYSTEM.
                 {"messages": [HumanMessage(content=query)]},  # Just this, no cache_buster
                 config=context
             )
-            return ResponseFactory.parse_llm_response(query=query, llm_response=raw)
+            return ResponseFactory.parse_llm_response(query=query, agent_name=self.get_name(), llm_response=raw)
         except Exception as e:
             logger.error(f"Internal agent failed in {self.agent_name}")
             return ResponseFactory.build_error_response(

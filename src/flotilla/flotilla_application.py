@@ -1,12 +1,12 @@
 from typing import Dict, List
 
-from flotilla.builders.component_builder import ComponentBuilder
-from flotilla.builders.builder_group import BuilderGroup
+from flotilla.container.component_builder import ComponentBuilder
+from flotilla.container.builder_group import BuilderGroup
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.secret_resolver import SecretResolver
 from flotilla.config.configuration_source import ConfigurationSource
-from flotilla.container.contributors.base_contributors import WiringContributor
+from flotilla.container.base_contributors import WiringContributor
 from flotilla.config.config_loader import ConfigLoader
 
 

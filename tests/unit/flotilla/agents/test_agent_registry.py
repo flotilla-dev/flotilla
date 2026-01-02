@@ -8,7 +8,7 @@ from flotilla.agents.agent_registry import BusinessAgentRegistry
 from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability, ToolDependency
 from flotilla.agents.business_agent_response import BusinessAgentResponse, ErrorResponse, ResponseStatus
 from flotilla.tools.tool_registry import ToolRegistry
-from flotilla.agents.selectors.keyword_agent_selector import KeywordAgentSelector
+from flotilla.selectors.keyword_agent_selector import KeywordAgentSelector
 from typing import List
 
 

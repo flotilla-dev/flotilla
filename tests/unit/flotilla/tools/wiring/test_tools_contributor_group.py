@@ -2,8 +2,8 @@ import pytest
 
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.container.contributors.tools.group import ToolsContributorGroup
-from flotilla.builders.default_builders import default_tool_registry_builder
+from flotilla.tools.wiring.tool_contributor_group import ToolsContributorGroup
+from flotilla.tools.builders.tool_registry_builder import tool_registry_builder
 
 
 pytestmark = pytest.mark.unit
@@ -18,7 +18,7 @@ def test_tools_contributor_group_registers_tools(tool_provider_factory, tool_fac
     })
 
     container = FlotillaContainer(settings)
-    container.register_builder("tool_registry", default_tool_registry_builder)
+    container.register_builder("tool_registry", tool_registry_builder)
     # register mock builder
     mock_tool = tool_factory(name="mock_tool")
     def mock_tool_builder(config, container):
@@ -30,7 +30,7 @@ def test_tools_contributor_group_registers_tools(tool_provider_factory, tool_fac
     group.contribute(container)
     group.validate(container)
 
-    registry = container.di.tool_registry()
+    registry = container.get("tool_registry")
 
     assert registry.get_tool_by_name("mock_tool") == mock_tool
 
@@ -55,7 +55,7 @@ def test_tools_contributor_group_with_no_tools_is_noop():
 
     container = FlotillaContainer(settings)
     group = ToolsContributorGroup()
-    container.register_builder("tool_registry", default_tool_registry_builder)
+    container.register_builder("tool_registry", tool_registry_builder)
 
     group.contribute(container)
     group.validate(container)
@@ -69,7 +69,7 @@ def test_tools_contributor_group_context_is_not_on_container():
 
     container = FlotillaContainer(settings)
     group = ToolsContributorGroup()
-    container.register_builder("tool_registry", default_tool_registry_builder)
+    container.register_builder("tool_registry", tool_registry_builder)
 
     group.contribute(container)
 

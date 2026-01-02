@@ -4,6 +4,7 @@ title: Flotilla Configuration Schema
 type: object
 required:
   - flotilla
+  - llm
 
 properties:
   flotilla:
@@ -16,18 +17,10 @@ properties:
 
   llm:
     type: object
-    description: LLM defaults and provider configuration.
-    required:
-      - defaults
-      - providers
-    properties:
-      defaults:
-        $ref: "#/$defs/llmDefaults"
-
-      providers:
-        type: object
-        additionalProperties:
-          $ref: "#/$defs/llmProvider"
+    description: LLM provider configuration.
+    minProperties: 1
+    additionalProperties:
+      $ref: "#/$defs/llmProvider"
 
   agents:
     type: object
@@ -78,42 +71,19 @@ $defs:
   # -----------------------
   # LLM Configuration
   # -----------------------
-  llmDefaults:
-    type: object
-    required:
-      - provider
-      - model
-    properties:
-      provider:
-        type: string
-        description: Default LLM provider name.
-
-      model:
-        type: string
-        description: Default model identifier.
-
-      temperature:
-        type: number
-        minimum: 0
-        maximum: 1
-
-      max_tokens:
-        type: integer
-        minimum: 1
-
-      timeout_seconds:
-        type: integer
-        minimum: 1
-    additionalProperties: false
-
   llmProvider:
     type: object
     required:
-      - type
+      - builder
+      - model
     properties:
-      type:
+      builder:
         type: string
-        description: Provider adapter type (e.g. openai, anthropic).
+        description: Builder function name used to create the LLM provider client.
+
+      model:
+        type: string
+        description: Model identifier for this provider (e.g. gpt-4, claude-sonnet-4).
 
       api_key:
         type: string
@@ -122,13 +92,33 @@ $defs:
       base_url:
         type: string
         format: uri
+        description: Base URL for the provider API.
 
       endpoint:
         type: string
         format: uri
+        description: Specific endpoint URL for requests.
 
       version:
         type: string
+        description: API version string.
+
+      temperature:
+        type: number
+        minimum: 0
+        maximum: 2
+        description: Sampling temperature (if supported by provider).
+
+      max_tokens:
+        type: integer
+        minimum: 1
+        description: Maximum tokens for completions.
+
+      timeout_seconds:
+        type: integer
+        minimum: 1
+        description: Request timeout in seconds.
+
     additionalProperties: true
 
   # -----------------------
@@ -137,21 +127,45 @@ $defs:
   agentConfig:
     type: object
     required:
-      - class
+      - builder
+      - llm
     properties:
-      class:
+      builder:
         type: string
-        description: Fully qualified agent class path.
+        description: Builder function name used to create the agent.
 
       llm:
         type: object
-        description: Partial LLM override for this agent.
+        description: LLM configuration and overrides for this agent.
+        required:
+          - provider
+        properties:
+          provider:
+            type: string
+            description: Provider name (must exist under llm).
+
+          model:
+            type: string
+            description: Override model for this agent (optional).
+
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            description: Override temperature for this agent (optional).
+
+          max_tokens:
+            type: integer
+            minimum: 1
+            description: Override max_tokens for this agent (optional).
+
         additionalProperties: true
 
       tools:
         type: array
         items:
           type: string
+
     additionalProperties: true
 
   # -----------------------
@@ -160,9 +174,9 @@ $defs:
   toolConfig:
     type: object
     required:
-      - class
+      - builder
     properties:
-      class:
+      builder:
         type: string
-        description: Fully qualified tool class path.
+        description: Builder function name used to create the tool.
     additionalProperties: true

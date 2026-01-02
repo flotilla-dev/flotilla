@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dependency_injector import containers, providers
-from typing import Callable, List, Optional
+from typing import List, Optional, Any
 
 from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.builders.component_builder import ComponentBuilder
-from flotilla.container.contributors.base_contributors import WiringContributor
+from flotilla.container.component_builder import ComponentBuilder
+from flotilla.container.base_contributors import WiringContributor
 from flotilla.utils.logger import get_logger
 
 
@@ -29,9 +29,15 @@ class FlotillaContainer:
         self._builders: dict[str, ComponentBuilder] = {}
         self._contributors: List[WiringContributor] = []
 
+
     # ----------------------------
     # Public API
     # ----------------------------
+
+    @property
+    def config_dict(self) -> dict:
+        return self.settings.config
+
 
     def register_builder(self, builder_name: str, builder: ComponentBuilder):
         """
@@ -56,7 +62,7 @@ class FlotillaContainer:
             The builder function for the name or None if it doesn't exist
         """
         logger.info(f"Get builder for {builder_name}")
-        return self._builders[builder_name]
+        return self._builders.get(builder_name)
 
 
     def register_contributor(self, contributor: WiringContributor):
@@ -139,7 +145,7 @@ class FlotillaContainer:
                 f"No builder registered for '{builder_name}'"
             )
 
-        setattr(self.di, name, providers.Singleton(builder, container=self.di, config=data, **kwargs))
+        setattr(self.di, name, providers.Singleton(builder, container=self, config=data, **kwargs))
 
 
 
@@ -183,11 +189,67 @@ class FlotillaContainer:
         setattr(self.di, name,
             providers.Singleton(
                 builder,
-                container=self.di,
+                container=self,
                 config={},          # explicit, even if empty
                 **kwargs,
             )
         )
+
+
+    def get(self, name: str) -> Optional[Any]:
+        """
+        Retrieve a resolved component from the container if it exists.
+
+        This method safely checks whether a component has been wired into the
+        internal dependency container under the given name and, if so,
+        returns the instantiated singleton.
+
+        If the component is not present, ``None`` is returned.
+
+        Calling this method MAY instantiate the component if it has not
+        already been constructed. Callers should avoid invoking this method
+        during validation phases if instantiation is undesirable.
+
+        Parameters
+        ----------
+        name : str
+            The attribute name of the component on the container.
+
+        Returns
+        -------
+        Optional[Any]
+            The resolved component instance, or ``None`` if the component is
+            not present.
+        """
+        provider = getattr(self.di, name, None)
+        if provider is None:
+            return None
+
+        try:
+            return provider()
+        except Exception:
+            logger.exception(f"Failed to resolve component '{name}'")
+            raise
+
+    def exists(self, name: str) -> bool:
+        """
+        Check whether a component has been wired into the container.
+
+        This method verifies that a component provider exists on the internal
+        dependency container under the given name. It does NOT instantiate
+        the component.
+
+        Parameters
+        ----------
+        name : str
+            The attribute name of the component on the container.
+
+        Returns
+        -------
+        bool
+            True if the component is present, False otherwise.
+        """
+        return hasattr(self.di, name)
 
     def build(self):
         """
@@ -233,10 +295,14 @@ class FlotillaContainer:
 
         ordered = sorted(self._contributors, key=lambda c: c.priority)
 
+        logger.info("Execute WiringContributors in priorty order")
         for contributor in ordered:
+            logger.info(f"Call contribute on WiringContributor {contributor.__class__}")
             contributor.contribute(self)
 
+        logger.info("Validate container wiring in priortiy order")
         for contributor in ordered:
+            logger.info(f"Call validate on WiringContributor {contributor.__class__}")
             contributor.validate(self)
 
         logger.info("✓ Flotilla container build complete")
