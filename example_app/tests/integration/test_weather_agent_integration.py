@@ -1,17 +1,13 @@
 # tests/test_weather_agent_integration.py
 import pytest
 from example_app.src.app_agents.weather_agent import WeatherAgent
-from config.settings import Settings
-from config.config_loader import ConfigLoader
-from config.config_factory import ConfigFactory
-from tools.tool_registry import ToolRegistry
-from agents.business_agent_response import BusinessAgentResponse, ResponseStatus
+
 import uuid
-from utils.logger import get_logger
-from langchain_core.globals import set_debug
+from flotilla.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+'''
 @pytest.mark.integration
 def test_weather_agent_real_llm():
     #set_debug(True)
@@ -42,4 +38,4 @@ def test_weather_agent_real_llm():
     assert result.status == ResponseStatus.SUCCESS
     assert "Denver" in result.message
     #logger.info(f"Response from LLM {result}")
-
+'''

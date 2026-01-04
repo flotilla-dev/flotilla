@@ -1,0 +1,182 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://flotilla.ai/schema/flotilla.schema.yml
+title: Flotilla Configuration Schema
+type: object
+required:
+  - flotilla
+  - llm
+
+properties:
+  flotilla:
+    type: object
+    description: Application-level runtime services and lifecycle policies.
+    additionalProperties:
+      oneOf:
+        - $ref: "#/$defs/runtimeService"
+        - $ref: "#/$defs/lifecycleConfig"
+
+  llm:
+    type: object
+    description: LLM provider configuration.
+    minProperties: 1
+    additionalProperties:
+      $ref: "#/$defs/llmProvider"
+
+  agents:
+    type: object
+    description: Agent definitions and configuration.
+    additionalProperties:
+      $ref: "#/$defs/agentConfig"
+
+  tools:
+    type: object
+    description: Tool definitions and configuration.
+    additionalProperties:
+      $ref: "#/$defs/toolConfig"
+
+additionalProperties: false
+
+# -------------------------------------------------------------------
+# Definitions
+# -------------------------------------------------------------------
+$defs:
+
+  # -----------------------
+  # Runtime Services
+  # -----------------------
+  runtimeService:
+    type: object
+    description: Shared application runtime service.
+    required:
+      - type
+    properties:
+      type:
+        type: string
+        description: Builder type name used to construct the service.
+    additionalProperties: true
+
+  lifecycleConfig:
+    type: object
+    description: Application lifecycle policies.
+    properties:
+      fail_fast:
+        type: boolean
+        default: true
+
+      validate_on_start:
+        type: boolean
+        default: true
+    additionalProperties: false
+
+  # -----------------------
+  # LLM Configuration
+  # -----------------------
+  llmProvider:
+    type: object
+    required:
+      - builder
+      - model
+    properties:
+      builder:
+        type: string
+        description: Builder function name used to create the LLM provider client.
+
+      model:
+        type: string
+        description: Model identifier for this provider (e.g. gpt-4, claude-sonnet-4).
+
+      api_key:
+        type: string
+        description: API key (may be secret-resolved).
+
+      base_url:
+        type: string
+        format: uri
+        description: Base URL for the provider API.
+
+      endpoint:
+        type: string
+        format: uri
+        description: Specific endpoint URL for requests.
+
+      version:
+        type: string
+        description: API version string.
+
+      temperature:
+        type: number
+        minimum: 0
+        maximum: 2
+        description: Sampling temperature (if supported by provider).
+
+      max_tokens:
+        type: integer
+        minimum: 1
+        description: Maximum tokens for completions.
+
+      timeout_seconds:
+        type: integer
+        minimum: 1
+        description: Request timeout in seconds.
+
+    additionalProperties: true
+
+  # -----------------------
+  # Agent Configuration
+  # -----------------------
+  agentConfig:
+    type: object
+    required:
+      - builder
+      - llm
+    properties:
+      builder:
+        type: string
+        description: Builder function name used to create the agent.
+
+      llm:
+        type: object
+        description: LLM configuration and overrides for this agent.
+        required:
+          - provider
+        properties:
+          provider:
+            type: string
+            description: Provider name (must exist under llm).
+
+          model:
+            type: string
+            description: Override model for this agent (optional).
+
+          temperature:
+            type: number
+            minimum: 0
+            maximum: 2
+            description: Override temperature for this agent (optional).
+
+          max_tokens:
+            type: integer
+            minimum: 1
+            description: Override max_tokens for this agent (optional).
+
+        additionalProperties: true
+
+      tools:
+        type: array
+        items:
+          type: string
+
+    additionalProperties: true
+
+  # -----------------------
+  # Tool Configuration
+  # -----------------------
+  toolConfig:
+    type: object
+    required:
+      - builder
+    properties:
+      builder:
+        type: string
+        description: Builder function name used to create the tool.
+    additionalProperties: true

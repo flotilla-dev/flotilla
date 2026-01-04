@@ -1,6 +1,6 @@
 import pytest
 from example_app.src.app_tools.weather_tools import WeatherTools
-from config.config_models import ToolConfig
+from flotilla.tools.tool_config import ToolConfig
 
 
 
@@ -12,15 +12,10 @@ def valid_config():
     config.tool_configuration = {
             "WEATHER_API": {
                 "KEY": "TEST-KEY-123",
-                "BASE_URL": "https://api.weatherapi.com/v1"
+                "BASE_URL": "https://api.weatherapi.com/v1",
+                "use_api": False
             }
         }
-    config.feature_flags = {
-        "weather_tools": {
-            "use_api": False
-        }
-
-    }
     return config
 
 
