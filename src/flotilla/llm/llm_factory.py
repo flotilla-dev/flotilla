@@ -9,9 +9,9 @@ class LLMFactory:
         """
         Create an LLM instance from a fully flattened LLM config.
 
-        Expected llm_config shape:
-        - contains a 'builder' key
-        - other keys are provider / model specific
+        The config must include a ``builder`` key identifying a registered
+        LLM builder. All remaining keys are passed directly to the builder
+        as keyword arguments.
         """
 
         builder_name = llm_config.get("builder")
@@ -26,5 +26,11 @@ class LLMFactory:
                 f"No LLM builder registered for '{builder_name}'"
             )
 
-        # Delegate construction to the builder
-        return builder(container=container.di, config=llm_config)
+        # Remove metadata and delegate construction
+        kwargs = dict(llm_config)
+        # strip out builder and provider from the config
+        kwargs.pop("builder", None)
+        kwargs.pop("provider", None)
+
+        return builder(**kwargs)
+

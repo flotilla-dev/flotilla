@@ -14,7 +14,7 @@ class BaseToolProvider(ABC):
     configuration, lifecycle, and registration.
     """
 
-    def __init__(self, *,provider_id: str, provider_name: str, config:ToolConfig):
+    def __init__(self, *,provider_id: str, provider_name: str, config:Optional[ToolConfig] = None):
         self.provider_id = provider_id
         self.provider_name = provider_name
         self.config = config

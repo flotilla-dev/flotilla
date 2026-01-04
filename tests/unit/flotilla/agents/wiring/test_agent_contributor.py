@@ -53,16 +53,16 @@ def test_agent_contributor_wires_all_agents(mock_checkpointer, mock_llm, agent_f
     container = FlotillaContainer(settings=settings)
 
     # create simple builder function to return mock llm and register to the container
-    def mock_llm_builder(container:FlotillaContainer, config:dict) -> Any:
+    def mock_llm_builder(*, model:str, temperature:float) -> Any:
         return mock_llm
     
     # create the mock agents and their buidler functions 
     weather_agent = agent_factory(agent_id="weather_agent", capabilities=[], dependencies=[])
-    def weather_agent_builder(container:FlotillaContainer, config:dict, llm:BaseChatModel, checkpointer:Checkpointer) -> Any:
+    def weather_agent_builder(*, llm:BaseChatModel, checkpointer:Checkpointer) -> Any:
         return weather_agent
     
     calculator_agent = agent_factory(agent_id="calculator_agent", capabilities=[], dependencies=[])
-    def calculator_agent_builder(container:FlotillaContainer, config:dict, llm:BaseChatModel, checkpointer:Checkpointer) -> Any:
+    def calculator_agent_builder(*, llm:BaseChatModel, checkpointer:Checkpointer) -> Any:
         return calculator_agent
     
     # register the builders

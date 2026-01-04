@@ -5,10 +5,10 @@ from flotilla.tools.base_tool_provider import BaseToolProvider
 from flotilla.container.component_builder import ComponentBuilder
 from flotilla.flotilla_configuration_error import FlotillaConfigurationError
 
-from typing import List, Optional
+from typing import List
 
 
-def tool_registry_builder(*, container: FlotillaContainer, config:Optional[dict], tool_provider_names:List[str] ) -> ToolRegistry:
+def tool_registry_builder(*, container: FlotillaContainer, tool_provider_names:List[str] ) -> ToolRegistry:
     tool_providers: List[str] = []
 
     for tool_provider_name in tool_provider_names:

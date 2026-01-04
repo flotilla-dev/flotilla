@@ -8,7 +8,9 @@ from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.secret_resolver import SecretResolver, SecretResolutionError
 from flotilla.config.configuration_source import ConfigurationSource
 
+from flotilla.utils.logger import get_logger
 
+logger = get_logger(__name__)
 # ---------------------------------------------------------------------
 # ConfigLoader
 # ---------------------------------------------------------------------
@@ -41,9 +43,11 @@ class ConfigLoader:
     # ------------------------------------------------------------
 
     def load(self) -> FlotillaSettings:
+        logger.info("Start loading of Settings from configuratoin sources")
         # 1. Load + merge config fragments
         merged: Dict[str, Any] = {}
         for source in self._sources:
+            logger.info(f"Load configuration fragment from source {source}")
             fragment = source.load()
             if fragment:
                 merged = ConfigUtils.deep_merge(merged, fragment)
@@ -51,6 +55,7 @@ class ConfigLoader:
         # 2. Resolve secrets (full-string interpolation only)
         resolved = self._interpolate_secrets(merged)
 
+        logger.info("Finished loading Settings from configuration sources")
         # 3. Construct immutable, semantically-valid settings
         return FlotillaSettings(resolved)
 

@@ -1,7 +1,10 @@
 from flotilla.agents.base_business_agent import (
     BaseBusinessAgent,
-    AgentCapability
+    AgentCapability, 
+    ToolDependency
 )
+from langchain.chat_models import BaseChatModel
+from langgraph.types import Checkpointer
 from flotilla.utils.logger import get_logger
 
 
@@ -12,8 +15,8 @@ logger = get_logger(__name__)
 class WeatherAgent(BaseBusinessAgent):
     """Business logic agent for return punny weather foracasts"""
 
-    def __init__(self):
-        super().__init__("weather_agent", "Weather Pun Agent")
+    def __init__(self, llm:BaseChatModel, checkpointer:Checkpointer):
+        super().__init__(agent_id="weather_agent", agent_name="Weather Pun Agent", llm=llm, checkpointer=checkpointer)
 
 
     def _initialize_capabilities(self):
@@ -28,6 +31,13 @@ class WeatherAgent(BaseBusinessAgent):
             )]
         return capabilities
     
+    def _initialize_dependencies(self):
+        return [ToolDependency(tool_name="get_weather_for_location", required=True),
+                ToolDependency(tool_name="get_user_location", required=True),
+                ToolDependency(tool_name="get_forecast_for_location", required=True)
+        ]
+
+
     def _get_agent_domain_prompt(self):
         return """
 You are an expert weather forecaster who speaks in clever, lighthearted puns.

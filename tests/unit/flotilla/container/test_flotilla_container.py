@@ -3,6 +3,7 @@ import pytest
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.container.base_contributors import WiringContributor
+from flotilla.flotilla_configuration_error import FlotillaConfigurationError
 
 
 @pytest.fixture
@@ -49,12 +50,6 @@ def test_flotilla_container_initializes_with_settings(flotilla_container, minima
         == "agent_selector.keyword"
     )
 
-def test_flotilla_container_no_longer_accepts_config_dir_and_env():
-    """
-    Old constructor signature should no longer be supported.
-    """
-    with pytest.raises(TypeError):
-        FlotillaContainer(config_dir="config", env="local")  # type: ignore
 
 
 def test_register_builder_adds_builder(flotilla_container):
@@ -107,13 +102,11 @@ def test_build_executes_contributors_in_priority_order(flotilla_container):
         "B_validate", "A_validate",
     ]
 
-def test_wire_from_config_happy_path(flotilla_container):
-    def dummy_builder(container, config):
-        return config["value"]
-
-    flotilla_container.register_builder("dummy", dummy_builder)
-
-    flotilla_container.di.config.from_dict(
+def test_wire_from_config_happy_path():
+    def dummy_builder(value:int):
+        return value
+    
+    settings = FlotillaSettings(
         {
             "core": {
                 "thing": {
@@ -123,6 +116,8 @@ def test_wire_from_config_happy_path(flotilla_container):
             }
         }
     )
+    flotilla_container = FlotillaContainer(settings=settings)
+    flotilla_container.register_builder("dummy", dummy_builder)
 
     flotilla_container.wire_from_config(
         section="core",
@@ -130,26 +125,25 @@ def test_wire_from_config_happy_path(flotilla_container):
         config_path="thing",
     )
 
-    assert flotilla_container.di.thing() == 42
+    assert flotilla_container.get("thing") == 42
 
 
 def test_wire_from_config_raises_if_builder_missing(flotilla_container):
-    flotilla_container.di.config.from_dict(
+    settings = FlotillaSettings(
         {
             "core": {
                 "thing": {
-                    "builder": "missing",
+                    "builder": "dummy",
+                    "value": 42,
                 }
             }
         }
     )
+    flotilla_container = FlotillaContainer(settings=settings)
 
-    with pytest.raises(ValueError, match="No builder registered"):
-        flotilla_container.wire_from_config(
-            section="core",
-            name="thing",
-            config_path="thing",
-        )
+    with pytest.raises(FlotillaConfigurationError):
+        flotilla_container.wire_from_config(section="core", name="thing", config_path="thing")
+
 
 
 

@@ -21,7 +21,7 @@ def test_tools_contributor_group_registers_tools(tool_provider_factory, tool_fac
     container.register_builder("tool_registry", tool_registry_builder)
     # register mock builder
     mock_tool = tool_factory(name="mock_tool")
-    def mock_tool_builder(config, container):
+    def mock_tool_builder():
         return tool_provider_factory(provider_id="mock_provider", config= None, tools= [mock_tool])
 
     container.register_builder("mock", mock_tool_builder)

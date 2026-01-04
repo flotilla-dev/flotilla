@@ -65,4 +65,12 @@ class OrchestrationEngine:
             self._tool_registry.shutdown()
             self._agent_registry.shutdown()
             self.running = False
+
+    @property
+    def tool_registry(self) -> ToolRegistry:
+        return self._tool_registry
+    
+    @property
+    def agent_registry(self) -> BusinessAgentRegistry:
+        return self._agent_registry
     

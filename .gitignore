@@ -28,9 +28,6 @@ ENV/
 .venv/
 
 # Configuration files with secrets
-config/client_config.json
-config/azure_openai_config.json
-config/block_mcp_config.json
 .env
 
 # IDE

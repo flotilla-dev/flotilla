@@ -9,7 +9,9 @@ from jsonschema import Draft202012Validator
 
 from flotilla.config.config_utils import ConfigUtils
 from flotilla.config.configuration_source import ConfigurationSource
+from flotilla.utils.logger import get_logger
 
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------
 # Errors
@@ -57,6 +59,8 @@ class YamlConfigurationSource:
 
     def load(self) -> Dict[str, Any]:
         merged: Dict[str, Any] = {}
+        
+        logger.info("Start loading configuration from YAML")
 
         # 1. Load base config
         merged = ConfigUtils.deep_merge(
@@ -74,7 +78,8 @@ class YamlConfigurationSource:
         # 3. Schema validation (source-level)
         if self._validator:
             self._validate_schema(merged)
-
+        
+        logger.info("Finished loading configuration from YAML")
         return merged
 
     # ------------------------------------------------------------
@@ -83,9 +88,12 @@ class YamlConfigurationSource:
 
     def _load_yaml(self, filename: str) -> Dict[str, Any]:
         path = self._config_dir / filename
+        logger.info(f"Check if path {path} exists")
         if not path.exists():
+            logger.info(f"Path {path} does not exist")
             return {}
-
+        
+        logger.info(f"Load YAML Configuration from '{path}'")
         try:
             with path.open("r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)

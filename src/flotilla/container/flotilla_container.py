@@ -7,6 +7,7 @@ from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.container.component_builder import ComponentBuilder
 from flotilla.container.base_contributors import WiringContributor
 from flotilla.utils.logger import get_logger
+from flotilla.flotilla_configuration_error import FlotillaConfigurationError
 
 
 
@@ -77,48 +78,36 @@ class FlotillaContainer:
 
     def wire_from_config(self, *, section: str, name: str, config_path: str, **kwargs):
         """
-        Wire a config-backed singleton into the dependency container.
+        Wire a singleton into the container using application configuration.
 
-        This method reads configuration from the specified configuration section and
-        path, resolves the configured builder, and registers a singleton provider
-        under the given name.
+        This method conditionally wires a component based on configuration at
+        ``<section>.<config_path>``. It extracts the configured builder name, merges
+        configuration values with explicitly provided keyword arguments, and delegates
+        wiring to ``wire_infrastructure_with_builder()``.
 
-        The wiring is conditional:
-        - If the configuration section does not exist, no wiring is performed.
-        - If the configuration path is missing or resolves to no data, no wiring is
-        performed.
-        - If configuration is present, a builder name is required and must be
-        registered on the container.
+        If the configuration section, path, or data is missing, no wiring is performed.
+        If configuration is present, a ``builder`` key is required and must reference a
+        registered builder. Explicit keyword arguments always override configuration
+        values.
 
-        This method always injects the following keyword arguments into the builder:
-        - ``container``: the dependency-injector container
-        - ``config``: the resolved configuration dictionary for this component
+        Args:
+            section (str):
+                Top-level configuration section (e.g. ``"agents"``, ``"tools"``).
+            name (str):
+                Attribute name under which the singleton provider will be registered on
+                the dependency container.
+            config_path (str):
+                Key within the configuration section that defines this component.
+            **kwargs:
+                Explicit keyword arguments passed to the builder. These values override
+                any corresponding values provided by configuration.
 
-        Additional keyword arguments may be provided and will be passed through to
-        the builder.
-
-        This method is intended for wiring user-configurable components driven by
-        application configuration. Infrastructure components that must always be
-        present should be wired using ``wire_infrastructure()`` instead.
-
-        Parameters
-        ----------
-        section : str
-            The top-level configuration section name (e.g. ``"tools"``, ``"agents"``).
-        name : str
-            The attribute name under which the singleton provider will be registered
-            on the dependency container.
-        config_path : str
-            The configuration key within the section that defines this component.
-        **kwargs
-            Additional keyword arguments to pass to the builder.
-
-        Raises
-        ------
-        ValueError
-            If configuration is present but no builder is specified, or if the
-            specified builder has not been registered on the container. 
+        Raises:
+            FlotillaConfigurationError:
+                If configuration is present but no builder is specified, or if the
+                configured builder is not registered on the container.
         """
+
         logger.info(f"Register singleton '{name}' from config section '{section}'")
 
         section_cfg = getattr(self.di.config, section, None)
@@ -135,65 +124,78 @@ class FlotillaContainer:
 
         builder_name = data.get("builder")
         if not builder_name:
-            raise ValueError(
-                f"{section}.{config_path}.builder is required"
-            )
+            raise FlotillaConfigurationError(f"{section}.{config_path}.builder is required"
+        )
+        data.pop("builder", None)
 
-        builder = self._builders.get(builder_name)
+        # Merge: explicit kwargs override config
+        merged_kwargs = {**data, **kwargs}
+
+        self.wire_infrastructure_with_builder(name=name, builder_name=builder_name, **merged_kwargs)
+
+
+    def wire_infrastructure_with_builder(self, *, name: str, builder_name: str, **kwargs):
+        """
+        Wire a singleton into the container using a builder resolved by name.
+
+        This method resolves a builder function from the container's builder registry,
+        validates that it exists, and delegates wiring to ``wire_infrastructure()``.
+        All parameters required by the builder must be supplied explicitly via
+        keyword arguments.
+
+        This method does not consult application configuration and always performs
+        wiring when invoked.
+
+        Args:
+            name (str):
+                Attribute name under which the singleton provider will be registered on
+                the dependency container.
+            builder_name (str):
+                Name of the builder function registered on the container.
+            **kwargs:
+                Keyword arguments passed directly to the builder function.
+
+        Raises:
+            FlotillaConfigurationError:
+                If the specified builder name is not registered on the container.
+        """
+        logger.info(f"Register infrstructure {name} with builder name {builder_name}")
+        builder = self.get_builder(builder_name)
         if not builder:
-            raise ValueError(
-                f"No builder registered for '{builder_name}'"
+            raise FlotillaConfigurationError(
+                f"Unable to wire infrastructure '{name}' with unknown builder '{builder_name}'"
             )
 
-        setattr(self.di, name, providers.Singleton(builder, container=self, config=data, **kwargs))
+
+        self.wire_infrastructure(name=name, builder=builder, **kwargs)
+
 
 
 
     def wire_infrastructure(self, *, name: str, builder: ComponentBuilder, **kwargs):
         """
-        Wire an infrastructure singleton into the dependency container.
+        Wire a singleton into the dependency container using an explicit builder function.
 
-        This method registers a singleton provider that is not driven by application
-        configuration and is expected to be present whenever the container is built.
-        Infrastructure components are typically internal framework components such
-        as registries, engines, or coordinators.
+        This method performs the actual wiring by registering a singleton provider with
+        the dependency-injector container. No validation, configuration lookup, or
+        argument processing is performed. All keyword arguments are passed directly to
+        the builder function.
 
-        The provided builder is invoked with a consistent contract and is always
-        supplied the following keyword arguments:
-        - ``container``: the dependency-injector container
-        - ``config``: an empty configuration dictionary
+        This method is intended for framework-owned or internal components where the
+        builder function is known explicitly.
 
-        Additional keyword arguments may be provided and will be passed through to
-        the builder.
-
-        Unlike ``wire_from_config()``, this method does not consult application
-        configuration and does not perform conditional wiring. If invoked, the
-        infrastructure component is always registered.
-
-        Parameters
-        ----------
-        name : str
-            The attribute name under which the singleton provider will be registered
-            on the dependency container.
-        builder : ComponentBuilder
-            The builder function used to construct the singleton instance.
-        **kwargs
-            Additional keyword arguments to pass to the builder.
-
-        Raises
-        ------
-        ValueError
-            If the builder is not callable or if wiring fails due to an invalid
-            builder invocation.
+        Args:
+            name (str):
+                Attribute name under which the singleton provider will be registered on
+                the dependency container.
+            builder (ComponentBuilder):
+                Builder function used to construct the singleton instance.
+            **kwargs:
+                Keyword arguments passed directly to the builder function.
         """
-        setattr(self.di, name,
-            providers.Singleton(
-                builder,
-                container=self,
-                config={},          # explicit, even if empty
-                **kwargs,
-            )
-        )
+
+        logger.info(f"Register singleton {name} with builder function {builder}")
+        setattr(self.di, name, providers.Singleton(builder, **kwargs))
 
 
     def get(self, name: str) -> Optional[Any]:

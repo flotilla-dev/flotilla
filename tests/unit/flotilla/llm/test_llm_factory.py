@@ -10,11 +10,11 @@ from flotilla.container.component_builder import ComponentBuilder
 # Test builders
 # ---------------------------------------------------------------------
 
-def mock_llm_builder(*, container, config):
+def mock_llm_builder(*, model:str, temperature:float):
     # container is container.di, config is flattened llm config
     return {
-        "container": container,
-        "config": config,
+        "model": model,
+        "temperature": temperature
     }
 
 
@@ -76,7 +76,7 @@ def test_create_invokes_registered_builder(container):
     - look up the builder by name
     - call it with container.di and config
     - return the builder's result
-    """
+    """    
     container.register_builder("mock-llm-builder", MockLLMBuilder)
 
     llm_config = {
@@ -88,8 +88,8 @@ def test_create_invokes_registered_builder(container):
     llm = LLMFactory.create(container, llm_config)
 
     assert isinstance(llm, dict)
-    assert llm["container"] is container.di
-    assert llm["config"] == llm_config
+    assert llm["model"] == "gpt-4"
+    assert llm["temperature"] == 0.5
 
 
 def test_builder_exceptions_are_propagated(container):
@@ -97,7 +97,7 @@ def test_builder_exceptions_are_propagated(container):
     LLMFactory should not swallow exceptions raised by builders.
     """
 
-    def failing_builder(*, container, config):
+    def failing_builder():
         raise RuntimeError("builder exploded")
 
     container.register_builder("failing-builder", failing_builder)

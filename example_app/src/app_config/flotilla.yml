@@ -1,20 +1,29 @@
-LLM:
-  API_KEY: "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"
-  MODEL: "gpt-4o-mini"
-  TEMPERATURE: 1.0
-  TYPE: "openai"
+flotilla:
+  agent_selector:
+    builder: agent_selector.keyword
+    min_confidence: 0.2
+  checkpointer:
+    builder: checkpointer.memory
 
-LOG:
-  LEVEL: "INFO"
+llm:
+  openai:
+    builder: llm.openai
+    model: gpt-4o-mini
+    api_key: ${OPENAI_API_KEY}
+    temperature: 1.5
+    max_tokens: 2048
+    timeout: 30
 
-TOOL_REGISTRY:
-  PACKAGES:
-    - "app_tools"
-  RECURISVE: true
-  ENABLE_DISCOVERY: true
 
-AGENT_REGISTRY:
-  PACKAGES:
-    - "app_agents"
-  RECURSIVE: true
-  ENABLE_DISCOVERY: true
+agents:
+  weather_agent:
+    builder: agents.weather_agent
+    llm:
+      provider: openai
+    
+tools:
+  weather_tools:
+    builder: tools.weather_tools
+    api_key: ${WEATHER_API_KEY}
+    base_url: https://api.weatherapi.com
+    use_api: true
