@@ -4,7 +4,7 @@ from typing import Any
 
 from flotilla.agents.wiring.agent_contributor import AgentContributor
 from flotilla.agents.wiring.agent_context import AgentContext
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
 from langgraph.types import Checkpointer

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
 
-from flotilla.orchestration_engine import OrchestrationEngine
+from flotilla.core.flotilla_runtime import FlotillaRuntime
 from flotilla.agents.business_agent_response import (
     BusinessAgentResponse,
     ResponseStatus,
@@ -17,132 +17,203 @@ def mock_tool_registry():
     return MagicMock()
 
 @pytest.mark.unit
-class TestOrchestrationEngine:
 
-    def test_constructor_starts_agent_registry(
-        self,
-        mock_agent_registry,
-        mock_tool_registry
-    ):
-        """Engine constructor should start the agent registry"""
-        mock_agent_registry.start = MagicMock()
+def test_constructor_starts_agent_registry(
+    mock_agent_registry,
+    mock_tool_registry
+):
+    """Engine constructor should start the agent registry"""
+    mock_agent_registry.start = MagicMock()
 
-        engine = OrchestrationEngine(
-            agent_registry=mock_agent_registry,
-            tool_registry=mock_tool_registry
-        )
+    engine = FlotillaRuntime(
+        agent_registry=mock_agent_registry,
+        tool_registry=mock_tool_registry
+    )
 
-        assert engine.running is True
-        mock_agent_registry.start.assert_called_once()
+    assert engine.running is True
+    mock_agent_registry.start.assert_called_once()
 
 
-    def test_execute_delegates_to_agent_registry(
-        self,
-        mock_agent_registry,
-        mock_tool_registry
-    ):
-        """Execute should delegate to agent registry"""
-        expected_response = BusinessAgentResponse(
-            status=ResponseStatus.SUCCESS,
-            query="test query",
-            confidence=0.7,
-            agent_name="TestAgent",
-            result={"answer": "ok"}
-        )
+def test_run_executes_selected_agent(
+    mock_agent_registry,
+    mock_tool_registry
+):
+    """Runtime should select and execute an agent"""
+    mock_agent_registry.start = MagicMock()
 
-        mock_agent_registry.execute_with_best_agent = MagicMock(
-            return_value=expected_response
-        )
-        mock_agent_registry.start = MagicMock()
+    mock_agent = MagicMock()
+    mock_response = MagicMock(spec=BusinessAgentResponse)
 
-        engine = OrchestrationEngine(
-            agent_registry=mock_agent_registry,
-            tool_registry=mock_tool_registry
-        )
+    mock_agent.agent_name = "TestAgent"
+    mock_agent.run.return_value = mock_response
+    mock_agent_registry.select_agent.return_value = mock_agent
 
-        response = engine.execute(
-            query="test query",
-            context={"foo": "bar"}
-        )
+    engine = FlotillaRuntime(
+        agent_registry=mock_agent_registry,
+        tool_registry=mock_tool_registry
+    )
 
-        mock_agent_registry.execute_with_best_agent.assert_called_once_with(
-            query="test query",
-            context={"foo": "bar"}
-        )
-        assert response == expected_response
+    response = engine.run(
+        query="test query",
+        user_id="user-1",
+        thread_id="thread-1",
+        request_id="trace-1",
+        metadata={"foo": "bar"}
+    )
 
-
-    def test_execute_returns_error_on_exception(self, mock_agent_registry, mock_tool_registry):
-        """Engine should return error response if execution raises (regression: must return the built response)"""
-        mock_agent_registry.execute_with_best_agent = MagicMock(
-            side_effect=RuntimeError("boom")
-        )
-        mock_agent_registry.start = MagicMock()
-
-        engine = OrchestrationEngine(
-            agent_registry=mock_agent_registry,
-            tool_registry=mock_tool_registry
-        )
-
-        response = engine.execute(
-            query="test query",
-            context={}
-        )
-
-        # This is the contract we want: always return a BusinessAgentResponse
-        assert isinstance(response, BusinessAgentResponse)
-        assert response.status == ResponseStatus.INTERNAL_ERROR
-        assert response.query == "test query"
-        assert response.agent_name == "Unknown"
-        assert response.errors
-        assert response.errors[0].error_code == "AGENT_EXECUTION_FAILED"
-        assert "boom" in response.errors[0].error_details
+    assert response == mock_response
+    mock_agent_registry.select_agent.assert_called_once()
+    mock_agent.run.assert_called_once()
 
 
 
-    def test_cleanup_shuts_down_registries(
-        self,
-        mock_agent_registry,
-        mock_tool_registry
-    ):
-        """Cleanup should shutdown tool and agent registries"""
-        mock_agent_registry.start = MagicMock()
-        mock_agent_registry.shutdown = MagicMock()
-        mock_tool_registry.shutdown = MagicMock()
+def test_run_passes_correct_agent_input(
+    mock_agent_registry,
+    mock_tool_registry
+):
+    """AgentInput should be constructed correctly"""
+    mock_agent_registry.start = MagicMock()
 
-        engine = OrchestrationEngine(
-            agent_registry=mock_agent_registry,
-            tool_registry=mock_tool_registry
-        )
+    mock_agent = MagicMock()
+    mock_agent.agent_name = "TestAgent"
+    mock_agent.run.return_value = MagicMock()
 
-        engine.cleanup()
+    mock_agent_registry.select_agent.return_value = mock_agent
 
-        mock_tool_registry.shutdown.assert_called_once()
-        mock_agent_registry.shutdown.assert_called_once()
-        assert engine.running is False
+    engine = FlotillaRuntime(
+        agent_registry=mock_agent_registry,
+        tool_registry=mock_tool_registry
+    )
+
+    engine.run(
+        query="hello",
+        user_id="u1",
+        thread_id="t1",
+        metadata={"k": "v"}
+    )
+
+    agent_input = mock_agent_registry.select_agent.call_args.kwargs["agent_input"]
+
+    assert agent_input.query == "hello"
+    assert agent_input.user_id == "u1"
+    assert agent_input.thread_id == "t1"
+    assert agent_input.metadata == {"k": "v"}
 
 
-    def test_cleanup_idempotent(
-        self,
-        mock_agent_registry,
-        mock_tool_registry
-    ):
-        """Calling cleanup twice should not double-shutdown"""
-        mock_agent_registry.start = MagicMock()
-        mock_agent_registry.shutdown = MagicMock()
-        mock_tool_registry.shutdown = MagicMock()
 
-        engine = OrchestrationEngine(
-            agent_registry=mock_agent_registry,
-            tool_registry=mock_tool_registry
-        )
+def test_run_passes_execution_config(
+    mock_agent_registry,
+    mock_tool_registry
+):
+    """ExecutionConfig should be wired correctly"""
+    mock_agent_registry.start = MagicMock()
 
-        engine.cleanup()
-        engine.cleanup()
+    mock_agent = MagicMock()
+    mock_agent.agent_name = "TestAgent"
+    mock_agent.run.return_value = MagicMock()
 
-        mock_tool_registry.shutdown.assert_called_once()
-        mock_agent_registry.shutdown.assert_called_once()
-        assert engine.running is False
+    mock_agent_registry.select_agent.return_value = mock_agent
+
+    engine = FlotillaRuntime(
+        agent_registry=mock_agent_registry,
+        tool_registry=mock_tool_registry
+    )
+
+    engine.run(
+        query="hello",
+        thread_id="thread-123",
+        request_id="trace-abc"
+    )
+
+    _, kwargs = mock_agent.run.call_args
+    config = kwargs["config"]
+
+    assert config.thread_id == "thread-123"
+    assert config.trace_id == "trace-abc"
+
+
+
+def test_run_returns_error_when_no_agent_found(
+    mock_agent_registry,
+    mock_tool_registry
+):
+    """No agent selected should return NO_VALID_AGENT response"""
+    mock_agent_registry.start = MagicMock()
+    mock_agent_registry.select_agent.return_value = None
+
+    engine = FlotillaRuntime(
+        agent_registry=mock_agent_registry,
+        tool_registry=mock_tool_registry
+    )
+
+    response = engine.run(query="unknown query")
+
+    assert response.status == ResponseStatus.NO_VALID_AGENT
+    assert isinstance(response.errors[0], ErrorResponse)
+    assert response.errors[0].error_code == "NO_VALID_AGENT"
+
+
+
+def test_run_does_not_execute_agent_if_none_selected(
+    mock_agent_registry,
+    mock_tool_registry
+):
+    mock_agent_registry.start = MagicMock()
+    mock_agent_registry.select_agent.return_value = None
+
+    engine = FlotillaRuntime(
+        agent_registry=mock_agent_registry,
+        tool_registry=mock_tool_registry
+    )
+
+    engine.run(query="test")
+
+    mock_agent_registry.select_agent.assert_called_once()
+
+
+
+
+def test_cleanup_shuts_down_registries(
+    mock_agent_registry,
+    mock_tool_registry
+):
+    """Cleanup should shutdown tool and agent registries"""
+    mock_agent_registry.start = MagicMock()
+    mock_agent_registry.shutdown = MagicMock()
+    mock_tool_registry.shutdown = MagicMock()
+
+    engine = FlotillaRuntime(
+        agent_registry=mock_agent_registry,
+        tool_registry=mock_tool_registry
+    )
+
+    engine.cleanup()
+
+    mock_tool_registry.shutdown.assert_called_once()
+    mock_agent_registry.shutdown.assert_called_once()
+    assert engine.running is False
+
+
+def test_cleanup_idempotent(
+    mock_agent_registry,
+    mock_tool_registry
+):
+    """Calling cleanup twice should not double-shutdown"""
+    mock_agent_registry.start = MagicMock()
+    mock_agent_registry.shutdown = MagicMock()
+    mock_tool_registry.shutdown = MagicMock()
+
+    engine = FlotillaRuntime(
+        agent_registry=mock_agent_registry,
+        tool_registry=mock_tool_registry
+    )
+
+    engine.cleanup()
+    engine.cleanup()
+
+    mock_tool_registry.shutdown.assert_called_once()
+    mock_agent_registry.shutdown.assert_called_once()
+    assert engine.running is False
 
 
 

@@ -4,11 +4,10 @@ from typing import Dict, Any, List, Optional
 from langchain_core.tools import StructuredTool
 
 from flotilla.agents.base_business_agent import BaseBusinessAgent, ToolDependency
-from flotilla.agents.business_agent_response import BusinessAgentResponse, ErrorResponse, ResponseStatus
 from flotilla.agents.agent_selector import AgentSelector
-from flotilla.agents.response_factory import ResponseFactory
+from flotilla.agents.agent_input import AgentInput
 from flotilla.tools.tool_registry import ToolRegistry
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 from flotilla.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -70,7 +69,7 @@ class BusinessAgentRegistry:
     
     def select_agent(
         self,
-        query: str
+        agent_input:AgentInput
         ) -> Optional[BaseBusinessAgent]:
         """
         Select the most appropriate agent for a query.  This method will leverage the AgentSelector that 
@@ -88,43 +87,9 @@ class BusinessAgentRegistry:
             logger.warning("No agents registered")
             return None
  
-        return self._agent_selector.select_agent(query=query, agents=self._agents)
+        return self._agent_selector.select_agent(agent_input=agent_input, agents=self._agents)
     
-    
-    
-    def execute_with_best_agent(
-        self,
-        query: str,
-        context: Optional[Dict[str, Any]] = None
-        ) -> BusinessAgentResponse:
-        """
-        Select and execute with the best agent for the query
         
-        Args:
-            query: User query
-            context: Optional context
-            min_confidence: Minimum confidence threshold
-            
-        Returns:
-            Execution results including agent selection info
-        """
-        # Select agent
-        selected_agent = self.select_agent(query=query)
-        
-        if not selected_agent:
-            return ResponseFactory.build_error_response(
-                status=ResponseStatus.NO_VALID_AGENT,
-                query=query,
-                agent_name="",
-                message="No suitable business logic agent found for this query",
-                errors=[ErrorResponse(error_code="NO_VALID_AGENT", error_details="There are no valid agents for the user query")]
-            )
-        
-        # Execute with selected agent
-        logger.info(f"Executing query with agent: {selected_agent.agent_name}")
-        return selected_agent.execute(query, context)
-    
-
     def shutdown(self):
         """
         Lifecycle method that is called by OrchestrationAgent to safely shutdown the AgentRegistry.  The AgentRegistry will cycle through all registered BusinessAgents and call their

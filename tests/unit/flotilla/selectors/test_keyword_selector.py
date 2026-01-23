@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import Mock
 from flotilla.selectors.keyword_agent_selector import KeywordAgentSelector
 from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability
-
+from flotilla.agents.agent_input import AgentInput
 
 # ==========================================
 # Fixtures
@@ -108,6 +108,7 @@ class TestKeywordSelector:
         """Test that weather query selects weather agent"""
         selector = KeywordAgentSelector(min_confidence=0.2)
         query = "What's the weather like today?"
+        input = AgentInput(query=query)
 
         agents = {
             weather_agent.agent_id: weather_agent,
@@ -115,10 +116,7 @@ class TestKeywordSelector:
             calendar_agent.agent_id: calendar_agent,
         }
 
-        selected = selector.select_agent(
-            query=query,
-            agents=agents
-        )
+        selected = selector.select_agent(agent_input=input, agents=agents )
 
         assert selected == weather_agent
 
@@ -137,7 +135,8 @@ class TestKeywordSelector:
         }
 
         query = "Calculate 15 times 23"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected == calculator_agent
 
@@ -156,7 +155,8 @@ class TestKeywordSelector:
         }
 
         query = "Schedule a meeting for tomorrow"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected == calendar_agent
 
@@ -171,7 +171,8 @@ class TestKeywordSelector:
         }
 
         query = "What's the weather and temperature forecast today?"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected == weather_agent
 
@@ -186,7 +187,8 @@ class TestKeywordSelector:
         }
 
         query = "WEATHER FORECAST"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected == weather_agent
 
@@ -201,7 +203,8 @@ class TestKeywordSelector:
         }
 
         query = "I need to calculate something"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected == calculator_agent
 
@@ -220,7 +223,8 @@ class TestKeywordSelector:
         }
 
         query = "Some unrelated query about quantum physics"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected is None
 
@@ -237,7 +241,8 @@ class TestKeywordSelector:
         }
 
         query = "xyz abc def"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected is None
 
@@ -248,8 +253,8 @@ class TestKeywordSelector:
         """Test select_agent with empty agent list"""
         agents = {}
         query = "Any query"
-
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected is None
 
@@ -264,7 +269,8 @@ class TestKeywordSelector:
         }
 
         query = "What's the weather?"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected == weather_agent
 
@@ -281,7 +287,8 @@ class TestKeywordSelector:
         }
 
         query = "weather weather weather calculate"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected == weather_agent
 
@@ -296,7 +303,8 @@ class TestKeywordSelector:
         }
 
         query = "What time is it?"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected == multi_capability_agent
 
@@ -311,7 +319,8 @@ class TestKeywordSelector:
         }
 
         query = "weather temperature time"
-        selected = keyword_selector.select_agent(query, agents)
+        input = AgentInput(query=query)
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected == multi_capability_agent
 
@@ -324,8 +333,8 @@ class TestKeywordSelector:
         agents = {
             weather_agent.agent_id: weather_agent
         }
-
-        selected = keyword_selector.select_agent("", agents)
+        input = AgentInput(query="")
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected is None
 
@@ -338,8 +347,8 @@ class TestKeywordSelector:
         agents = {
             weather_agent.agent_id: weather_agent
         }
-
-        selected = keyword_selector.select_agent("   ", agents)
+        input = AgentInput(query="   ")
+        selected = keyword_selector.select_agent(input, agents)
 
         assert selected is None
 

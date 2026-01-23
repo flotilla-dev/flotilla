@@ -12,6 +12,8 @@ from langchain.messages import HumanMessage
 from langgraph.types import Checkpointer
 from flotilla.agents.business_agent_response import BusinessAgentResponse, ResponseStatus, ErrorResponse
 from flotilla.agents.response_factory import ResponseFactory
+from flotilla.agents.agent_input import AgentInput
+from flotilla.agents.execution_config import ExecutionConfig
 from flotilla.utils.logger import get_logger
 
 
@@ -120,18 +122,49 @@ END SYSTEM.
         """
         return self._tool_dependencies
 
-    def execute(self, query: str, context: Optional[Dict[str, Any]] = None) -> BusinessAgentResponse:
+
+    def run(self, *, agent_input:AgentInput, config:ExecutionConfig) -> BusinessAgentResponse:
+    
         """
-        Execute business logic for the query
+        Execute business logic for the agnet input.  This method assumes that a Langchain agnet has been 
+        created via create_agent() call and is assigned to self.agent.  IF this is not the case
+        then an BusinessAgentResponse with a status of ResponseStatus.APP_MISCONFIGURED will be returned.
+
+        If self.agent exists and correctly configured then it is invoked with the user query and the LLM's 
+        response is mapped to a valid BusinessAgentResponse.  If the call to the LLM fails then BusinessAgentResponse 
+        is returned with a status of ResponseStatus.LLM_CALL_FAILED
         
         Args:
-            query: User query
-            context: Optional context including data from other agents
+            agent_input - The input from the user to execute the agent
+            config - The execution config that describes the rules for running the agent
             
         Returns:
             Standard response object containing the results
         """
-        return self._run_internal_agent(query, context)
+        if not hasattr(self, "agent") or self.agent is None:
+            return ResponseFactory.build_error_response(
+                status=ResponseStatus.APP_MISCONFIGURED,
+                query=agent_input.query,
+                agent_name=self.get_name(),
+                message="Agent was not properly initialized.",
+                errors=[ErrorResponse(error_code="AGENT_NOT_INITIALIZED", error_details="startup() must initialize self.agent")]
+            )
+
+        try:
+            graph_state = self._to_graph_state(agent_input)
+            graph_config = self._to_graph_config(config)
+            logger.info(f"Execute agent with input: '{graph_state}'")
+            raw = self.agent.invoke(graph_state, config=graph_config)
+            return ResponseFactory.parse_llm_response(query=agent_input.query, agent_name=self.get_name(), llm_response=raw)
+        except Exception as e:
+            logger.error(f"Internal agent failed in {self.agent_name}")
+            return ResponseFactory.build_error_response(
+                status=ResponseStatus.LLM_CALL_FAILED,
+                query=agent_input.query,
+                agent_name=self.get_name(),
+                message="Error while calling LLM",
+                errors=[ErrorResponse(error_code="AGENT_EXECUTION_FAILED", error_details=str(e))]
+            )
  
 
     # ------------------------------
@@ -168,48 +201,73 @@ END SYSTEM.
     # -----------------------------------------------------------------------
     # Internal methods
     # -----------------------------------------------------------------------
-    def _run_internal_agent(
-        self,
-        query: str,
-        context: Optional[dict] = None
-        ) -> BusinessAgentResponse:
+
+    def _to_graph_state(self, input: AgentInput) -> dict:
         """
-        Convenience method for running an Agent.  This method assumes that a Langchain agnet has been 
-        created via create_agent() call and is assigned to self.agent.  IF this is not the case
-        then an BusinessAgentResponse with a status of ResponseStatus.APP_MISCONFIGURED will be returned.
+        Convert an AgentInput into the initial LangGraph state.
 
-        If self.agent exists and correctly configured then it is invoked with the user query and the LLM's 
-        response is mapped to a valid BusinessAgentResponse.  If the call to the LLM fails then BusinessAgentResponse 
-        is returned with a status of ResponseStatus.LLM_CALL_FAILED
+        This method translates Flotilla’s typed execution input into the
+        dictionary-based state expected by the compiled LangGraph. The returned
+        state represents the starting point for agent execution and may be freely
+        read and mutated by graph nodes.
 
+        This method is the sole owner of the LangGraph state shape. No other layer
+        should construct or depend on the structure returned here.
+
+        Args:
+            input (AgentInput):
+                The typed execution input provided by the runtime.
+
+        Returns:
+            dict:
+                The initial LangGraph state dictionary.
         """
-        if not hasattr(self, "agent") or self.agent is None:
-            return ResponseFactory.build_error_response(
-                status=ResponseStatus.APP_MISCONFIGURED,
-                query=query,
-                agent_name=self.get_name(),
-                message="Agent was not properly initialized.",
-                errors=[ErrorResponse(error_code="AGENT_NOT_INITIALIZED", error_details="startup() must initialize self.agent")]
-            )
+        return {
+            "messages": [HumanMessage(content=input.query)],
+            "user": {
+                "id": input.user_id,
+            },
+            "conversation": {
+                "thread_id": input.thread_id,
+            },
+            "metadata": input.metadata,
+        }
+    
+    def _to_graph_config(self, config: ExecutionConfig) -> dict:
+        """
+        Convert an ExecutionConfig into LangGraph execution configuration.
 
-        try:
-            logger.info(f"Execute agent with query: '{query}'")
-            raw = self.agent.invoke(
-                {"messages": [HumanMessage(content=query)]},  # Just this, no cache_buster
-                config=context
-            )
-            return ResponseFactory.parse_llm_response(query=query, agent_name=self.get_name(), llm_response=raw)
-        except Exception as e:
-            logger.error(f"Internal agent failed in {self.agent_name}")
-            return ResponseFactory.build_error_response(
-                status=ResponseStatus.LLM_CALL_FAILED,
-                query=query,
-                agent_name=self.get_name(),
-                message="Error while calling LLM",
-                errors=[ErrorResponse(error_code="AGENT_EXECUTION_FAILED", error_details=str(e))]
-            )
+        This method translates Flotilla’s typed execution configuration into the
+        dictionary of runtime options expected by LangGraph. The resulting config
+        controls how the graph executes (e.g. threading, recursion limits, tracing)
+        and is not part of the agent’s mutable state.
+
+        This method is the sole owner of LangGraph-specific execution keys. Callers
+        should never construct or depend on the structure returned here.
+
+        Args:
+            config (ExecutionConfig):
+                The typed execution configuration provided by the runtime.
+
+        Returns:
+            dict:
+                The LangGraph execution configuration dictionary.
+        """
+        graph_config = {}
+
+        if config.thread_id:
+            graph_config["thread_id"] = config.thread_id
+
+        if config.trace_id:
+            graph_config["trace_id"] = config.trace_id
+
+        if config.recursion_limit is not None:
+            graph_config["recursion_limit"] = config.recursion_limit
+
+        return graph_config
+
   
-
+    
     def _create_internal_agent(self):
         """Construct the final agent using system prompt + domain prompt + tools."""
         

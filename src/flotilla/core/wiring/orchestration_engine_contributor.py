@@ -1,6 +1,6 @@
 from flotilla.container.base_contributors import WiringContributor
 from flotilla.core.builders.orchestration_engine_buidler import orchestration_engine_builder
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 
 class OrchestrationEngineContributor(WiringContributor):
     name = "Orchestratoin Engine Contributor"

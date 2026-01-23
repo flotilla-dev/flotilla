@@ -4,7 +4,7 @@ from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.agents.agent_selector import AgentSelector
 from flotilla.agents.base_business_agent import BaseBusinessAgent
 from typing import List, Dict
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 
 def agent_registry_builder(*, container:FlotillaContainer, agent_names:List[str], agent_selector:AgentSelector, tool_registry:ToolRegistry) -> BusinessAgentRegistry:
     agents:Dict[str, BaseBusinessAgent] = {}

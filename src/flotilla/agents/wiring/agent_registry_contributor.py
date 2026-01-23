@@ -1,6 +1,6 @@
 from flotilla.container.base_contributors import GroupedContributor
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 from flotilla.agents.wiring.agent_context import AgentContext
 from flotilla.agents.builders.agent_registry_builder import agent_registry_builder
 

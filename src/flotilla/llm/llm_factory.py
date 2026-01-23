@@ -1,5 +1,5 @@
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 
 
 class LLMFactory:

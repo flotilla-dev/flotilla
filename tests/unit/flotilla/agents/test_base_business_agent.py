@@ -20,6 +20,10 @@ from flotilla.agents.business_agent_response import (
     ErrorResponse,
     ResponseStatus
 )
+
+from flotilla.agents.agent_input import AgentInput
+from flotilla.agents.execution_config import ExecutionConfig
+
 from typing import List
 
 import json
@@ -190,7 +194,7 @@ def test_attach_tools_sets_tools(mock_llm, mock_checkpointer):
 
     assert agent.tools == tools
 
-def test_execute_returns_error_when_agent_not_initialized(mock_llm, mock_checkpointer):
+def test_run_returns_error_when_agent_not_initialized(mock_llm, mock_checkpointer):
     agent = ConcreteBusinessAgent(
         agent_id="test_id",
         agent_name="Test Agent",
@@ -198,7 +202,9 @@ def test_execute_returns_error_when_agent_not_initialized(mock_llm, mock_checkpo
         checkpointer=mock_checkpointer,
     )
 
-    response = agent.execute("test query")
+    input = AgentInput(query="test query")
+
+    response = agent.run(agent_input=input, config=ExecutionConfig())
 
     assert isinstance(response, BusinessAgentResponse)
     assert response.status == ResponseStatus.APP_MISCONFIGURED
@@ -207,7 +213,7 @@ def test_execute_returns_error_when_agent_not_initialized(mock_llm, mock_checkpo
         for err in response.errors
     )
 
-def test_execute_returns_error_when_llm_raises_exception(mock_llm, mock_checkpointer):
+def test_run_returns_error_when_llm_raises_exception(mock_llm, mock_checkpointer):
     agent = ConcreteBusinessAgent(
         agent_id="test_id",
         agent_name="Test Agent",
@@ -219,7 +225,8 @@ def test_execute_returns_error_when_llm_raises_exception(mock_llm, mock_checkpoi
     agent.agent = Mock()
     agent.agent.invoke.side_effect = RuntimeError("LLM failure")
 
-    response = agent.execute("test query")
+    input = AgentInput(query="test query")
+    response = agent.run(agent_input=input, config=ExecutionConfig())
 
     assert response.status == ResponseStatus.LLM_CALL_FAILED
     assert any(
@@ -228,7 +235,7 @@ def test_execute_returns_error_when_llm_raises_exception(mock_llm, mock_checkpoi
     )
 
 
-def test_execute_success_path_returns_business_response(mock_llm, mock_checkpointer):
+def test_run_success_path_returns_business_response(mock_llm, mock_checkpointer):
     agent = ConcreteBusinessAgent(
         agent_id="test_id",
         agent_name="Test Agent",
@@ -267,7 +274,9 @@ def test_execute_success_path_returns_business_response(mock_llm, mock_checkpoin
 
     mock_internal_agent.invoke.return_value = valid_llm_response
 
-    response = agent.execute("test query")
+    input = AgentInput(query="test query")
+
+    response = agent.run(agent_input=input, config=ExecutionConfig())
 
     assert isinstance(response, BusinessAgentResponse)
     assert response.status == ResponseStatus.SUCCESS

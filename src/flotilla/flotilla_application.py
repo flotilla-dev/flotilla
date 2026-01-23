@@ -8,7 +8,7 @@ from flotilla.config.secret_resolver import SecretResolver
 from flotilla.config.configuration_source import ConfigurationSource
 from flotilla.container.base_contributors import WiringContributor
 from flotilla.config.config_loader import ConfigLoader
-from flotilla.orchestration_engine import OrchestrationEngine
+from flotilla.core.flotilla_runtime import FlotillaRuntime
 
 
 class FlotillaApplication:
@@ -168,7 +168,8 @@ class FlotillaApplication:
     def started(self) -> bool:
         return self._started
     
-    def orchestration_engine(self) -> OrchestrationEngine:
+    @property
+    def runtime(self) -> FlotillaRuntime:
         if not self.started:
             raise RuntimeError("Application not started")
         

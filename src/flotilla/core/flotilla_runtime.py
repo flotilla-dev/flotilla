@@ -9,12 +9,14 @@ from flotilla.agents.response_factory import ResponseFactory
 from flotilla.agents.business_agent_response import BusinessAgentResponse, ErrorResponse, ResponseStatus
 from flotilla.utils.logger import get_logger
 from flotilla.tools.tool_registry import ToolRegistry
+from flotilla.agents.agent_input import AgentInput
+from flotilla.agents.execution_config import ExecutionConfig
 
 
 logger = get_logger(__name__)
 
 
-class OrchestrationEngine:
+class FlotillaRuntime:
     """
     Main orchestration engine 
     """
@@ -29,33 +31,41 @@ class OrchestrationEngine:
     
 
 
+    def run(self, query: str, *, 
+            user_id: str | None = None, 
+            thread_id: str | None = None, 
+            request_id:str | None = None,
+            metadata: dict | None = None) -> BusinessAgentResponse:
+        # build the context for the query
 
-    
-    def execute(self, query: str, context:Dict) -> BusinessAgentResponse:
-        """
-        Execute an orchestration query
+        input = AgentInput(
+            query=query,
+            user_id=user_id,
+            thread_id=thread_id,
+            metadata=metadata
+        )
+
+        config = ExecutionConfig(
+            thread_id=thread_id,
+            trace_id=request_id
+        )
+
+        # Select agent
+        selected_agent = self.agent_registry.select_agent(agent_input=input)
         
-        Args:
-            query: Natural language query or command
-            
-        Returns:
-            Execution results
-        """
-        #TODO: Change the method signature to support context and config 
-        logger.debug(f"Executing orchestration query: {query}")
-
-        try:
-            return self._agent_registry.execute_with_best_agent(query=query, context=context)
-    
-        except Exception as e:
-            logger.error(f"Orchestration execution failed: {e}")
+        if not selected_agent:
             return ResponseFactory.build_error_response(
-                status=ResponseStatus.INTERNAL_ERROR,
+                status=ResponseStatus.NO_VALID_AGENT,
                 query=query,
-                agent_name="Unknown",
-                message="Error executing business agent",
-                errors=[ErrorResponse(error_code="AGENT_EXECUTION_FAILED", error_details=str(e))]
+                agent_name="",
+                message="No suitable business logic agent found for this query",
+                errors=[ErrorResponse(error_code="NO_VALID_AGENT", error_details="There are no valid agents for the user query")]
             )
+        
+        # Execute with selected agent
+        logger.info(f"Executing query {query} with agent: {selected_agent.agent_name}")
+        return selected_agent.run(agent_input=input, config=config)
+
             
     
     def cleanup(self):

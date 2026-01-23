@@ -34,7 +34,7 @@ sys.path.insert(0, str(framework_src))
 # Now imports from framework work correctly
 # ------------------------------------------------------------
 
-from flotilla.orchestration_engine import OrchestrationEngine
+from flotilla.core.flotilla_runtime import FlotillaRuntime
 
 from flotilla.utils.logger import setup_logging, get_logger
 from flotilla.config.sources.yaml_configuration_source import YamlConfigurationSource
@@ -132,10 +132,10 @@ def query(ctx, query):
 
     try:
         app:FlotillaApplication = ctx.obj["app"]
-        engine = app.orchestration_engine()
+        engine = app.runtime
 
         with console.status("[bold green]Executing query...[/bold green]"):
-            result = engine.execute(query)
+            result = engine.run(query)
 
         console.print(f"\n[bold green]Result:[/bold green] {result}")
         app.shutdown()
@@ -161,7 +161,7 @@ def test(ctx):
 
     try:
         app:FlotillaApplication = ctx.obj["app"]
-        engine = app.orchestration_engine()
+        engine:FlotillaRuntime = app.runtime
 
         console.print("[green]✓[/green] Orchestration agent initialized")
 
@@ -202,7 +202,7 @@ def interactive(ctx):
 
     try:
         app:FlotillaApplication = ctx.obj["app"]
-        engine = app.orchestration_engine()
+        engine = app.runtime
 
         console.print("[green]✓ Ready for queries[/green]\n")
 
@@ -217,9 +217,8 @@ def interactive(ctx):
 
             try:
                 with console.status("[bold green]Processing…[/bold green]"):
-                    thread_id = uuid.uuid4()
-                    context = {"configurable": {"thread_id": thread_id}}
-                    result = engine.execute(query, context)
+                    thread_id = str(uuid.uuid4())
+                    result = engine.run(query, thread_id=thread_id)
 
                 console.print(f"\n[bold green]{result.message}[/bold green]\n")
 
