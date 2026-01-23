@@ -1,6 +1,6 @@
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.tools.wiring.tool_context import ToolsContext
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 from flotilla.tools.builders.tool_registry_builder import tool_registry_builder
 
 

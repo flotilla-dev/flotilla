@@ -1,4 +1,5 @@
 from flotilla.agents.agent_selector import AgentSelector
+from flotilla.agents.agent_input import AgentInput
 from flotilla.agents.base_business_agent import BaseBusinessAgent
 from typing import Optional, List, Dict
 
@@ -11,7 +12,7 @@ class KeywordAgentSelector(AgentSelector):
     def __init__(self, min_confidence):
         super().__init__(selector_name="KeywordAgentSelector", min_confidence=min_confidence)
 
-    def select_agent(self, query:str, agents:Dict[str, BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
+    def select_agent(self, agent_input:AgentInput, agents:Dict[str, BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
         """
         Concrete AgentSelector that matches the keywords for each agent against the query
         """
@@ -21,7 +22,7 @@ class KeywordAgentSelector(AgentSelector):
         for agent in agents.values():
             capabilities = agent.get_capabilities()
             for capability in capabilities:
-                score = self._match_keywords(query, capability.keywords)
+                score = self._match_keywords(agent_input.query, capability.keywords)
                 if score > max_score and score >= self.min_confidence:
                     max_score = score
                     selected_agent = agent

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from flotilla.agents.base_business_agent import BaseBusinessAgent
+from flotilla.agents.agent_input import AgentInput
 from typing import Optional,Dict
 from flotilla.utils.logger import get_logger
 
@@ -25,7 +26,7 @@ class AgentSelector(ABC):
     
 
     @abstractmethod
-    def select_agent(self, query: str, agents: Dict[str, BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
+    def select_agent(self, agent_input:AgentInput, agents: Dict[str, BaseBusinessAgent]) -> Optional[BaseBusinessAgent]:
         """
         The primary Agent selection logic for the concrete AgentSelector implementation.  A conrete AgentSelector
         will process the provided query and match it to the BaseBusinessAgent that it determines
@@ -34,7 +35,7 @@ class AgentSelector(ABC):
         cannot be found that meets the threshold then None is returned.  
 
         Args:
-            query - The query to check each agent against
+            agent_input - The full input from the user 
             agents - The list of BaseBusinessAgents to check
 
         Returns:

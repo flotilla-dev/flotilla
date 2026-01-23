@@ -7,7 +7,7 @@ from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.container.component_builder import ComponentBuilder
 from flotilla.container.base_contributors import WiringContributor
 from flotilla.utils.logger import get_logger
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 
 
 

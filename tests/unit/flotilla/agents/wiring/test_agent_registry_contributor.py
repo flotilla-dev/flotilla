@@ -3,8 +3,9 @@ from unittest.mock import MagicMock
 
 from flotilla.agents.wiring.agent_context import AgentContext
 from flotilla.agents.wiring.agent_registry_contributor import AgentRegistryContributor
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 from flotilla.container.flotilla_container import FlotillaContainer
+from flotilla.agents.builders.agent_registry_builder import agent_registry_builder
 
 
 @pytest.fixture
@@ -29,30 +30,17 @@ def test_agent_registry_contributor_wires_registry(container):
 
     contributor.contribute(container, context)
 
-    container.get_builder.assert_called_once_with("agent_registry")
-
     # get() called twice: tool_registry, agent_selector
     assert container.get.call_count == 2
 
     container.wire_infrastructure.assert_called_once_with(
         name="agent_registry",
-        builder=mock_builder,
+        builder=agent_registry_builder,
+        container=container,
         agent_names=["weather", "calculator"],
         tool_registry=mock_tool_registry,
         agent_selector=mock_agent_selector,
     )
-
-
-def test_agent_registry_contributor_raises_if_builder_missing(container):
-    contributor = AgentRegistryContributor()
-    context = AgentContext(agent_names=["weather"])
-
-    container.get_builder.return_value = None
-
-    with pytest.raises(FlotillaConfigurationError):
-        contributor.contribute(container, context)
-
-    container.wire_infrastructure.assert_not_called()
 
 
 def test_agent_registry_contributor_validate_raise_error(container):

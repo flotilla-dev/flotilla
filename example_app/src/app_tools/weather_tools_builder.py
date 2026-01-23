@@ -1,5 +1,5 @@
 from app_tools.weather_tools import WeatherTools
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 
 def weather_tools_builder(api_key:str, base_url:str, use_api:bool = True) -> WeatherTools:
     if not api_key:

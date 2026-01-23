@@ -3,7 +3,7 @@ from flotilla.agents.wiring.agent_context import AgentContext
 from flotilla.config.config_utils import ConfigUtils
 from flotilla.llm.llm_factory import LLMFactory
 from flotilla.utils.logger import get_logger
-from flotilla.flotilla_configuration_error import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError
 
 
 logger = get_logger(__name__)

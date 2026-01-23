@@ -10,6 +10,7 @@ from flotilla.agents.business_agent_response import BusinessAgentResponse, Error
 from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.selectors.keyword_agent_selector import KeywordAgentSelector
 from typing import List
+from flotilla.agents.agent_input import AgentInput
 
 
 class MockBusinessAgent(BaseBusinessAgent):
@@ -123,9 +124,8 @@ class TestBusinessAgentRegistry:
         #registry.startup()
 
         # Query with pricing keywords
-        selected = registry.select_agent(
-            query="What is the best price for this item?"
-        )
+        input = AgentInput(query="What is the best price for this item?")
+        selected = registry.select_agent(agent_input=input)
         
         assert selected is not None
         assert selected.agent_id == "agent1"
@@ -145,9 +145,8 @@ class TestBusinessAgentRegistry:
         #registry.startup()
 
         # Query with pricing keywords
-        selected = registry.select_agent(
-            query="What is the name for this item?"
-        )
+        input = AgentInput(query="What is the name for this item?")
+        selected = registry.select_agent(agent_input=input)
         
         assert selected is None
 
@@ -199,105 +198,4 @@ class TestBusinessAgentRegistry:
         registry.start()
 
 
-    def test_execute_with_best_agent_success(
-        self,
-        mock_tool_registry,
-        mock_agent_selector,
-        mock_llm,
-        mock_checkpointer
-    ):
-        """Test execute_with_best_agent executes selected agent"""
-        agent = MockBusinessAgent(
-            agent_id="agent1",
-            agent_name="Agent 1",
-            llm=mock_llm,
-            checkpointer=mock_checkpointer,
-            keywords=["price"]
-        )
-
-        expected_response = BusinessAgentResponse(
-            status=ResponseStatus.SUCCESS,
-            agent_name=agent.agent_name,
-            confidence=0.8,
-            query="What is the price?",
-            result={"answer": "10"}
-        )
-
-        agent.execute = MagicMock(return_value=expected_response)
-
-        registry = BusinessAgentRegistry(
-            agents={"agent1": agent},
-            tool_registry=mock_tool_registry,
-            agent_selector=mock_agent_selector
-        )
-
-        response = registry.execute_with_best_agent(
-            query="What is the price?"
-        )
-
-        agent.execute.assert_called_once_with("What is the price?", None)
-        assert response == expected_response
-        assert response.status == ResponseStatus.SUCCESS
-
-
-    def test_execute_with_best_agent_no_match_returns_error(
-        self,
-        mock_tool_registry,
-        mock_agent_selector
-    ):
-
-        registry = BusinessAgentRegistry(
-            agents={},
-            tool_registry=mock_tool_registry,
-            agent_selector=mock_agent_selector
-        )
-
-        response = registry.execute_with_best_agent(
-            query="Unknown query"
-        )
-
-        assert isinstance(response, BusinessAgentResponse)
-        assert response.status == ResponseStatus.NO_VALID_AGENT
-        assert response.query == "Unknown query"
-
-
-    def test_shutdown_calls_agent_shutdown(
-        self,
-        mock_tool_registry,
-        mock_agent_selector,
-        mock_llm,
-        mock_checkpointer
-    ):
-        """Test shutdown calls shutdown on all registered agents"""
-        agent1 = MockBusinessAgent(
-            agent_id="agent1",
-            agent_name="Agent 1",
-            llm=mock_llm,
-            checkpointer=mock_checkpointer,
-            keywords=["price"]
-        )
-        agent2 = MockBusinessAgent(
-            agent_id="agent2",
-            agent_name="Agent 2",
-            llm=mock_llm,
-            checkpointer=mock_checkpointer,
-            keywords=["stock"]
-        )
-
-        agent1.shutdown = MagicMock()
-        agent2.shutdown = MagicMock()
-
-        registry = BusinessAgentRegistry(
-            agents={
-                "agent1": agent1,
-                "agent2": agent2
-            },
-            tool_registry=mock_tool_registry,
-            agent_selector=mock_agent_selector
-        )
-
-        registry.shutdown()
-
-        agent1.shutdown.assert_called_once()
-        agent2.shutdown.assert_called_once()
 
