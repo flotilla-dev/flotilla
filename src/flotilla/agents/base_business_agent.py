@@ -10,6 +10,7 @@ from langchain_core.tools import StructuredTool
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langgraph.types import Checkpointer
+from langgraph.graph.state import CompiledStateGraph  
 from flotilla.agents.business_agent_response import BusinessAgentResponse, ResponseStatus, ErrorResponse
 from flotilla.agents.response_factory import ResponseFactory
 from flotilla.agents.agent_input import AgentInput
@@ -95,7 +96,7 @@ END SYSTEM.
     def startup(self):
         """Lifecycle method that allows BusinessAgents to perform necessary startup logic before use.  This method is called after configure()"""
         logger.debug(f"Run empty startup on Agent {self.agent_name}")
-        self._create_internal_agent()
+        self._agent = self._create_internal_agent()
         self.started = True
 
 
@@ -141,7 +142,7 @@ END SYSTEM.
         Returns:
             Standard response object containing the results
         """
-        if not hasattr(self, "agent") or self.agent is None:
+        if not hasattr(self, "_agent") or self._agent is None:
             return ResponseFactory.build_error_response(
                 status=ResponseStatus.APP_MISCONFIGURED,
                 query=agent_input.query,
@@ -154,7 +155,7 @@ END SYSTEM.
             graph_state = self._to_graph_state(agent_input)
             graph_config = self._to_graph_config(config)
             logger.info(f"Execute agent with input: '{graph_state}'")
-            raw = self.agent.invoke(graph_state, config=graph_config)
+            raw = self._agent.invoke(graph_state, config=graph_config)
             return ResponseFactory.parse_llm_response(query=agent_input.query, agent_name=self.get_name(), llm_response=raw)
         except Exception as e:
             logger.error(f"Internal agent failed in {self.agent_name}")
@@ -268,8 +269,15 @@ END SYSTEM.
 
   
     
-    def _create_internal_agent(self):
-        """Construct the final agent using system prompt + domain prompt + tools."""
+    def _create_internal_agent(self) -> CompiledStateGraph:
+        """
+        Construct the final agent using system prompt + domain prompt + tools.
+
+        This method should return a CompiledStateGraph from Langchain.  This is the same 
+        type of object returned by the create_agent() factory method from Langchain.  This method
+        works correctly and is designed to create a simple single agent flow.  But subclasses 
+        can override this method to create more complex Langchain agents or even multi-agent flows.  
+        """
         
         # Combine base and agent-specific instructions
         final_prompt = (
@@ -280,7 +288,7 @@ END SYSTEM.
         logger.debug(f"Final prompt {final_prompt} for agent {self.agent_name}")
 
         # Build the langchain agent
-        self.agent = create_agent(
+        return create_agent(
             model=self._llm,
             system_prompt=final_prompt,
             tools=self.tools,

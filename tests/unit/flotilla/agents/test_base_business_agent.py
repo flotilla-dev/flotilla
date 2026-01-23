@@ -222,8 +222,8 @@ def test_run_returns_error_when_llm_raises_exception(mock_llm, mock_checkpointer
     )
 
     # Fake internal agent with failing invoke
-    agent.agent = Mock()
-    agent.agent.invoke.side_effect = RuntimeError("LLM failure")
+    agent._agent = Mock()
+    agent._agent.invoke.side_effect = RuntimeError("LLM failure")
 
     input = AgentInput(query="test query")
     response = agent.run(agent_input=input, config=ExecutionConfig())
@@ -249,7 +249,7 @@ def test_run_success_path_returns_business_response(mock_llm, mock_checkpointer)
 
     # Mock the internal LangChain agent
     mock_internal_agent = Mock()
-    agent.agent = mock_internal_agent
+    agent._agent = mock_internal_agent
 
     # Valid SYSTEM-compliant JSON response
     valid_llm_response = {
