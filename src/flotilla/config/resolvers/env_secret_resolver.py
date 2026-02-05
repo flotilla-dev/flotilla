@@ -1,9 +1,7 @@
 import os
 from typing import Any
 
-from flotilla.config.secret_resolver import (
-    SecretResolutionError,
-)
+from flotilla.core.errors import SecretResolutionError
 from flotilla.utils.logger import get_logger
 
 logger = get_logger(__name__)

@@ -6,7 +6,6 @@ from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.secret_resolver import SecretResolver
 from flotilla.config.configuration_source import ConfigurationSource
-from flotilla.container.base_contributors import WiringContributor
 from flotilla.config.config_loader import ConfigLoader
 from flotilla.core.flotilla_runtime import FlotillaRuntime
 
@@ -55,7 +54,6 @@ class FlotillaApplication:
         The application is created in a non-started state. No configuration
         is loaded and no container is built until start() is called.
         """
-        self._contributors: List[WiringContributor] = []
         self._builders: Dict[str, ComponentBuilder] = {}
         self._loader:ConfigLoader = ConfigLoader(sources=sources, secrets=secrets)
         self._container = None
@@ -84,13 +82,6 @@ class FlotillaApplication:
         for name, builder in group.builders().items():
             self.register_builder(name, builder)
 
-    def register_contributor(self, contributor: WiringContributor):
-        """
-        Register a wiring contributor to participate in container build.
-
-        Contributors are executed in priority order during startup.
-        """
-        self._contributors.append(contributor)
 
     # ----------------------------
     # Build lifecycle
@@ -102,10 +93,6 @@ class FlotillaApplication:
         # Apply builders
         for name, builder in self._builders.items():
             container.register_builder(name, builder)
-
-        # Apply contributors
-        for contributor in self._contributors:
-            container.register_contributor(contributor)
 
         return container.build()
     

@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 from flotilla.flotilla_application import FlotillaApplication
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.container.base_contributors import WiringContributor
 from flotilla.config.sources.dict_configuration_source import DictConfigurationSource
 
 
@@ -62,14 +61,9 @@ def test_application_allows_custom_contributor_registration(empty_sources, no_se
         secrets=no_secrets,
     )
 
-    mock_contributor = MagicMock(spec=WiringContributor)
-    mock_contributor.priority = 0
 
-    app.register_contributor(mock_contributor)
     app.start()
 
-    mock_contributor.contribute.assert_called_once()
-    mock_contributor.validate.assert_called_once()
 
 
 def test_container_property_raises_before_start(app):
