@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from flotilla.agents.agent_registry import BusinessAgentRegistry
 from flotilla.core.errors import FlotillaConfigurationError
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.agents.builders.agent_registry_builder import agent_registry_builder
+from flotilla.agents.factories.agent_registry_factory import agent_registry_factory
 
 @pytest.fixture
 def container():
@@ -37,7 +37,7 @@ def test_agent_registry_builder_happy_path(
         "calculator": calculator_agent,
     }[name]
 
-    registry = agent_registry_builder(
+    registry = agent_registry_factory(
         container=container,
         agent_names=agent_names,
         agent_selector=mock_agent_selector,
@@ -59,7 +59,7 @@ def test_agent_registry_builder_raises_if_agent_missing(
     container.exists.return_value = False
 
     with pytest.raises(FlotillaConfigurationError):
-        agent_registry_builder(
+        agent_registry_factory(
             container=container,
             agent_names=agent_names,
             agent_selector=mock_agent_selector,
@@ -78,7 +78,7 @@ def test_agent_registry_builder_raises_if_not_business_agent(
     container.get.return_value = object()  # not a BaseBusinessAgent
 
     with pytest.raises(TypeError):
-        agent_registry_builder(
+        agent_registry_factory(
             container=container,
             agent_names=agent_names,
             agent_selector=mock_agent_selector,
@@ -104,7 +104,7 @@ def test_agent_registry_builder_handles_callable_provider(
     container.exists.return_value = True
     container.get.return_value = provider
 
-    registry = agent_registry_builder(
+    registry = agent_registry_factory(
         container=container,
         agent_names=agent_names,
         agent_selector=mock_agent_selector,

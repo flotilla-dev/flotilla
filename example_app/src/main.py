@@ -92,11 +92,11 @@ def cli(ctx, env):
 
     # register the wiring logic and application builders
     # TODO this needs to be moved to an application builder group
-    app.register_builder("agents.weather_agent", weather_agent_buidler)
-    app.register_builder("tools.weather_tools", weather_tools_builder)
-    app.register_builder("llm.openai", openai_llm_builder)
-    app.register_builder("checkpointer.memory", memory_checkpointer_buidler)
-    app.register_builder("agent_selector.keyword", keyword_agent_selector_builder)
+    app.register_factory("agents.weather_agent", weather_agent_buidler)
+    app.register_factory("tools.weather_tools", weather_tools_builder)
+    app.register_factory("llm.openai", openai_llm_builder)
+    app.register_factory("checkpointer.memory", memory_checkpointer_buidler)
+    app.register_factory("agent_selector.keyword", keyword_agent_selector_builder)
 
     app.start()
 

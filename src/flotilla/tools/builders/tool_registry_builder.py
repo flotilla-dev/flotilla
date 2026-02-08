@@ -2,7 +2,7 @@
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.tools.base_tool_provider import BaseToolProvider
-from flotilla.container.component_builder import ComponentBuilder
+from flotilla.container.component_factory import ComponentBuilder
 from flotilla.core.errors import FlotillaConfigurationError
 
 from typing import List

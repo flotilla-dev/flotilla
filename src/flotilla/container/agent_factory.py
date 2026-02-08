@@ -1,11 +1,11 @@
 from typing import Protocol
 from langchain.chat_models.base import BaseChatModel
 from langgraph.types import Checkpointer
-from flotilla.container.component_builder import ComponentBuilder
+from flotilla.container.component_factory import ComponentFactory
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.agents.base_business_agent import BaseBusinessAgent
 
-class AgentBuilder(ComponentBuilder, Protocol):
+class AgentFactory(ComponentFactory, Protocol):
     """
     Builder protocol for constructing Business Agents.
 

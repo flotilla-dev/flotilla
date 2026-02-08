@@ -6,7 +6,7 @@ from flotilla.agents.base_business_agent import BaseBusinessAgent
 from typing import List, Dict
 from flotilla.core.errors import FlotillaConfigurationError
 
-def agent_registry_builder(*, container:FlotillaContainer, agent_names:List[str], agent_selector:AgentSelector, tool_registry:ToolRegistry) -> BusinessAgentRegistry:
+def agent_registry_factory(*, container:FlotillaContainer, agent_names:List[str], agent_selector:AgentSelector, tool_registry:ToolRegistry) -> BusinessAgentRegistry:
     agents:Dict[str, BaseBusinessAgent] = {}
 
     for agent_name in agent_names:

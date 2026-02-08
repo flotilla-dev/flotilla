@@ -1,7 +1,7 @@
 from typing import Dict, List
 
-from flotilla.container.component_builder import ComponentBuilder
-from flotilla.container.builder_group import BuilderGroup
+from flotilla.container.component_factory import ComponentFactory
+from flotilla.container.factory_group import FactoryGroup
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.secret_resolver import SecretResolver
@@ -54,7 +54,7 @@ class FlotillaApplication:
         The application is created in a non-started state. No configuration
         is loaded and no container is built until start() is called.
         """
-        self._builders: Dict[str, ComponentBuilder] = {}
+        self._builders: Dict[str, ComponentFactory] = {}
         self._loader:ConfigLoader = ConfigLoader(sources=sources, secrets=secrets)
         self._container = None
         self._started = False
@@ -63,7 +63,7 @@ class FlotillaApplication:
     # Extension API (app-owned)
     # ----------------------------
 
-    def register_builder(self, builder_name: str, builder: ComponentBuilder):
+    def register_factory(self, builder_name: str, builder: ComponentFactory):
         """
         Register a named component builder with the application.
 
@@ -72,7 +72,7 @@ class FlotillaApplication:
         """
         self._builders[builder_name] = builder
 
-    def register_builder_group(self, group:BuilderGroup):
+    def register_factory_group(self, group:FactoryGroup):
         """
         Register a group of component builders.
 
@@ -80,7 +80,7 @@ class FlotillaApplication:
         under their declared names.
         """
         for name, builder in group.builders().items():
-            self.register_builder(name, builder)
+            self.register_factory(name, builder)
 
 
     # ----------------------------
@@ -90,9 +90,9 @@ class FlotillaApplication:
     def _build_container(self, settings:FlotillaSettings) -> FlotillaContainer:
         container = FlotillaContainer(settings)
 
-        # Apply builders
+        # Apply factories
         for name, builder in self._builders.items():
-            container.register_builder(name, builder)
+            container.register_factory(name, builder)
 
         return container.build()
     
@@ -157,6 +157,7 @@ class FlotillaApplication:
     
     @property
     def runtime(self) -> FlotillaRuntime:
+        #TODO change how runtime is returned from the container
         if not self.started:
             raise RuntimeError("Application not started")
         

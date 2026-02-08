@@ -49,16 +49,16 @@ def create_container(config: dict) -> FlotillaContainer:
     Correct container construction:
     - Settings created from raw config
     - Container initialized with settings
-    - Builders registered BEFORE compiler runs
+    - factorys registered BEFORE compiler runs
     """
     settings = FlotillaSettings(raw=config)
     container = FlotillaContainer(settings=settings)
 
-    container.register_builder("simple", simple_factory)
-    container.register_builder("no_arg", no_arg_factory)
-    container.register_builder("composite", composite_factory)
-    container.register_builder("list_builder", list_factory)
-    container.register_builder("dict_builder", dict_factory)
+    container.register_factory("simple", simple_factory)
+    container.register_factory("no_arg", no_arg_factory)
+    container.register_factory("composite", composite_factory)
+    container.register_factory("list_factory", list_factory)
+    container.register_factory("dict_factory", dict_factory)
 
     return container
 
@@ -85,7 +85,7 @@ def compile_config(config: dict) -> FlotillaContainer:
 def test_compile_simple_component():
     config = {
         "a": {
-            "builder": "simple",
+            "factory": "simple",
             "x": 1,
             "y": "test",
         }
@@ -102,7 +102,7 @@ def test_ref_name_overrides_path():
     config = {
         "flotilla": {
             "checkpointer": {
-                "builder": "no_arg",
+                "factory": "no_arg",
                 "ref_name": "checkpointer",
             }
         }
@@ -117,11 +117,11 @@ def test_ref_name_overrides_path():
 def test_duplicate_component_names_error():
     config = {
         "a": {
-            "builder": "no_arg",
+            "factory": "no_arg",
             "ref_name": "dup",
         },
         "b": {
-            "builder": "no_arg",
+            "factory": "no_arg",
             "ref_name": "dup",
         },
     }
@@ -133,10 +133,10 @@ def test_duplicate_component_names_error():
 def test_ref_injection():
     config = {
         "child": {
-            "builder": "no_arg",
+            "factory": "no_arg",
         },
         "parent": {
-            "builder": "composite",
+            "factory": "composite",
             "child": {"$ref": "child"},
             "value": 42,
         },
@@ -154,7 +154,7 @@ def test_ref_injection():
 def test_ref_missing_component_raises():
     config = {
         "a": {
-            "builder": "simple",
+            "factory": "simple",
             "x": {"$ref": "missing"},
         }
     }
@@ -166,9 +166,9 @@ def test_ref_missing_component_raises():
 def test_embedded_component():
     config = {
         "parent": {
-            "builder": "composite",
+            "factory": "composite",
             "child": {
-                "builder": "simple",
+                "factory": "simple",
                 "x": 10,
             },
             "value": 5,
@@ -184,10 +184,10 @@ def test_embedded_component():
 
 def test_list_injection():
     config = {
-        "item1": {"builder": "no_arg"},
-        "item2": {"builder": "no_arg"},
+        "item1": {"factory": "no_arg"},
+        "item2": {"factory": "no_arg"},
         "list_comp": {
-            "builder": "list_builder",
+            "factory": "list_factory",
             "items": {
                 "$list": [
                     {"$ref": "item1"},
@@ -205,10 +205,10 @@ def test_list_injection():
 
 def test_dict_injection():
     config = {
-        "a": {"builder": "no_arg"},
-        "b": {"builder": "no_arg"},
+        "a": {"factory": "no_arg"},
+        "b": {"factory": "no_arg"},
         "dict_comp": {
-            "builder": "dict_builder",
+            "factory": "dict_factory",
             "mapping": {
                 "$dict": {
                     "one": {"$ref": "a"},
@@ -228,7 +228,7 @@ def test_dict_injection():
 def test_raw_list_is_illegal():
     config = {
         "a": {
-            "builder": "simple",
+            "factory": "simple",
             "x": [1, 2, 3],
         }
     }
@@ -240,7 +240,7 @@ def test_raw_list_is_illegal():
 def test_raw_dict_is_illegal():
     config = {
         "a": {
-            "builder": "simple",
+            "factory": "simple",
             "x": {"y": 1},
         }
     }
@@ -252,11 +252,11 @@ def test_raw_dict_is_illegal():
 def test_component_cycle_detected():
     config = {
         "a": {
-            "builder": "simple",
+            "factory": "simple",
             "x": {"$ref": "b"},
         },
         "b": {
-            "builder": "simple",
+            "factory": "simple",
             "x": {"$ref": "a"},
         },
     }

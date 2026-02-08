@@ -58,17 +58,17 @@ class ComponentCompiler:
     def _walk_for_discovery(self, node: Any, *, path_parts: List[str]) -> None:
         if isinstance(node, dict):
             # Guardrail A: factory + $ref is illegal
-            if "builder" in node and self._TAG_REF in node:
+            if "factory" in node and self._TAG_REF in node:
                 cfg_path = ".".join(path_parts) if path_parts else "<root>"
                 raise FlotillaConfigurationError(
-                    f"{cfg_path}: component cannot declare both 'builder' and '$ref'"
+                    f"{cfg_path}: component cannot declare both 'factory' and '$ref'"
                 )
 
-            if "builder" in node:
+            if "factory" in node:
                 self._register_component(node=node, path_parts=path_parts)
 
             for key, val in node.items():
-                if key in {"builder", "ref_name"}:
+                if key in {"factory", "ref_name"}:
                     continue
                 if key in {self._TAG_REF, self._TAG_LIST, self._TAG_DICT}:
                     continue
@@ -99,18 +99,18 @@ class ComponentCompiler:
                 f"Component name '{name}' already exists (declared at {cfg_path})"
             )
 
-        builder_name = node.get("builder")
-        if not isinstance(builder_name, str) or not builder_name:
+        factory_name = node.get("factory")
+        if not isinstance(factory_name, str) or not factory_name:
             raise FlotillaConfigurationError(
-                f"{cfg_path}.builder must be a non-empty string"
+                f"{cfg_path}.factory must be a non-empty string"
             )
 
-        builder = self._container.get_builder(builder_name)
+        factory = self._container.get_factory(factory_name)
 
-        # Guardrail D: builder must exist and be callable
-        if builder is None or not callable(builder):
+        # Guardrail D: factory must exist and be callable
+        if factory is None or not callable(factory):
             raise FlotillaConfigurationError(
-                f"{cfg_path}.builder '{builder_name}' is not callable"
+                f"{cfg_path}.factory '{factory_name}' is not callable"
             )
 
         self._component_defs[name] = node
@@ -168,7 +168,7 @@ class ComponentCompiler:
                     return
 
                 for k, vv in v.items():
-                    if k in {"builder", "ref_name"}:
+                    if k in {"factory", "ref_name"}:
                         continue
                     walk(vv)
 
@@ -177,7 +177,7 @@ class ComponentCompiler:
                     walk(item)
 
         for k, v in node.items():
-            if k in {"builder", "ref_name"}:
+            if k in {"factory", "ref_name"}:
                 continue
             walk(v)
 
@@ -230,11 +230,11 @@ class ComponentCompiler:
 
         self._building_stack.append(name)
         try:
-            builder = self._container.get_builder(node["builder"])
+            factory = self._container.get_factory(node["factory"])
 
             kwargs = {}
             for key, val in node.items():
-                if key in {"builder", "ref_name"}:
+                if key in {"factory", "ref_name"}:
                     continue
                 kwargs[key] = self._materialize_value(
                     val, owner_path=cfg_path, arg_name=key
@@ -242,7 +242,7 @@ class ComponentCompiler:
 
             self._container.wire_component(
                 name=name,
-                builder=builder,
+                factory=factory,
                 **kwargs,
             )
             self._instantiated.add(name)
@@ -272,7 +272,7 @@ class ComponentCompiler:
                     for k, v in value[self._TAG_DICT].items()
                 }
 
-            if "builder" in value:
+            if "factory" in value:
                 embedded_name = f"{owner_path}.{arg_name}"
                 if embedded_name not in self._component_defs:
                     self._register_component(

@@ -4,7 +4,7 @@ from dependency_injector import containers, providers
 from typing import List, Optional, Any
 
 from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.container.component_builder import ComponentBuilder
+from flotilla.container.component_factory import ComponentFactory
 from flotilla.container.component_compiler import ComponentCompiler
 from flotilla.utils.logger import get_logger
 from flotilla.core.errors import FlotillaConfigurationError, ReferenceResolutionError
@@ -27,7 +27,7 @@ class FlotillaContainer:
         self.di.config = providers.Configuration()
         self.di.config.from_dict(settings.config)
 
-        self._builders: dict[str, ComponentBuilder] = {}
+        self._factories: dict[str, ComponentFactory] = {}
 
         self._pre_compile_hooks = []
         self._post_compile_hooks = []
@@ -44,56 +44,56 @@ class FlotillaContainer:
         return self.settings.config
 
 
-    def register_builder(self, builder_name: str, builder: ComponentBuilder):
+    def register_factory(self, factory_name: str, factory: ComponentFactory):
         """
-        Register a builder function that can be referenced by name in config.
+        Register a factory function that can be referenced by name in config.
 
         Args:
-            buidler_name - The name (key) of the builder function
-            builder - The builder function
+            buidler_name - The name (key) of the factory function
+            factory - The factory function
         """
-        logger.info(f"Register builder '{builder_name}'")
-        self._builders[builder_name] = builder
+        logger.info(f"Register factory '{factory_name}'")
+        self._factories[factory_name] = factory
 
 
-    def get_builder(self, builder_name:str) -> Optional[ComponentBuilder]:
+    def get_factory(self, factory_name:str) -> Optional[ComponentFactory]:
         """
-        Gets the builder for the provided buidler_name, returns None if it doesn't exist
+        Gets the factory for the provided buidler_name, returns None if it doesn't exist
 
         Args:
-            builder_name - The name of the builder to return
+            factory_name - The name of the factory to return
         
         Returns:
-            The builder function for the name or None if it doesn't exist
+            The factory function for the name or None if it doesn't exist
         """
-        logger.info(f"Get builder for {builder_name}")
-        return self._builders.get(builder_name)
+        logger.info(f"Get factory for {factory_name}")
+        return self._factories.get(factory_name)
 
 
-    def wire_component(self, *, name: str, builder: ComponentBuilder, **kwargs):
+    def wire_component(self, *, name: str, factory: ComponentFactory, **kwargs):
         """
-        Wire a singleton into the dependency container using an explicit builder function.
+        Wire a singleton into the dependency container using an explicit factory function.
 
         This method performs the actual wiring by registering a singleton provider with
         the dependency-injector container. No validation, configuration lookup, or
         argument processing is performed. All keyword arguments are passed directly to
-        the builder function.
+        the factory function.
 
         This method is intended for framework-owned or internal components where the
-        builder function is known explicitly.
+        factory function is known explicitly.
 
         Args:
             name (str):
                 Attribute name under which the singleton provider will be registered on
                 the dependency container.
-            builder (ComponentBuilder):
-                Builder function used to construct the singleton instance.
+            factory (Componentfactory):
+                factory function used to construct the singleton instance.
             **kwargs:
-                Keyword arguments passed directly to the builder function.
+                Keyword arguments passed directly to the factory function.
         """
 
-        logger.info(f"Register singleton {name} with builder function {builder}")
-        setattr(self.di, name, providers.Singleton(builder, **kwargs))
+        logger.info(f"Register singleton {name} with factory function {factory}")
+        setattr(self.di, name, providers.Singleton(factory, **kwargs))
 
 
 

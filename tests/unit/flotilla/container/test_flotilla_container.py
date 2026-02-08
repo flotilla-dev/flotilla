@@ -55,9 +55,9 @@ def test_register_builder_adds_builder(flotilla_container):
     def dummy_builder():
         pass
 
-    flotilla_container.register_builder("test.builder", dummy_builder)
+    flotilla_container.register_factory("test.builder", dummy_builder)
 
-    assert "test.builder" in flotilla_container._builders
-    assert flotilla_container._builders["test.builder"] is dummy_builder
+    assert "test.builder" in flotilla_container._factories
+    assert flotilla_container._factories["test.builder"] is dummy_builder
 
 

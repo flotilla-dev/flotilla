@@ -3,7 +3,7 @@ import pytest
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.llm.llm_factory import LLMFactory
 from flotilla.core.errors import FlotillaConfigurationError
-from flotilla.container.component_builder import ComponentBuilder
+from flotilla.container.component_factory import ComponentFactory
 
 
 # ---------------------------------------------------------------------
@@ -18,7 +18,7 @@ def mock_llm_builder(*, model:str, temperature:float):
     }
 
 
-MockLLMBuilder: ComponentBuilder = mock_llm_builder
+MockLLMBuilder: ComponentFactory = mock_llm_builder
 
 
 # ---------------------------------------------------------------------
@@ -77,7 +77,7 @@ def test_create_invokes_registered_builder(container):
     - call it with container.di and config
     - return the builder's result
     """    
-    container.register_builder("mock-llm-builder", MockLLMBuilder)
+    container.register_factory("mock-llm-builder", MockLLMBuilder)
 
     llm_config = {
         "builder": "mock-llm-builder",
@@ -100,7 +100,7 @@ def test_builder_exceptions_are_propagated(container):
     def failing_builder():
         raise RuntimeError("builder exploded")
 
-    container.register_builder("failing-builder", failing_builder)
+    container.register_factory("failing-builder", failing_builder)
 
     llm_config = {
         "builder": "failing-builder",

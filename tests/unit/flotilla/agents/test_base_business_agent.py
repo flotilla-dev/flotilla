@@ -21,8 +21,8 @@ from flotilla.agents.business_agent_response import (
     ResponseStatus
 )
 
-from flotilla.agents.agent_input import AgentInput
-from flotilla.agents.execution_config import ExecutionConfig
+from flotilla.core.agent_input import AgentInput
+from flotilla.core.execution_config import ExecutionConfig
 
 from typing import List
 
