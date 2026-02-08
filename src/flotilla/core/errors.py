@@ -5,3 +5,19 @@ class FlotillaConfigurationError(ValueError):
     This indicates a user-facing configuration error (e.g. missing required
     fields, unknown builders, invalid values), not a framework bug.
     """
+
+
+class ConfigurationResolutionError(FlotillaConfigurationError):
+    """
+    Raised when Flotilla is unable to resolve $config tag into configuration block
+    """
+
+class SecretResolutionError(FlotillaConfigurationError):
+    """
+    Raised when the list SecretResolver(s) are unable to convert a $secret into a value
+    """
+
+class ReferenceResolutionError(FlotillaConfigurationError):
+    """
+    Raised when Flotilla is unable to convert a $ref into a container component
+    """

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from flotilla.agents.base_business_agent import BaseBusinessAgent
-from flotilla.agents.agent_input import AgentInput
+from flotilla.core.agent_input import AgentInput
 from typing import Optional,Dict
 from flotilla.utils.logger import get_logger
 

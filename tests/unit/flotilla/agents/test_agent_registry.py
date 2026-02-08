@@ -10,7 +10,7 @@ from flotilla.agents.business_agent_response import BusinessAgentResponse, Error
 from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.selectors.keyword_agent_selector import KeywordAgentSelector
 from typing import List
-from flotilla.agents.agent_input import AgentInput
+from flotilla.core.agent_input import AgentInput
 
 
 class MockBusinessAgent(BaseBusinessAgent):

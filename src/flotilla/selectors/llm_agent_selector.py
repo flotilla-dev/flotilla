@@ -1,5 +1,5 @@
 from flotilla.agents.agent_selector import AgentSelector
-from flotilla.agents.agent_input import AgentInput
+from flotilla.core.agent_input import AgentInput
 from typing import Dict
 from flotilla.agents.base_business_agent import BaseBusinessAgent
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage

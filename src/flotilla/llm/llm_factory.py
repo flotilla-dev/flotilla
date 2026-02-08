@@ -20,7 +20,7 @@ class LLMFactory:
                 "LLM configuration must define a 'builder' field"
             )
 
-        builder = container.get_builder(builder_name)
+        builder = container.get_factory(builder_name)
         if not builder:
             raise FlotillaConfigurationError(
                 f"No LLM builder registered for '{builder_name}'"

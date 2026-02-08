@@ -45,11 +45,7 @@ from flotilla.flotilla_application import FlotillaApplication
 from flotilla.llm.llm_builders import openai_llm_builder
 from flotilla.core.builders.checkpoint_builders import memory_checkpointer_buidler
 from flotilla.selectors.builders.agent_selector_builders import keyword_agent_selector_builder
-from flotilla.agents.wiring.agent_contributor_group import AgentContributorGroup
-from flotilla.tools.wiring.tool_contributor_group import ToolsContributorGroup
-from flotilla.core.wiring.checkpoint_contributor import CheckpointContributor
-from flotilla.selectors.wiring.keyword_agent_contributor import KeywordAgentSelectorContributor
-from flotilla.core.wiring.orchestration_engine_contributor import OrchestrationEngineContributor
+
 
 
 
@@ -96,17 +92,11 @@ def cli(ctx, env):
 
     # register the wiring logic and application builders
     # TODO this needs to be moved to an application builder group
-    app.register_builder("agents.weather_agent", weather_agent_buidler)
-    app.register_builder("tools.weather_tools", weather_tools_builder)
-    app.register_builder("llm.openai", openai_llm_builder)
-    app.register_builder("checkpointer.memory", memory_checkpointer_buidler)
-    app.register_builder("agent_selector.keyword", keyword_agent_selector_builder)
-
-    app.register_contributor(ToolsContributorGroup())
-    app.register_contributor(AgentContributorGroup())
-    app.register_contributor(CheckpointContributor())
-    app.register_contributor(KeywordAgentSelectorContributor())
-    app.register_contributor(OrchestrationEngineContributor())
+    app.register_factory("agents.weather_agent", weather_agent_buidler)
+    app.register_factory("tools.weather_tools", weather_tools_builder)
+    app.register_factory("llm.openai", openai_llm_builder)
+    app.register_factory("checkpointer.memory", memory_checkpointer_buidler)
+    app.register_factory("agent_selector.keyword", keyword_agent_selector_builder)
 
     app.start()
 

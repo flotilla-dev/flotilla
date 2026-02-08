@@ -5,7 +5,7 @@ from langchain_core.tools import StructuredTool
 
 from flotilla.agents.base_business_agent import BaseBusinessAgent, ToolDependency
 from flotilla.agents.agent_selector import AgentSelector
-from flotilla.agents.agent_input import AgentInput
+from flotilla.core.agent_input import AgentInput
 from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.core.errors import FlotillaConfigurationError
 from flotilla.utils.logger import get_logger

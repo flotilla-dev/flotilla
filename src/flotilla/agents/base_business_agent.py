@@ -13,8 +13,8 @@ from langgraph.types import Checkpointer
 from langgraph.graph.state import CompiledStateGraph  
 from flotilla.agents.business_agent_response import BusinessAgentResponse, ResponseStatus, ErrorResponse
 from flotilla.agents.response_factory import ResponseFactory
-from flotilla.agents.agent_input import AgentInput
-from flotilla.agents.execution_config import ExecutionConfig
+from flotilla.core.agent_input import AgentInput
+from flotilla.core.execution_config import ExecutionConfig
 from flotilla.utils.logger import get_logger
 
 

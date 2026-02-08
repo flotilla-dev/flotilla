@@ -4,10 +4,10 @@ from dependency_injector import containers, providers
 from typing import List, Optional, Any
 
 from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.container.component_builder import ComponentBuilder
-from flotilla.container.base_contributors import WiringContributor
+from flotilla.container.component_factory import ComponentFactory
+from flotilla.container.component_compiler import ComponentCompiler
 from flotilla.utils.logger import get_logger
-from flotilla.core.errors import FlotillaConfigurationError
+from flotilla.core.errors import FlotillaConfigurationError, ReferenceResolutionError
 
 
 
@@ -27,8 +27,12 @@ class FlotillaContainer:
         self.di.config = providers.Configuration()
         self.di.config.from_dict(settings.config)
 
-        self._builders: dict[str, ComponentBuilder] = {}
-        self._contributors: List[WiringContributor] = []
+        self._factories: dict[str, ComponentFactory] = {}
+
+        self._pre_compile_hooks = []
+        self._post_compile_hooks = []
+
+        self._built = False
 
 
     # ----------------------------
@@ -40,162 +44,57 @@ class FlotillaContainer:
         return self.settings.config
 
 
-    def register_builder(self, builder_name: str, builder: ComponentBuilder):
+    def register_factory(self, factory_name: str, factory: ComponentFactory):
         """
-        Register a builder function that can be referenced by name in config.
+        Register a factory function that can be referenced by name in config.
 
         Args:
-            buidler_name - The name (key) of the builder function
-            builder - The builder function
+            buidler_name - The name (key) of the factory function
+            factory - The factory function
         """
-        logger.info(f"Register builder '{builder_name}'")
-        self._builders[builder_name] = builder
+        logger.info(f"Register factory '{factory_name}'")
+        self._factories[factory_name] = factory
 
 
-    def get_builder(self, builder_name:str) -> Optional[ComponentBuilder]:
+    def get_factory(self, factory_name:str) -> Optional[ComponentFactory]:
         """
-        Gets the builder for the provided buidler_name, returns None if it doesn't exist
+        Gets the factory for the provided buidler_name, returns None if it doesn't exist
 
         Args:
-            builder_name - The name of the builder to return
+            factory_name - The name of the factory to return
         
         Returns:
-            The builder function for the name or None if it doesn't exist
+            The factory function for the name or None if it doesn't exist
         """
-        logger.info(f"Get builder for {builder_name}")
-        return self._builders.get(builder_name)
+        logger.info(f"Get factory for {factory_name}")
+        return self._factories.get(factory_name)
 
 
-    def register_contributor(self, contributor: WiringContributor):
+    def wire_component(self, *, name: str, factory: ComponentFactory, **kwargs):
         """
-        Register a WiringContributor for use in building the Container
-
-        Args:
-            contributor - The WiringContributor to execute
-        """
-        self._contributors.append(contributor)
-
-
-    def wire_from_config(self, *, section: str, name: str, config_path: str, **kwargs):
-        """
-        Wire a singleton into the container using application configuration.
-
-        This method conditionally wires a component based on configuration at
-        ``<section>.<config_path>``. It extracts the configured builder name, merges
-        configuration values with explicitly provided keyword arguments, and delegates
-        wiring to ``wire_infrastructure_with_builder()``.
-
-        If the configuration section, path, or data is missing, no wiring is performed.
-        If configuration is present, a ``builder`` key is required and must reference a
-        registered builder. Explicit keyword arguments always override configuration
-        values.
-
-        Args:
-            section (str):
-                Top-level configuration section (e.g. ``"agents"``, ``"tools"``).
-            name (str):
-                Attribute name under which the singleton provider will be registered on
-                the dependency container.
-            config_path (str):
-                Key within the configuration section that defines this component.
-            **kwargs:
-                Explicit keyword arguments passed to the builder. These values override
-                any corresponding values provided by configuration.
-
-        Raises:
-            FlotillaConfigurationError:
-                If configuration is present but no builder is specified, or if the
-                configured builder is not registered on the container.
-        """
-
-        logger.info(f"Register singleton '{name}' from config section '{section}'")
-
-        section_cfg = getattr(self.di.config, section, None)
-        if not section_cfg:
-            return
-
-        cfg = getattr(section_cfg, config_path, None)
-        if not cfg:
-            return
-
-        data = cfg()
-        if not data:
-            return
-
-        builder_name = data.get("builder")
-        if not builder_name:
-            raise FlotillaConfigurationError(f"{section}.{config_path}.builder is required"
-        )
-        data.pop("builder", None)
-
-        # Merge: explicit kwargs override config
-        merged_kwargs = {**data, **kwargs}
-
-        self.wire_infrastructure_with_builder(name=name, builder_name=builder_name, **merged_kwargs)
-
-
-    def wire_infrastructure_with_builder(self, *, name: str, builder_name: str, **kwargs):
-        """
-        Wire a singleton into the container using a builder resolved by name.
-
-        This method resolves a builder function from the container's builder registry,
-        validates that it exists, and delegates wiring to ``wire_infrastructure()``.
-        All parameters required by the builder must be supplied explicitly via
-        keyword arguments.
-
-        This method does not consult application configuration and always performs
-        wiring when invoked.
-
-        Args:
-            name (str):
-                Attribute name under which the singleton provider will be registered on
-                the dependency container.
-            builder_name (str):
-                Name of the builder function registered on the container.
-            **kwargs:
-                Keyword arguments passed directly to the builder function.
-
-        Raises:
-            FlotillaConfigurationError:
-                If the specified builder name is not registered on the container.
-        """
-        logger.info(f"Register infrstructure {name} with builder name {builder_name}")
-        builder = self.get_builder(builder_name)
-        if not builder:
-            raise FlotillaConfigurationError(
-                f"Unable to wire infrastructure '{name}' with unknown builder '{builder_name}'"
-            )
-
-
-        self.wire_infrastructure(name=name, builder=builder, **kwargs)
-
-
-
-
-    def wire_infrastructure(self, *, name: str, builder: ComponentBuilder, **kwargs):
-        """
-        Wire a singleton into the dependency container using an explicit builder function.
+        Wire a singleton into the dependency container using an explicit factory function.
 
         This method performs the actual wiring by registering a singleton provider with
         the dependency-injector container. No validation, configuration lookup, or
         argument processing is performed. All keyword arguments are passed directly to
-        the builder function.
+        the factory function.
 
         This method is intended for framework-owned or internal components where the
-        builder function is known explicitly.
+        factory function is known explicitly.
 
         Args:
             name (str):
                 Attribute name under which the singleton provider will be registered on
                 the dependency container.
-            builder (ComponentBuilder):
-                Builder function used to construct the singleton instance.
+            factory (Componentfactory):
+                factory function used to construct the singleton instance.
             **kwargs:
-                Keyword arguments passed directly to the builder function.
+                Keyword arguments passed directly to the factory function.
         """
 
-        logger.info(f"Register singleton {name} with builder function {builder}")
-        setattr(self.di, name, providers.Singleton(builder, **kwargs))
+        logger.info(f"Register singleton {name} with factory function {factory}")
+        setattr(self.di, name, providers.Singleton(factory, **kwargs))
+
 
 
     def get(self, name: str) -> Optional[Any]:
@@ -233,6 +132,7 @@ class FlotillaContainer:
             logger.exception(f"Failed to resolve component '{name}'")
             raise
 
+
     def exists(self, name: str) -> bool:
         """
         Check whether a component has been wired into the container.
@@ -252,64 +152,77 @@ class FlotillaContainer:
             True if the component is present, False otherwise.
         """
         return hasattr(self.di, name)
+    
 
-    def build(self):
+    def resolve_ref(self, ref: dict) -> Any:
         """
-        Finalize the Flotilla dependency container by executing all registered
-        wiring contributors.
-
-        This method performs a two-phase build process:
-
-        1. **Contribution phase**:
-        All registered contributors are executed in ascending priority order.
-        During this phase, contributors perform dependency wiring based on
-        configuration and framework conventions. Contributors may fail fast if
-        required wiring cannot be completed.
-
-        2. **Validation phase**:
-        All contributors are executed again in the same priority order to
-        validate that the container is fully and correctly wired. Validation
-        ensures that required components are present and that cross-component
-        invariants are satisfied.
-
-        The build process is deterministic: contributors are always executed in a
-        stable, priority-based order, and validation reflects the results of the
-        completed wiring phase.
-
-        This method must be called exactly once before the container is used.
-        After a successful build, the container is considered immutable and safe
-        for dependency resolution.
-
-        Returns
-        -------
-        FlotillaContainer
-            The fully built container instance.
-
-        Raises
-        ------
-        Exception
-            If any contributor fails during contribution or validation. Errors
-            raised during contribution indicate unrecoverable wiring failures,
-            while errors raised during validation indicate incomplete or invalid
-            wiring.
+        Docstring for resolve_ref
+        
+        :param self: Description
+        :param ref: Description
+        :type ref: dict
+        :return: Description
+        :rtype: Any
         """
-        logger.info("Building Flotilla DI container")
+        if not isinstance(ref, dict) or "$ref" not in ref:
+            return ref
 
-        ordered = sorted(self._contributors, key=lambda c: c.priority)
+        key = ref["$ref"]
+        if not isinstance(key, str):
+            raise ReferenceResolutionError("$ref must be a string")
 
-        logger.info("Execute WiringContributors in priorty order")
-        for contributor in ordered:
-            logger.info(f"Call contribute on WiringContributor {contributor.__class__}")
-            contributor.contribute(self)
 
-        logger.info("Validate container wiring in priortiy order")
-        for contributor in ordered:
-            logger.info(f"Call validate on WiringContributor {contributor.__class__}")
-            contributor.validate(self)
+        componnt = self.get(key)
+        if componnt is None:
+            raise ReferenceResolutionError(f"$ref '{key}' not found in container")
+ 
+            
 
-        logger.info("✓ Flotilla container build complete")
+
+    def build(self) -> FlotillaContainer:
+        """
+        Build the DI container from the resolved configuration.
+
+        Build lifecycle:
+          1. Pre-compile hooks
+          2. Component discovery
+          3. Dependency analysis
+          4. Component instantiation
+          5. Post-compile hooks
+
+        After build completes, the container becomes immutable.
+        """
+
+        if self._built:
+            raise RuntimeError("FlotillaContainer.build() may only be called once")
+
+        config = self.config_dict
+
+        # ---------------------------
+        # Phase 0: pre-compile hooks
+        # ---------------------------
+        for hook in self._pre_compile_hooks:
+            hook(self, config)
+
+        # TODO: Change compiler hooks to be container events that are fired for each step
+
+        # ---------------------------
+        # Phase 1–3: compile
+        # ---------------------------
+        compiler = ComponentCompiler(container=self)
+
+        compiler.discover_components(config)
+        compiler.analyze_dependencies()
+        compiler.instantiate_components()
+
+        # ---------------------------
+        # Phase 4: post-compile hooks
+        # ---------------------------
+        for hook in self._post_compile_hooks:
+            hook(self)
+
+        self._built = True
         return self
-
 
 
 

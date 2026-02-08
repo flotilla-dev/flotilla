@@ -1,6 +1,7 @@
 import pytest
 
-from flotilla.config.resolvers.env_secret_resolver import EnvSecretResolver, SecretResolutionError
+from flotilla.config.resolvers.env_secret_resolver import EnvSecretResolver
+from flotilla.core.errors import SecretResolutionError
 
 
 def test_env_secret_resolver_returns_value(monkeypatch):

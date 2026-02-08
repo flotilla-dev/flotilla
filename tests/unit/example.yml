@@ -1,13 +1,13 @@
 flotilla:
   agent_selector:
-    builder: agent_selector.keyword
+    factory: agent_selector.keyword
     min_confidence: 0.7
   checkpointer:
-    builder: checkpointer.memory
+    factory: checkpointer.memory
 
 llm:
   openai:
-    builder: "llm.openai"
+    factory: "llm.openai"
     model: gpt-4
     api_key: sk-proj-xxxxxxxxxxxxxxxxxxxxx
     base_url: https://api.openai.com/v1
@@ -17,7 +17,7 @@ llm:
     timeout_seconds: 30
   
   anthropic:
-    builder: "llm.anthopic"
+    factory: "llm.anthopic"
     model: claude-sonnet-4-20250514
     api_key: sk-ant-xxxxxxxxxxxxxxxxxxxxx
     base_url: https://api.anthropic.com
@@ -29,7 +29,7 @@ llm:
 
 agents:
   customer_support:
-    builder: agent.customer_support
+    factory: agent.customer_support
     llm:
       provider: openai
       model: gpt-4-turbo
@@ -40,7 +40,7 @@ agents:
       - send_email
   
   data_analyst:
-    builder: agent.data_analyst
+    factory: agent.data_analyst
     llm:
       provider: anthropic
       temperature: 0.3
@@ -50,7 +50,7 @@ agents:
       - generate_chart
   
   general_assistant:
-    builder: agent.general_assistant
+    factory: agent.general_assistant
     llm:
       provider: openai
     tools:
@@ -58,27 +58,27 @@ agents:
 
 tools:
   search_knowledge_base:
-    builder: tools.search_knowledge_base
+    factory: tools.search_knowledge_base
     index_name: kb_main
     max_results: 10
   
   create_ticket:
-    builder: tools.create_ticket
+    factory: tools.create_ticket
     system: jira
     default_priority: medium
   
   send_email:
-    builder: tools.send_email
+    factory: tools.send_email
     smtp_host: smtp.company.com
     from_address: support@company.com
   
   query_database:
-    builder: tools.query_database
+    factory: tools.query_database
     connection_string: postgresql://user:pass@localhost/analytics
     read_only: true
   
   generate_chart:
-    builder: tool.generate_chart
+    factory: tool.generate_chart
     output_format: png
     default_width: 800
     default_height: 600
