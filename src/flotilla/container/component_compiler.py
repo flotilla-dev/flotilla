@@ -117,7 +117,12 @@ class ComponentCompiler:
             raise FlotillaConfigurationError(f"{cfg_path}.factory must be a string")
 
         factory = self._container.get_factory(factory_name)
-        if factory is None or not callable(factory):
+        if factory is None:
+            raise FlotillaConfigurationError(
+                f"{cfg_path}: no factory registered under key '{factory_name}'"
+            )
+
+        if not callable(factory):
             raise FlotillaConfigurationError(
                 f"{cfg_path}.factory '{factory_name}' is not callable"
             )
@@ -250,7 +255,7 @@ class ComponentCompiler:
                 val, owner_path=cfg_path, arg_name=key
             )
 
-        self._container.wire_component(name=name, factory=factory, **kwargs)
+        self._container.wire_component(component_name=name, factory=factory, **kwargs)
         self._instantiated.add(name)
 
     def _materialize_value(self, value, *, owner_path, arg_name):

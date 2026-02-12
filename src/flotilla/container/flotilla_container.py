@@ -66,7 +66,9 @@ class FlotillaContainer:
         logger.info(f"Get factory for {factory_name}")
         return self._factories.get(factory_name)
 
-    def wire_component(self, *, name: str, factory: ComponentFactory, **kwargs):
+    def wire_component(
+        self, *, component_name: str, factory: ComponentFactory, **kwargs
+    ):
         """
         Wire a singleton into the dependency container using an explicit factory function.
 
@@ -88,8 +90,10 @@ class FlotillaContainer:
                 Keyword arguments passed directly to the factory function.
         """
 
-        logger.info(f"Register singleton {name} with factory function {factory}")
-        setattr(self.di, name, providers.Singleton(factory, **kwargs))
+        logger.info(
+            f"Register singleton {component_name} with factory function {factory}"
+        )
+        setattr(self.di, component_name, providers.Singleton(factory, **kwargs))
 
     def get(self, name: str) -> Optional[Any]:
         """
