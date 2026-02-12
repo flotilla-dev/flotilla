@@ -25,6 +25,7 @@ class SingleAgentRuntime(FlotillaRuntime):
 
     def __init__(self, *, agent: BaseBusinessAgent):
         self._agent = agent
+        agent
 
     async def stream(
         self,
@@ -45,7 +46,6 @@ class SingleAgentRuntime(FlotillaRuntime):
             response: BusinessAgentResponse = self._agent.run(
                 agent_input=agent_input,
                 config=execution_config,
-                checkpoint=checkpoint,
             )
 
             # Suspension cases
@@ -61,7 +61,6 @@ class SingleAgentRuntime(FlotillaRuntime):
                         "data": response.data,
                     },
                     agent_name=response.agent_name,
-                    checkpoint=getattr(response, "checkpoint", None),
                 )
                 return
 
@@ -108,7 +107,6 @@ class SingleAgentRuntime(FlotillaRuntime):
         async for event in self.stream(
             agent_input=agent_input,
             execution_config=execution_config,
-            checkpoint=checkpoint,
         ):
             last_event = event
 
@@ -117,7 +115,6 @@ class SingleAgentRuntime(FlotillaRuntime):
                     status=ResultStatus.AWAITING_INPUT,
                     output=event.payload,
                     agent_name=event.agent_name,
-                    checkpoint=event.checkpoint,
                 )
 
         if last_event is None:

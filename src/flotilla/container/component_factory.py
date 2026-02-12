@@ -18,5 +18,4 @@ class ComponentFactory(Protocol):
         container: FlotillaContainer,
         config: Optional[dict],
         **kwargs: Any,
-    ) -> Any:
-        ...
+    ) -> Any: ...

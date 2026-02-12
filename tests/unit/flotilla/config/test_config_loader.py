@@ -6,13 +6,12 @@ from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.sources.dict_configuration_source import DictConfigurationSource
 from flotilla.config.configuration_source import ConfigurationSource
 from flotilla.config.secret_resolver import SecretResolver
+from flotilla.core.errors import ConfigurationResolutionError
 
 
 # ---------------------------------------------------------------------
 # Test helpers
 # ---------------------------------------------------------------------
-
-
 
 
 class StaticSecretResolver:
@@ -26,6 +25,7 @@ class StaticSecretResolver:
 # ---------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------
+
 
 def test_config_loader_merges_sources_last_wins():
     loader = ConfigLoader(
@@ -80,7 +80,6 @@ def test_config_loader_raises_if_secret_unresolved():
 
     with pytest.raises(SecretResolutionError) as exc:
         loader.load()
-    
 
 
 def test_config_loader_ignores_non_secret_values():
@@ -92,9 +91,11 @@ def test_config_loader_ignores_non_secret_values():
     settings = loader.load()
     assert settings.config["value"] == "plain-string"
 
+
 # ---------------------------------------------------------------------
 # $config resolution
 # ---------------------------------------------------------------------
+
 
 def test_config_loader_resolves_config_reference():
     loader = ConfigLoader(
@@ -217,21 +218,139 @@ def test_config_loader_asserts_no_unresolved_secret_refs():
             return None  # intentionally permissive
 
     loader = ConfigLoader(
-        sources=[
-            DictConfigurationSource(
-                {
-                    "api_key": {
-                        "$secret": "MISSING_KEY"
-                    }
-                }
-            )
-        ],
+        sources=[DictConfigurationSource({"api_key": {"$secret": "MISSING_KEY"}})],
         secrets=[PermissiveSecretResolver()],
     )
 
     with pytest.raises(ValueError) as exc:
         loader.load()
-    
+
     assert isinstance(exc.value, SecretResolutionError)
 
 
+def test_config_mapping_node_is_fully_resolved():
+    config = {
+        "llm": {
+            "openai": {
+                "factory": "llm.openai",
+                "model": "gpt-4o-mini",
+            }
+        },
+        "agents": {
+            "weather_agent": {
+                "factory": "agents.weather_agent",
+                "llm": {
+                    "$config": "llm.openai",
+                },
+            }
+        },
+    }
+
+    config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
+    settings = config_loader.load()
+    resolved = settings.config
+
+    llm_cfg = resolved["agents"]["weather_agent"]["llm"]
+
+    assert isinstance(llm_cfg, dict)
+    assert llm_cfg["factory"] == "llm.openai"
+    assert llm_cfg["model"] == "gpt-4o-mini"
+
+
+def test_no_config_tokens_remain_after_load():
+    config = {
+        "base": {
+            "x": 1,
+        },
+        "derived": {
+            "$config": "base",
+        },
+    }
+    config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
+    settings = config_loader.load()
+    resolved = settings.config
+
+    def walk(node):
+        if isinstance(node, str):
+            assert not node.startswith("$config ")
+        elif isinstance(node, dict):
+            assert "$config" not in node
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(resolved)
+
+
+def test_config_inside_component_arguments():
+    config = {
+        "llm": {
+            "openai": {
+                "factory": "llm.openai",
+                "model": "gpt-4o-mini",
+            }
+        },
+        "agent": {"factory": "agents.weather_agent", "llm": {"$config": "llm.openai"}},
+    }
+
+    config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
+    settings = config_loader.load()
+    resolved = settings.config
+
+    agent_cfg = resolved["agent"]
+
+    assert isinstance(agent_cfg["llm"], dict)
+    assert agent_cfg["llm"]["factory"] == "llm.openai"
+
+
+def test_config_resolution_is_recursive():
+    config = {
+        "base": {
+            "a": 1,
+        },
+        "outer": {
+            "inner": {
+                "$config": "base",
+            }
+        },
+    }
+
+    config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
+    settings = config_loader.load()
+    resolved = settings.config
+    assert resolved["outer"]["inner"]["a"] == 1
+
+
+def test_unresolved_config_raises_error():
+    config = {
+        "x": {
+            "$config": "does.not.exist",
+        }
+    }
+    config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
+
+    with pytest.raises(Exception):
+        config_loader.load()
+
+
+########################################
+
+
+def test_config_scalar_form_is_invalid():
+    config = {"llm": "$config llm.openai"}
+
+    loader = ConfigLoader(sources=[DictConfigurationSource(config)])
+
+    with pytest.raises(ConfigurationResolutionError):
+        loader.load()
+
+
+def test_secret_scalar_form_is_invalid():
+    config = {"api_key": "$secret MY_KEY"}
+
+    loader = ConfigLoader(sources=[DictConfigurationSource(config)])
+
+    with pytest.raises(SecretResolutionError):
+        loader.load()

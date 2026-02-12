@@ -37,7 +37,6 @@ class ConfigUtils:
 
         return obj
 
-
     @staticmethod
     def resolve_flattened_config(
         *,
@@ -53,11 +52,9 @@ class ConfigUtils:
             - None if base path is missing or not a mapping
         """
         if not isinstance(config, dict):
-            raise TypeError(
-                "resolve_flattened_config requires 'config' to be a dict"
-            )
+            raise TypeError("resolve_flattened_config requires 'config' to be a dict")
 
-        base_cfg = ConfigUtils._get_at_path(config, base_path)
+        base_cfg = ConfigUtils.get_at_path(config, base_path)
 
         # Base missing OR not a dict → treat as unavailable
         if not isinstance(base_cfg, dict):
@@ -66,7 +63,7 @@ class ConfigUtils:
         result = dict(base_cfg)
 
         if override_path:
-            override_cfg = ConfigUtils._get_at_path(config, override_path)
+            override_cfg = ConfigUtils.get_at_path(config, override_path)
 
             # Only merge if override exists AND is a dict
             if isinstance(override_cfg, dict):
@@ -75,7 +72,7 @@ class ConfigUtils:
         return result
 
     @staticmethod
-    def _get_at_path(root: Dict[str, Any], path: str) -> Any:
+    def get_at_path(root: Dict[str, Any], path: str) -> Any:
         """
         Retrieve a value from a nested dict using a dot-delimited path.
         Returns None if the path does not exist.
@@ -116,9 +113,6 @@ class ConfigUtils:
             return node
 
         return ConfigUtils.walk_and_replace(config, resolver)
-    
-
-
 
     @staticmethod
     def resolve_config_refs(config: Any, *, root: Dict[str, Any]) -> Any:
@@ -127,8 +121,6 @@ class ConfigUtils:
             root=root,
             resolving=[],
         )
-
-
 
     @staticmethod
     def _resolve_config_refs_internal(
@@ -148,10 +140,10 @@ class ConfigUtils:
 
         return ConfigUtils.walk_and_replace(value, resolver)
 
-
-
     @staticmethod
-    def _resolve_config_ref(ref: Dict[str, Any], *, root: Dict[str, Any], resolving: list[str]) -> Dict[str, Any]:
+    def _resolve_config_ref(
+        ref: Dict[str, Any], *, root: Dict[str, Any], resolving: list[str]
+    ) -> Dict[str, Any]:
         path = ref.get("$config")
 
         if not isinstance(path, str):
@@ -160,11 +152,9 @@ class ConfigUtils:
         # 🚨 Cycle detection
         if path in resolving:
             cycle = " -> ".join(resolving + [path])
-            raise ConfigurationResolutionError(
-                f"$config cycle detected: {cycle}"
-            )
+            raise ConfigurationResolutionError(f"$config cycle detected: {cycle}")
 
-        base_cfg = ConfigUtils._get_at_path(root, path)
+        base_cfg = ConfigUtils.get_at_path(root, path)
         if not isinstance(base_cfg, dict):
             raise ConfigurationResolutionError(
                 f"$config '{path}' must resolve to a config object"
@@ -187,8 +177,6 @@ class ConfigUtils:
         finally:
             # Always pop, even if resolution fails
             resolving.pop()
-
-
 
     @staticmethod
     def contains_tag(value: Any, *, tag: str) -> bool:
