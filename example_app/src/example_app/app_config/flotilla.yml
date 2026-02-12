@@ -1,0 +1,39 @@
+flotilla:
+  runtime:
+    factory: runtime.single_agent
+    agent: 
+      $ref: agents.weather_agent
+  checkpointer:
+    factory: checkpointer.memory
+    ref_name: checkpointer
+
+llm:
+  openai:
+    factory: llm.openai
+    model: gpt-4o-mini
+    api_key: 
+      $secret: OPENAI_API_KEY
+    temperature: 1.5
+    max_tokens: 2048
+    timeout: 30
+
+
+agents:
+  weather_agent:
+    factory: agents.weather_agent
+    llm:
+      $config: llm.openai
+      overrides:
+        max_tokens: 5000
+    checkpointer:
+      $ref: checkpointer
+    weather_tools:
+      $ref: tools.weather_tools
+    
+tools:
+  weather_tools:
+    factory: tools.weather_tools
+    api_key: 
+      $secret: WEATHER_API_KEY
+    base_url: https://api.weatherapi.com
+    use_api: true

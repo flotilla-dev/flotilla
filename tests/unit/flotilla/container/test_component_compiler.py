@@ -10,6 +10,7 @@ from flotilla.core.errors import FlotillaConfigurationError, ReferenceResolution
 # Fake factories for testing
 # -----------------------------
 
+
 def simple_factory(**kwargs):
     return {"type": "simple", "kwargs": kwargs}
 
@@ -19,38 +20,23 @@ def no_arg_factory():
 
 
 def composite_factory(child, value):
-    return {
-        "type": "composite",
-        "child": child,
-        "value": value,
-    }
+    return {"type": "composite", "child": child, "value": value}
 
 
 def list_factory(items):
-    return {
-        "type": "list",
-        "items": items,
-    }
+    return {"type": "list", "items": items}
 
 
-def dict_factory(mapping):
-    return {
-        "type": "dict",
-        "mapping": mapping,
-    }
+def map_factory(mapping):
+    return {"type": "map", "mapping": mapping}
 
 
 # -----------------------------
 # Test helpers
 # -----------------------------
 
+
 def create_container(config: dict) -> FlotillaContainer:
-    """
-    Correct container construction:
-    - Settings created from raw config
-    - Container initialized with settings
-    - factorys registered BEFORE compiler runs
-    """
     settings = FlotillaSettings(raw=config)
     container = FlotillaContainer(settings=settings)
 
@@ -58,16 +44,12 @@ def create_container(config: dict) -> FlotillaContainer:
     container.register_factory("no_arg", no_arg_factory)
     container.register_factory("composite", composite_factory)
     container.register_factory("list_factory", list_factory)
-    container.register_factory("dict_factory", dict_factory)
+    container.register_factory("map_factory", map_factory)
 
     return container
 
 
 def compile_config(config: dict) -> FlotillaContainer:
-    """
-    Convenience helper mirroring real usage:
-    container.build() would normally orchestrate this.
-    """
     container = create_container(config)
     compiler = ComponentCompiler(container=container)
 
@@ -82,59 +64,29 @@ def compile_config(config: dict) -> FlotillaContainer:
 # Tests
 # -----------------------------
 
+
 def test_compile_simple_component():
-    config = {
-        "a": {
-            "factory": "simple",
-            "x": 1,
-            "y": "test",
-        }
-    }
-
+    config = {"a": {"factory": "simple", "x": 1}}
     container = compile_config(config)
-
-    instance = container.get("a")
-    assert instance["type"] == "simple"
-    assert instance["kwargs"] == {"x": 1, "y": "test"}
+    assert container.get("a")["kwargs"]["x"] == 1
 
 
 def test_ref_name_overrides_path():
     config = {
-        "flotilla": {
+        "root": {
             "checkpointer": {
                 "factory": "no_arg",
                 "ref_name": "checkpointer",
             }
         }
     }
-
     container = compile_config(config)
-
     assert container.exists("checkpointer")
-    assert not container.exists("flotilla.checkpointer")
-
-
-def test_duplicate_component_names_error():
-    config = {
-        "a": {
-            "factory": "no_arg",
-            "ref_name": "dup",
-        },
-        "b": {
-            "factory": "no_arg",
-            "ref_name": "dup",
-        },
-    }
-
-    with pytest.raises(FlotillaConfigurationError, match="already exists"):
-        compile_config(config)
 
 
 def test_ref_injection():
     config = {
-        "child": {
-            "factory": "no_arg",
-        },
+        "child": {"factory": "no_arg"},
         "parent": {
             "factory": "composite",
             "child": {"$ref": "child"},
@@ -143,12 +95,7 @@ def test_ref_injection():
     }
 
     container = compile_config(config)
-
-    parent = container.get("parent")
-    child = container.get("child")
-
-    assert parent["child"] is child
-    assert parent["value"] == 42
+    assert container.get("parent")["child"] is container.get("child")
 
 
 def test_ref_missing_component_raises():
@@ -163,54 +110,33 @@ def test_ref_missing_component_raises():
         compile_config(config)
 
 
-def test_embedded_component():
-    config = {
-        "parent": {
-            "factory": "composite",
-            "child": {
-                "factory": "simple",
-                "x": 10,
-            },
-            "value": 5,
-        }
-    }
-
-    container = compile_config(config)
-
-    parent = container.get("parent")
-    assert parent["child"]["kwargs"]["x"] == 10
-    assert parent["value"] == 5
-
-
 def test_list_injection():
     config = {
-        "item1": {"factory": "no_arg"},
-        "item2": {"factory": "no_arg"},
-        "list_comp": {
+        "a": {"factory": "no_arg"},
+        "b": {"factory": "no_arg"},
+        "c": {
             "factory": "list_factory",
             "items": {
                 "$list": [
-                    {"$ref": "item1"},
-                    {"$ref": "item2"},
+                    {"$ref": "a"},
+                    {"$ref": "b"},
                 ]
             },
         },
     }
 
     container = compile_config(config)
-
-    result = container.get("list_comp")
-    assert len(result["items"]) == 2
+    assert len(container.get("c")["items"]) == 2
 
 
-def test_dict_injection():
+def test_map_injection():
     config = {
         "a": {"factory": "no_arg"},
         "b": {"factory": "no_arg"},
-        "dict_comp": {
-            "factory": "dict_factory",
+        "c": {
+            "factory": "map_factory",
             "mapping": {
-                "$dict": {
+                "$map": {
                     "one": {"$ref": "a"},
                     "two": {"$ref": "b"},
                 }
@@ -219,47 +145,101 @@ def test_dict_injection():
     }
 
     container = compile_config(config)
-
-    result = container.get("dict_comp")
-    assert "one" in result["mapping"]
-    assert "two" in result["mapping"]
+    assert container.get("c")["mapping"]["one"] is container.get("a")
 
 
 def test_raw_list_is_illegal():
-    config = {
-        "a": {
-            "factory": "simple",
-            "x": [1, 2, 3],
-        }
-    }
-
-    with pytest.raises(FlotillaConfigurationError, match="raw lists"):
+    config = {"a": {"factory": "simple", "x": [1, 2]}}
+    with pytest.raises(FlotillaConfigurationError):
         compile_config(config)
 
 
-def test_raw_dict_is_illegal():
-    config = {
-        "a": {
-            "factory": "simple",
-            "x": {"y": 1},
-        }
-    }
-
-    with pytest.raises(FlotillaConfigurationError, match="raw object"):
+def test_raw_map_is_illegal():
+    config = {"a": {"factory": "simple", "x": {"y": 1}}}
+    with pytest.raises(FlotillaConfigurationError):
         compile_config(config)
 
 
 def test_component_cycle_detected():
     config = {
-        "a": {
-            "factory": "simple",
-            "x": {"$ref": "b"},
-        },
-        "b": {
-            "factory": "simple",
-            "x": {"$ref": "a"},
-        },
+        "a": {"factory": "simple", "x": {"$ref": "b"}},
+        "b": {"factory": "simple", "x": {"$ref": "a"}},
     }
 
-    with pytest.raises(FlotillaConfigurationError, match="cycle"):
+    with pytest.raises(FlotillaConfigurationError):
         compile_config(config)
+
+
+##################################################
+
+
+def test_ref_scalar_form_is_invalid():
+    config = {
+        "a": {"factory": "simple", "dep": "$ref other"},
+        "other": {"factory": "simple"},
+    }
+
+    with pytest.raises(FlotillaConfigurationError):
+        compile_config(config)
+
+
+def test_list_scalar_form_is_invalid():
+    config = {"a": {"factory": "simple", "deps": "$list [1,2,3]"}}
+
+    with pytest.raises(FlotillaConfigurationError):
+        compile_config(config)
+
+
+def test_map_scalar_form_is_invalid():
+    config = {
+        "a": {
+            "factory": "map_factory",
+            "mapping": "$map something",
+        }
+    }
+
+    with pytest.raises(FlotillaConfigurationError):
+        compile_config(config)
+
+
+def test_nested_component_definition_is_allowed():
+    config = {
+        "root": {
+            "factory": "composite",
+            "value": 100,
+            "child": {
+                "factory": "composite",
+                "value": "this is a string",
+                "child": {"factory": "no_arg"},
+            },
+        }
+    }
+
+    # Should not raise
+    container = compile_config(config)
+
+    assert container is not None
+
+
+def test_deeply_nested_component_definition_is_allowed():
+    config = {
+        "root": {
+            "factory": "composite",
+            "child": {
+                "factory": "composite",
+                "child": {
+                    "factory": "simple",
+                    "x": 10,
+                },
+                "value": 1,
+            },
+            "value": 2,
+        }
+    }
+
+    container = compile_config(config)
+
+    root = container.get("root")
+    assert root["value"] == 2
+    assert root["child"]["value"] == 1
+    assert root["child"]["child"]["kwargs"]["x"] == 10

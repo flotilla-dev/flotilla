@@ -9,38 +9,83 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from flotilla.agents.base_business_agent import BaseBusinessAgent, AgentCapability, ToolDependency
+from flotilla.agents.base_business_agent import (
+    BaseBusinessAgent,
+    AgentCapability,
+    ToolDependency,
+)
 from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.agents.agent_selector import AgentSelector
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.selectors.keyword_agent_selector import KeywordAgentSelector
 from flotilla.tools.base_tool_provider import BaseToolProvider
 from flotilla.tools.tool_config import ToolConfig
+from flotilla.core.flotilla_runtime import FlotillaRuntime
 
 
 class MockBusinessAgent(BaseBusinessAgent):
-    def __init__(self, *, agent_id, agent_name, llm, checkpointer, capabilities:List[AgentCapability], dependencies:List[ToolDependency]):
+    def __init__(
+        self,
+        *,
+        agent_id,
+        agent_name,
+        llm,
+        checkpointer,
+        capabilities: List[AgentCapability],
+        dependencies: List[ToolDependency],
+    ):
         self.capabilities = capabilities
         self.tool_dependencies = dependencies
-        super().__init__(agent_id=agent_id, agent_name=agent_name, llm=llm, checkpointer=checkpointer)
-
+        super().__init__(
+            agent_id=agent_id, agent_name=agent_name, llm=llm, checkpointer=checkpointer
+        )
 
     def _initialize_capabilities(self):
         return self.capabilities
-    
+
     def _initialize_dependencies(self):
         return self.tool_dependencies
 
+
+class MockFlotillaRuntime(FlotillaRuntime):
+    def run(self, *, agent_input, execution_config, checkpoint=None):
+        return super().run(
+            agent_input=agent_input,
+            execution_config=execution_config,
+            checkpoint=checkpoint,
+        )
+
+    def stream(self, *, agent_input, execution_config, checkpoint=None):
+        return super().stream(
+            agent_input=agent_input,
+            execution_config=execution_config,
+            checkpoint=checkpoint,
+        )
+
+
+@pytest.fixture
+def mock_flotilla_runtime_factory():
+    def factory(**kwargs):
+        return MockFlotillaRuntime()
+
+    return factory
+
+
 class MockToolProvider(BaseToolProvider):
-    def __init__(self, *, provider_id, provider_name, config, tools:List[StructuredTool]):
+    def __init__(
+        self, *, provider_id, provider_name, config, tools: List[StructuredTool]
+    ):
         self.mock_tools = tools
-        super().__init__(provider_id=provider_id, provider_name=provider_name, config=config)
+        super().__init__(
+            provider_id=provider_id, provider_name=provider_name, config=config
+        )
 
     def _configure_tools(self):
         pass
-    
+
     def _register_tools(self):
         return self.mock_tools
+
 
 @pytest.fixture
 def tmp_config_dir(tmp_path: Path) -> Path:
@@ -53,9 +98,11 @@ def tmp_config_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def write_yaml():
     """Helper to write YAML files inside tests."""
+
     def _write(path: Path, data: dict):
         with open(path, "w") as f:
             yaml.safe_dump(data, f)
+
     return _write
 
 
@@ -63,18 +110,15 @@ def write_yaml():
 def mock_checkpointer():
     return InMemorySaver
 
+
 class MockChatModel(BaseChatModel):
     """Minimal mock LLM for testing"""
 
-    response: str = "mock response"   # ← pydantic field
+    response: str = "mock response"  # ← pydantic field
 
     def _generate(self, messages, stop=None, **kwargs):
         return ChatResult(
-            generations=[
-                ChatGeneration(
-                    message=AIMessage(content=self.response)
-                )
-            ]
+            generations=[ChatGeneration(message=AIMessage(content=self.response))]
         )
 
     @property
@@ -89,37 +133,49 @@ def mock_llm() -> BaseChatModel:
     """
     return MockChatModel()
 
+
 @pytest.fixture
 def mock_tool_registry() -> ToolRegistry:
     return ToolRegistry(tool_providers=[])
+
 
 @pytest.fixture
 def mock_agent_selector() -> AgentSelector:
     return KeywordAgentSelector(min_confidence=0.2)
 
+
 @pytest.fixture
 def agent_factory(mock_llm, mock_checkpointer):
-    def _factory(*, agent_id:str, capabilities: List[AgentCapability] | None, dependencies: List[ToolDependency] | None):
+    def _factory(
+        *,
+        agent_id: str,
+        capabilities: List[AgentCapability] | None,
+        dependencies: List[ToolDependency] | None,
+    ):
         return MockBusinessAgent(
             agent_id=agent_id,
             agent_name=agent_id,
             llm=mock_llm,
             checkpointer=mock_checkpointer,
             capabilities=capabilities,
-            dependencies=dependencies
+            dependencies=dependencies,
         )
+
     return _factory
+
 
 @pytest.fixture
 def tool_provider_factory():
-    def _factory(*, provider_id:str, config:ToolConfig, tools:List[StructuredTool]):
+    def _factory(*, provider_id: str, config: ToolConfig, tools: List[StructuredTool]):
         return MockToolProvider(
             provider_id=provider_id,
             provider_name=provider_id,
             config=config,
-            tools=tools
+            tools=tools,
         )
+
     return _factory
+
 
 @pytest.fixture
 def tool_factory():
@@ -130,6 +186,7 @@ def tool_factory():
         func: Optional[Callable] = None,
     ) -> StructuredTool:
         if func is None:
+
             def func(**kwargs):
                 return "ok"
 

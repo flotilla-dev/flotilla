@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dependency_injector import containers, providers
-from typing import List, Optional, Any
+from dependency_injector.providers import Provider
+
+from typing import List, Optional, Any, Type, TypeVar
 
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.container.component_factory import ComponentFactory
@@ -10,9 +12,7 @@ from flotilla.utils.logger import get_logger
 from flotilla.core.errors import FlotillaConfigurationError, ReferenceResolutionError
 
 
-
 logger = get_logger(__name__)
-
 
 
 class FlotillaContainer:
@@ -34,7 +34,6 @@ class FlotillaContainer:
 
         self._built = False
 
-
     # ----------------------------
     # Public API
     # ----------------------------
@@ -42,7 +41,6 @@ class FlotillaContainer:
     @property
     def config_dict(self) -> dict:
         return self.settings.config
-
 
     def register_factory(self, factory_name: str, factory: ComponentFactory):
         """
@@ -55,20 +53,18 @@ class FlotillaContainer:
         logger.info(f"Register factory '{factory_name}'")
         self._factories[factory_name] = factory
 
-
-    def get_factory(self, factory_name:str) -> Optional[ComponentFactory]:
+    def get_factory(self, factory_name: str) -> Optional[ComponentFactory]:
         """
         Gets the factory for the provided buidler_name, returns None if it doesn't exist
 
         Args:
             factory_name - The name of the factory to return
-        
+
         Returns:
             The factory function for the name or None if it doesn't exist
         """
         logger.info(f"Get factory for {factory_name}")
         return self._factories.get(factory_name)
-
 
     def wire_component(self, *, name: str, factory: ComponentFactory, **kwargs):
         """
@@ -94,8 +90,6 @@ class FlotillaContainer:
 
         logger.info(f"Register singleton {name} with factory function {factory}")
         setattr(self.di, name, providers.Singleton(factory, **kwargs))
-
-
 
     def get(self, name: str) -> Optional[Any]:
         """
@@ -132,7 +126,6 @@ class FlotillaContainer:
             logger.exception(f"Failed to resolve component '{name}'")
             raise
 
-
     def exists(self, name: str) -> bool:
         """
         Check whether a component has been wired into the container.
@@ -152,12 +145,85 @@ class FlotillaContainer:
             True if the component is present, False otherwise.
         """
         return hasattr(self.di, name)
-    
+
+    T = TypeVar("T")
+
+    def find_instances_by_type(self, base_type: Type[T]) -> List[T]:
+        """
+        Docstring for find_instances_by_type
+
+        :param self: Description
+        :param base_type: Description
+        :type base_type: Type[T]
+        :return: Description
+        :rtype: List[T]
+        """
+        if not self._built:
+            raise FlotillaConfigurationError(
+                f"Ensure that build() is called on FlotillaContainer before attempting to find instances by type {base_type}"
+            )
+
+        matches: List[T] = []
+        try:
+            for attr_name in dir(self.di):
+                if attr_name.startswith("_"):
+                    continue
+
+                attr = getattr(self.di, attr_name, None)
+
+                if not attr:
+                    logger.warn(
+                        f"Could not find attribute {attr_name} on DI Container, continue"
+                    )
+                    continue
+
+                # Case 1: attribute is already an instance
+                if not isinstance(attr, Provider):
+                    if isinstance(attr, base_type):
+                        matches.append(attr)
+                    continue
+
+                # Case 2: attribute is a provider (assumed singleton)
+                try:
+                    instance = attr()
+                except Exception as e:
+                    logger.warn(f"Unable to resolve provier {attr}", exc_info=True)
+                    # Defensive: skip providers that cannot be resolved
+                    continue
+
+                if isinstance(instance, base_type):
+                    matches.append(instance)
+        except Exception as exc:
+            logger.error(
+                f"Error finding instances by type {base_type}",
+                exc_info=True,
+            )
+
+        return matches
+
+    def find_one_by_type(self, base_type: Type[T]) -> T:
+        """
+        Convenience method to find a single instnace of a particular type on the DI container.  If anything on other
+        than a single instacce is found on the DI container a FlotillaConfigurationError is raised.
+        """
+        matches = self.find_instances_by_type(base_type)
+
+        if not matches:
+            raise FlotillaConfigurationError(
+                f"No instances of type {base_type.__name__} found in container"
+            )
+
+        if len(matches) > 1:
+            raise FlotillaConfigurationError(
+                f"Multiple instances of type {base_type.__name__} found: {matches}"
+            )
+
+        return matches[0]
 
     def resolve_ref(self, ref: dict) -> Any:
         """
         Docstring for resolve_ref
-        
+
         :param self: Description
         :param ref: Description
         :type ref: dict
@@ -171,13 +237,9 @@ class FlotillaContainer:
         if not isinstance(key, str):
             raise ReferenceResolutionError("$ref must be a string")
 
-
         componnt = self.get(key)
         if componnt is None:
             raise ReferenceResolutionError(f"$ref '{key}' not found in container")
- 
-            
-
 
     def build(self) -> FlotillaContainer:
         """
@@ -223,6 +285,3 @@ class FlotillaContainer:
 
         self._built = True
         return self
-
-
-

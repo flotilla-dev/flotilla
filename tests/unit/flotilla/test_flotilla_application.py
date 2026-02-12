@@ -12,9 +12,10 @@ from flotilla.config.sources.dict_configuration_source import DictConfigurationS
 # Fixtures
 # ---------------------------------------------------------------------
 
+
 @pytest.fixture
-def empty_sources():
-    return [DictConfigurationSource({})]
+def min_source():
+    return [DictConfigurationSource({"runtime": {"factory": "runtime.mock"}})]
 
 
 @pytest.fixture
@@ -23,16 +24,20 @@ def no_secrets():
 
 
 @pytest.fixture
-def app(empty_sources, no_secrets):
-    return FlotillaApplication(
-        sources=empty_sources,
+def app(min_source, no_secrets, mock_flotilla_runtime_factory):
+    app = FlotillaApplication(
+        sources=min_source,
         secrets=no_secrets,
     )
+    app.register_factory("runtime.mock", mock_flotilla_runtime_factory)
+
+    return app
 
 
 # ---------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------
+
 
 def test_application_initial_state(app):
     assert app.started is False
@@ -46,24 +51,6 @@ def test_application_start_builds_container(app):
 
     assert app.started is True
     assert isinstance(app.container, FlotillaContainer)
-
-
-def test_application_registers_default_contributors(app):
-    # No explicit assertion on wiring side-effects yet;
-    # container build success is the contract.
-    app.start()
-    assert isinstance(app.container, FlotillaContainer)
-
-
-def test_application_allows_custom_contributor_registration(empty_sources, no_secrets):
-    app = FlotillaApplication(
-        sources=empty_sources,
-        secrets=no_secrets,
-    )
-
-
-    app.start()
-
 
 
 def test_container_property_raises_before_start(app):

@@ -37,8 +37,10 @@ class FlotillaApplication:
     This class serves as the primary integration point for real runtimes
     (CLI, FastAPI, workers, etc.).
     """
-        
-    def __init__(self, sources:List[ConfigurationSource], secrets:List[SecretResolver]):
+
+    def __init__(
+        self, sources: List[ConfigurationSource], secrets: List[SecretResolver]
+    ):
         """
         Create a new FlotillaApplication.
 
@@ -55,8 +57,9 @@ class FlotillaApplication:
         is loaded and no container is built until start() is called.
         """
         self._builders: Dict[str, ComponentFactory] = {}
-        self._loader:ConfigLoader = ConfigLoader(sources=sources, secrets=secrets)
+        self._loader: ConfigLoader = ConfigLoader(sources=sources, secrets=secrets)
         self._container = None
+        self._runtime = None
         self._started = False
 
     # ----------------------------
@@ -72,7 +75,7 @@ class FlotillaApplication:
         """
         self._builders[builder_name] = builder
 
-    def register_factory_group(self, group:FactoryGroup):
+    def register_factory_group(self, group: FactoryGroup):
         """
         Register a group of component builders.
 
@@ -82,12 +85,11 @@ class FlotillaApplication:
         for name, builder in group.builders().items():
             self.register_factory(name, builder)
 
-
     # ----------------------------
     # Build lifecycle
     # ----------------------------
 
-    def _build_container(self, settings:FlotillaSettings) -> FlotillaContainer:
+    def _build_container(self, settings: FlotillaSettings) -> FlotillaContainer:
         container = FlotillaContainer(settings)
 
         # Apply factories
@@ -95,9 +97,6 @@ class FlotillaApplication:
             container.register_factory(name, builder)
 
         return container.build()
-    
-
-
 
     def start(self):
         """
@@ -119,8 +118,8 @@ class FlotillaApplication:
         """
         settings = self._loader.load()
         self._container = self._build_container(settings=settings)
+        self._runtime = self._container.find_one_by_type(FlotillaRuntime)
         self._started = True
-
 
     def shutdown(self):
         if not self._started:
@@ -130,11 +129,10 @@ class FlotillaApplication:
         self._container = None
         self._started = False
 
-
     # ----------------------------
     # Accessors
     # ----------------------------
-    
+
     @property
     def container(self) -> FlotillaContainer:
         """
@@ -154,11 +152,10 @@ class FlotillaApplication:
     @property
     def started(self) -> bool:
         return self._started
-    
+
     @property
     def runtime(self) -> FlotillaRuntime:
-        #TODO change how runtime is returned from the container
         if not self.started:
             raise RuntimeError("Application not started")
-        
-        return self._container.get("orchestration_engine")
+
+        return self._runtime
