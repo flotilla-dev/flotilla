@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import List, Optional, Callable, Any, Dict
 from pydantic import ConfigDict
 
-from langchain_core.tools import StructuredTool
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -16,9 +15,9 @@ from flotilla.agents.base_business_agent import (
     AgentCapability,
     ToolDependency,
 )
-from flotilla.tools.base_tool_provider import BaseToolProvider
-from flotilla.tools.tool_config import ToolConfig
+
 from flotilla.core.flotilla_runtime import FlotillaRuntime
+from flotilla.tools.flotilla_tool import FlotillaTool
 
 
 class MockBusinessAgent(BaseBusinessAgent):
@@ -58,35 +57,32 @@ class MockFlotillaRuntime(FlotillaRuntime):
         pass
 
 
+class MockFlotillaTool(FlotillaTool):
+    def __init__(self, name: str, description: str, func: Callable, **kwargs):
+        self._name = name
+        self._description = description
+        self._func = func
+        self.extra_kwargs = kwargs
+        super().__init__()
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def llm_description(self) -> str:
+        return self._description
+
+    def execution_callable(self) -> Callable:
+        return self._func
+
+
 @pytest.fixture
 def mock_flotilla_runtime_factory():
     def factory(**kwargs):
         return MockFlotillaRuntime(**kwargs)
 
     return factory
-
-
-class MockToolProvider(BaseToolProvider):
-    def __init__(
-        self,
-        *,
-        provider_id,
-        provider_name,
-        config,
-        tools: List[StructuredTool],
-        **kwargs,
-    ):
-        self.mock_tools = tools
-        self.extra_kwags = kwargs
-        super().__init__(
-            provider_id=provider_id, provider_name=provider_name, config=config
-        )
-
-    def _configure_tools(self):
-        pass
-
-    def _register_tools(self):
-        return self.mock_tools
 
 
 @pytest.fixture
@@ -178,38 +174,19 @@ def agent_factory():
 
 
 @pytest.fixture
-def tool_provider_factory():
-    def _factory(
-        *, provider_id: str, config: ToolConfig, tools: List[StructuredTool], **kwargs
-    ):
-        return MockToolProvider(
-            provider_id=provider_id,
-            provider_name=provider_id,
-            config=config,
-            tools=tools,
-            **kwargs,
-        )
-
-    return _factory
-
-
-@pytest.fixture
 def tool_factory():
     def _factory(
         *,
         name: str,
         description: Optional[str] = None,
         func: Optional[Callable] = None,
-    ) -> StructuredTool:
+        **kwargs,
+    ) -> FlotillaTool:
         if func is None:
 
             def func(**kwargs):
                 return "ok"
 
-        return StructuredTool.from_function(
-            func=func,
-            name=name,
-            description=description or f"Mock tool '{name}'",
-        )
+        return MockFlotillaTool(name=name, description=description, func=func, **kwargs)
 
     return _factory

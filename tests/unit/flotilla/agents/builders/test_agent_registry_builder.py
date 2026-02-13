@@ -6,16 +6,17 @@ from flotilla.core.errors import FlotillaConfigurationError
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.agents.factories.agent_registry_factory import agent_registry_factory
 
+
 @pytest.fixture
 def container():
     container = MagicMock(spec=FlotillaContainer)
     return container
 
+
 def test_agent_registry_builder_happy_path(
     container,
     agent_factory,
     mock_agent_selector,
-    mock_tool_registry,
 ):
     agent_names = ["weather", "calculator"]
 
@@ -41,7 +42,6 @@ def test_agent_registry_builder_happy_path(
         container=container,
         agent_names=agent_names,
         agent_selector=mock_agent_selector,
-        tool_registry=mock_tool_registry,
     )
 
     assert isinstance(registry, BusinessAgentRegistry)
@@ -52,7 +52,6 @@ def test_agent_registry_builder_happy_path(
 def test_agent_registry_builder_raises_if_agent_missing(
     container,
     mock_agent_selector,
-    mock_tool_registry,
 ):
     agent_names = ["weather"]
 
@@ -63,14 +62,12 @@ def test_agent_registry_builder_raises_if_agent_missing(
             container=container,
             agent_names=agent_names,
             agent_selector=mock_agent_selector,
-            tool_registry=mock_tool_registry,
         )
 
 
 def test_agent_registry_builder_raises_if_not_business_agent(
     container,
     mock_agent_selector,
-    mock_tool_registry,
 ):
     agent_names = ["weather"]
 
@@ -82,14 +79,13 @@ def test_agent_registry_builder_raises_if_not_business_agent(
             container=container,
             agent_names=agent_names,
             agent_selector=mock_agent_selector,
-            tool_registry=mock_tool_registry,
         )
+
 
 def test_agent_registry_builder_handles_callable_provider(
     container,
     agent_factory,
     mock_agent_selector,
-    mock_tool_registry,
 ):
     agent_names = ["weather"]
 
@@ -108,7 +104,6 @@ def test_agent_registry_builder_handles_callable_provider(
         container=container,
         agent_names=agent_names,
         agent_selector=mock_agent_selector,
-        tool_registry=mock_tool_registry,
     )
 
     assert registry.get_agent("weather") is weather_agent

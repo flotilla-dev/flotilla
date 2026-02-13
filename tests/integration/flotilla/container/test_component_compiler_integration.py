@@ -7,9 +7,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.tools.base_tool_provider import BaseToolProvider
 from flotilla.agents.base_business_agent import BaseBusinessAgent
 from flotilla.core.flotilla_runtime import FlotillaRuntime
+from flotilla.tools.flotilla_tool import FlotillaTool
 from flotilla.selectors.builders.agent_selector_builders import (
     keyword_agent_selector_builder,
 )
@@ -66,7 +66,6 @@ config = {
 
 
 def test_full_graph_integration(
-    tool_provider_factory,
     tool_factory,
     agent_factory,
     mock_flotilla_runtime_factory,
@@ -96,26 +95,23 @@ def test_full_graph_integration(
         agent.attach_tools(tools=tools)
         return agent
 
-    def weather_tool_factory(api_key: str, base_url: str) -> BaseToolProvider:
-        return tool_provider_factory(
-            provider_id="weather_tools",
-            config=None,
-            tools=[tool_factory(name="weather_tool")],
+    def weather_tool_factory(api_key: str, base_url: str) -> FlotillaTool:
+        return tool_factory(
+            name="Weather Tool",
+            description="Call to get weather data",
             api_key=api_key,
             base_url=base_url,
         )
 
-    def audit_tool_factory(level: str) -> BaseToolProvider:
-        return tool_provider_factory(
-            provider_id="audit_tools",
-            config=None,
-            tools=[tool_factory(name="audit_tool")],
-            level=level,
+    def audit_tool_factory(level: str) -> FlotillaTool:
+        return tool_factory(
+            name="Audit Tool", description="Mock audit tool", level=level
         )
 
-    def inline_tool_factory(name: str) -> BaseToolProvider:
-        return tool_provider_factory(
-            provider_id=name, config=None, tools=[tool_factory(name=name)]
+    def inline_tool_factory(name: str) -> FlotillaTool:
+        return tool_factory(
+            name=name,
+            description="description",
         )
 
     def mock_runtime_factory(agent: BaseBusinessAgent) -> FlotillaRuntime:
@@ -185,10 +181,6 @@ def test_full_graph_integration(
     assert weather_tool in agent.tools
     assert container.get("tools.audit") in agent.tools
     assert len(agent.tools) == 3
-    inline_tool = next(
-        tool for tool in agent.tools if tool.provider_id == "inline_tool"
-    )
-    assert inline_tool
 
     assert agent.extra_kwargs["metadata"]
     assert agent.extra_kwargs["metadata"]["owner"] == "Geoff"
