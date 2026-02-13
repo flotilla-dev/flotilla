@@ -4,22 +4,19 @@ import yaml
 from pathlib import Path
 from typing import List, Optional, Callable
 from langgraph.checkpoint.memory import InMemorySaver
-from langchain_core.tools import StructuredTool
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from flotilla.tools.flotilla_tool import FlotillaTool
 
 from flotilla.agents.base_business_agent import (
     BaseBusinessAgent,
     AgentCapability,
     ToolDependency,
 )
-from flotilla.tools.tool_registry import ToolRegistry
 from flotilla.agents.agent_selector import AgentSelector
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.selectors.keyword_agent_selector import KeywordAgentSelector
-from flotilla.tools.base_tool_provider import BaseToolProvider
-from flotilla.tools.tool_config import ToolConfig
 from flotilla.core.flotilla_runtime import FlotillaRuntime
 
 
@@ -71,22 +68,6 @@ def mock_flotilla_runtime_factory():
     return factory
 
 
-class MockToolProvider(BaseToolProvider):
-    def __init__(
-        self, *, provider_id, provider_name, config, tools: List[StructuredTool]
-    ):
-        self.mock_tools = tools
-        super().__init__(
-            provider_id=provider_id, provider_name=provider_name, config=config
-        )
-
-    def _configure_tools(self):
-        pass
-
-    def _register_tools(self):
-        return self.mock_tools
-
-
 @pytest.fixture
 def tmp_config_dir(tmp_path: Path) -> Path:
     """Creates a temporary config directory with empty default files."""
@@ -135,11 +116,6 @@ def mock_llm() -> BaseChatModel:
 
 
 @pytest.fixture
-def mock_tool_registry() -> ToolRegistry:
-    return ToolRegistry(tool_providers=[])
-
-
-@pytest.fixture
 def mock_agent_selector() -> AgentSelector:
     return KeywordAgentSelector(min_confidence=0.2)
 
@@ -164,17 +140,23 @@ def agent_factory(mock_llm, mock_checkpointer):
     return _factory
 
 
-@pytest.fixture
-def tool_provider_factory():
-    def _factory(*, provider_id: str, config: ToolConfig, tools: List[StructuredTool]):
-        return MockToolProvider(
-            provider_id=provider_id,
-            provider_name=provider_id,
-            config=config,
-            tools=tools,
-        )
+class MockFlotillaTool(FlotillaTool):
+    def __init__(self, name: str, description: str, func: Callable):
+        self._name = name
+        self._description = description
+        self._func = func
+        super().__init__()
 
-    return _factory
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def desciption(self) -> str:
+        return self._description
+
+    def execution_callable(self) -> Callable:
+        return self._func
 
 
 @pytest.fixture
@@ -184,17 +166,13 @@ def tool_factory():
         name: str,
         description: Optional[str] = None,
         func: Optional[Callable] = None,
-    ) -> StructuredTool:
+    ) -> FlotillaTool:
         if func is None:
 
             def func(**kwargs):
                 return "ok"
 
-        return StructuredTool.from_function(
-            func=func,
-            name=name,
-            description=description or f"Mock tool '{name}'",
-        )
+        return MockFlotillaTool(name=name, description=description, func=func)
 
     return _factory
 

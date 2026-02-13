@@ -1,17 +1,21 @@
 """
 Base class for business logic agents
 """
+
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 
 from pydantic import BaseModel, Field
 from langchain.chat_models.base import BaseChatModel
-from langchain_core.tools import StructuredTool
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langgraph.types import Checkpointer
-from langgraph.graph.state import CompiledStateGraph  
-from flotilla.agents.business_agent_response import BusinessAgentResponse, ResponseStatus, ErrorResponse
+from langgraph.graph.state import CompiledStateGraph
+from flotilla.agents.business_agent_response import (
+    BusinessAgentResponse,
+    ResponseStatus,
+    ErrorResponse,
+)
 from flotilla.agents.response_factory import ResponseFactory
 from flotilla.core.agent_input import AgentInput
 from flotilla.core.execution_config import ExecutionConfig
@@ -22,20 +26,30 @@ logger = get_logger(__name__)
 
 
 # ------------------------------
-# AgentCapability 
+# AgentCapability
 # ------------------------------
+
 
 class AgentCapability(BaseModel):
     """Describes what an agent can do"""
+
     name: str = Field(..., description="Capability name")
     description: str = Field(..., description="What this capability does")
-    keywords: List[str] = Field(default_factory=list, description="Keywords for matching")
+    keywords: List[str] = Field(
+        default_factory=list, description="Keywords for matching"
+    )
     examples: List[str] = Field(default_factory=list, description="Example queries")
+
 
 class ToolDependency(BaseModel):
     """Describes a dependency on a Tool for the Agent"""
-    tool_name:str = Field(..., description="The name of the tool that is a dependency for the Agent")
-    required:bool = Field(default=True, description="Describes if a Tool is required or not by the Agent.")
+
+    tool_name: str = Field(
+        ..., description="The name of the tool that is a dependency for the Agent"
+    )
+    required: bool = Field(
+        default=True, description="Describes if a Tool is required or not by the Agent."
+    )
 
 
 class BaseBusinessAgent(ABC):
@@ -79,7 +93,15 @@ CONFLICT & OVERRIDE CONTROL:
 
 END SYSTEM.
 """
-    def __init__(self, *, agent_id:str, agent_name:str, llm:BaseChatModel, checkpointer:Checkpointer):
+
+    def __init__(
+        self,
+        *,
+        agent_id: str,
+        agent_name: str,
+        llm: BaseChatModel,
+        checkpointer: Checkpointer,
+    ):
         self.agent_id = agent_id
         self.agent_name = agent_name
         self._capabilities = self._initialize_capabilities()
@@ -88,25 +110,22 @@ END SYSTEM.
         self._tool_dependencies = self._initialize_dependencies()
         self.started = False
 
-        
     # ------------------------------
     # Lifecycle methods
     # ------------------------------
-    
+
     def startup(self):
         """Lifecycle method that allows BusinessAgents to perform necessary startup logic before use.  This method is called after configure()"""
         logger.debug(f"Run empty startup on Agent {self.agent_name}")
         self._agent = self._create_internal_agent()
         self.started = True
 
-
     def shutdown(self):
         """Lifecycle method that allows subclasses to perform necessary cleanup"""
         logger.debug(f"Run empty shutdown on Agent {self.agent_name}")
         self.started = False
 
-    
-    def attach_tools(self, tools:List[StructuredTool]):
+    def attach_tools(self, tools: List[Any]):
         """
         Lifecycle method called by the AgentRegistry during startup that attaches the list of Tools that are available to this Agent.  This method
         is called before startup() is called
@@ -123,22 +142,22 @@ END SYSTEM.
         """
         return self._tool_dependencies
 
-
-    def run(self, *, agent_input:AgentInput, config:ExecutionConfig) -> BusinessAgentResponse:
-    
+    def run(
+        self, *, agent_input: AgentInput, config: ExecutionConfig
+    ) -> BusinessAgentResponse:
         """
-        Execute business logic for the agnet input.  This method assumes that a Langchain agnet has been 
+        Execute business logic for the agnet input.  This method assumes that a Langchain agnet has been
         created via create_agent() call and is assigned to self.agent.  IF this is not the case
         then an BusinessAgentResponse with a status of ResponseStatus.APP_MISCONFIGURED will be returned.
 
-        If self.agent exists and correctly configured then it is invoked with the user query and the LLM's 
-        response is mapped to a valid BusinessAgentResponse.  If the call to the LLM fails then BusinessAgentResponse 
+        If self.agent exists and correctly configured then it is invoked with the user query and the LLM's
+        response is mapped to a valid BusinessAgentResponse.  If the call to the LLM fails then BusinessAgentResponse
         is returned with a status of ResponseStatus.LLM_CALL_FAILED
-        
+
         Args:
             agent_input - The input from the user to execute the agent
             config - The execution config that describes the rules for running the agent
-            
+
         Returns:
             Standard response object containing the results
         """
@@ -148,7 +167,12 @@ END SYSTEM.
                 query=agent_input.query,
                 agent_name=self.get_name(),
                 message="Agent was not properly initialized.",
-                errors=[ErrorResponse(error_code="AGENT_NOT_INITIALIZED", error_details="startup() must initialize self.agent")]
+                errors=[
+                    ErrorResponse(
+                        error_code="AGENT_NOT_INITIALIZED",
+                        error_details="startup() must initialize self.agent",
+                    )
+                ],
             )
 
         try:
@@ -156,7 +180,9 @@ END SYSTEM.
             graph_config = self._to_graph_config(config)
             logger.info(f"Execute agent with input: '{graph_state}'")
             raw = self._agent.invoke(graph_state, config=graph_config)
-            return ResponseFactory.parse_llm_response(query=agent_input.query, agent_name=self.get_name(), llm_response=raw)
+            return ResponseFactory.parse_llm_response(
+                query=agent_input.query, agent_name=self.get_name(), llm_response=raw
+            )
         except Exception as e:
             logger.error(f"Internal agent failed in {self.agent_name}")
             return ResponseFactory.build_error_response(
@@ -164,26 +190,29 @@ END SYSTEM.
                 query=agent_input.query,
                 agent_name=self.get_name(),
                 message="Error while calling LLM",
-                errors=[ErrorResponse(error_code="AGENT_EXECUTION_FAILED", error_details=str(e))]
+                errors=[
+                    ErrorResponse(
+                        error_code="AGENT_EXECUTION_FAILED", error_details=str(e)
+                    )
+                ],
             )
- 
 
     # ------------------------------
     # Public API
     # ------------------------------
-    
+
     def get_capabilities(self) -> List[AgentCapability]:
         """Return list of agent capabilities"""
         return self._capabilities
-    
+
     def get_name(self) -> str:
         """Return the name of the agent"""
         return self.agent_name
-    
+
     def get_id(self) -> str:
         """Return the id of the agent"""
         return self.agent_id
-    
+
     def get_info(self) -> Dict[str, Any]:
         """Get agent information"""
         return {
@@ -193,12 +222,12 @@ END SYSTEM.
                 {
                     "name": cap.name,
                     "description": cap.description,
-                    "keywords": cap.keywords
+                    "keywords": cap.keywords,
                 }
                 for cap in self._capabilities
-            ]
+            ],
         }
-    
+
     # -----------------------------------------------------------------------
     # Internal methods
     # -----------------------------------------------------------------------
@@ -233,7 +262,7 @@ END SYSTEM.
             },
             "metadata": input.metadata,
         }
-    
+
     def _to_graph_config(self, config: ExecutionConfig) -> dict:
         """
         Convert an ExecutionConfig into LangGraph execution configuration.
@@ -267,24 +296,18 @@ END SYSTEM.
 
         return graph_config
 
-  
-    
     def _create_internal_agent(self) -> CompiledStateGraph:
         """
         Construct the final agent using system prompt + domain prompt + tools.
 
-        This method should return a CompiledStateGraph from Langchain.  This is the same 
+        This method should return a CompiledStateGraph from Langchain.  This is the same
         type of object returned by the create_agent() factory method from Langchain.  This method
-        works correctly and is designed to create a simple single agent flow.  But subclasses 
-        can override this method to create more complex Langchain agents or even multi-agent flows.  
+        works correctly and is designed to create a simple single agent flow.  But subclasses
+        can override this method to create more complex Langchain agents or even multi-agent flows.
         """
-        
+
         # Combine base and agent-specific instructions
-        final_prompt = (
-            self.DEFAULT_PROMPT
-            + "\n\n"
-            + self._get_agent_domain_prompt()
-        )
+        final_prompt = self.DEFAULT_PROMPT + "\n\n" + self._get_agent_domain_prompt()
         logger.debug(f"Final prompt {final_prompt} for agent {self.agent_name}")
 
         # Build the langchain agent
@@ -292,20 +315,20 @@ END SYSTEM.
             model=self._llm,
             system_prompt=final_prompt,
             tools=self.tools,
-            checkpointer=self._checkpointer
+            checkpointer=self._checkpointer,
         )
 
     def _get_agent_domain_prompt(self) -> str:
         """
-        Allows simple Business Agnets to return their domain specific prompt as part of the standard internal agent creation process.  
+        Allows simple Business Agnets to return their domain specific prompt as part of the standard internal agent creation process.
 
-        Returns: The prompt that is speicifc to the Agent.  This will be included with BusinessAgent default prompt which is intended to properly map LLM respones to the 
+        Returns: The prompt that is speicifc to the Agent.  This will be included with BusinessAgent default prompt which is intended to properly map LLM respones to the
         standard response object
         """
         return ""
-    
+
     # ------------------------------
-    # Abstract methods to be implemented by subclasses 
+    # Abstract methods to be implemented by subclasses
     # ------------------------------
 
     @abstractmethod
@@ -314,5 +337,3 @@ END SYSTEM.
 
     def _initialize_dependencies(self) -> List[ToolDependency]:
         """Create the list ToolDepdencies for this agent, must be implemented by subclasses"""
-
-
