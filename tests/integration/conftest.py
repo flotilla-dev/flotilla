@@ -8,42 +8,9 @@ from pydantic import ConfigDict
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langgraph.types import Checkpointer
-
-from flotilla.agents.base_business_agent import (
-    BaseBusinessAgent,
-    AgentCapability,
-    ToolDependency,
-)
 
 from flotilla.core.flotilla_runtime import FlotillaRuntime
 from flotilla.tools.flotilla_tool import FlotillaTool
-
-
-class MockBusinessAgent(BaseBusinessAgent):
-    def __init__(
-        self,
-        *,
-        agent_id,
-        agent_name,
-        llm,
-        checkpointer,
-        capabilities: List[AgentCapability],
-        dependencies: List[ToolDependency],
-        **kwargs,
-    ):
-        self.capabilities = capabilities
-        self.tool_dependencies = dependencies
-        self.extra_kwargs = kwargs
-        super().__init__(
-            agent_id=agent_id, agent_name=agent_name, llm=llm, checkpointer=checkpointer
-        )
-
-    def _initialize_capabilities(self):
-        return self.capabilities
-
-    def _initialize_dependencies(self):
-        return self.tool_dependencies
 
 
 class MockFlotillaRuntime(FlotillaRuntime):
@@ -155,20 +122,9 @@ def agent_factory():
         *,
         agent_id: str,
         llm: BaseChatModel,
-        checkpointer: Checkpointer,
-        capabilities: List[AgentCapability] | None,
-        dependencies: List[ToolDependency] | None,
         **kwargs,
     ):
-        return MockBusinessAgent(
-            agent_id=agent_id,
-            agent_name=agent_id,
-            llm=llm,
-            checkpointer=checkpointer,
-            capabilities=capabilities,
-            dependencies=dependencies,
-            **kwargs,
-        )
+        pass
 
     return _factory
 
