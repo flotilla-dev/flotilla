@@ -20,6 +20,7 @@ class ComponentCompiler:
     _TAG_LIST = "$list"
     _TAG_MAP = "$map"
     _TAG_REF = "$ref"
+    _TAG_PROVIDER = "provider"
 
     def __init__(self, *, container: FlotillaContainer):
         self._container = container
@@ -118,7 +119,7 @@ class ComponentCompiler:
         if not isinstance(factory_name, str):
             raise FlotillaConfigurationError(f"{cfg_path}.factory must be a string")
 
-        factory = self._container.get_factory(factory_name)
+        factory = self._container.get_provider(factory_name)
         if factory is None:
             raise FlotillaConfigurationError(
                 f"{cfg_path}: no factory registered under key '{factory_name}'"
@@ -282,7 +283,11 @@ class ComponentCompiler:
 
         node = self._component_defs[name]
         cfg_path = self._component_paths[name]
-        factory = self._container.get_factory(node["factory"])
+        provider = self._container.get_provider(node["factory"])
+        if provider is None:
+            raise FlotillaConfigurationError(
+                f"{cfg_path}: unknown provider '{node['factory']}'"
+            )
 
         kwargs = {}
         for key, val in node.items():
@@ -292,7 +297,9 @@ class ComponentCompiler:
                 val, owner_path=cfg_path, arg_name=key
             )
 
-        self._container.wire_component(component_name=name, factory=factory, **kwargs)
+        componet = provider(**kwargs)
+
+        self._container.register_component(component_name=name, component=componet)
         self._instantiated.add(name)
 
     def _materialize_value(self, value, *, owner_path, arg_name):

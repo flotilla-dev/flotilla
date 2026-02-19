@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from flotilla.container.flotilla_container import FlotillaContainer
 
 
-class ComponentFactory(Protocol):
+class ComponentProvider(Protocol):
     """
     A callable responsible for constructing a framework component
     from configuration and container context.

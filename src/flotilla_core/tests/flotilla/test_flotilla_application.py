@@ -29,7 +29,7 @@ def app(min_source, no_secrets, mock_flotilla_runtime_factory):
         sources=min_source,
         secrets=no_secrets,
     )
-    app.register_factory("runtime.mock", mock_flotilla_runtime_factory)
+    app.register_provider("runtime.mock", mock_flotilla_runtime_factory)
 
     return app
 

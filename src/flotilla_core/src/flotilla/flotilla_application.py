@@ -1,7 +1,7 @@
 from typing import Dict, List
 
-from flotilla.container.component_factory import ComponentFactory
-from flotilla.container.factory_group import FactoryGroup
+from flotilla.container.component_provider import ComponentProvider
+from flotilla.container.provider_group import ProviderGroup
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.secret_resolver import SecretResolver
@@ -56,7 +56,7 @@ class FlotillaApplication:
         The application is created in a non-started state. No configuration
         is loaded and no container is built until start() is called.
         """
-        self._builders: Dict[str, ComponentFactory] = {}
+        self._providers: Dict[str, ComponentProvider] = {}
         self._loader: ConfigLoader = ConfigLoader(sources=sources, secrets=secrets)
         self._container = None
         self._runtime = None
@@ -66,16 +66,16 @@ class FlotillaApplication:
     # Extension API (app-owned)
     # ----------------------------
 
-    def register_factory(self, builder_name: str, builder: ComponentFactory):
+    def register_provider(self, builder_name: str, builder: ComponentProvider):
         """
         Register a named component builder with the application.
 
         Registered builders are applied to the container during startup
         before contributors are executed.
         """
-        self._builders[builder_name] = builder
+        self._providers[builder_name] = builder
 
-    def register_factory_group(self, group: FactoryGroup):
+    def register_proivder_group(self, group: ProviderGroup):
         """
         Register a group of component builders.
 
@@ -83,7 +83,7 @@ class FlotillaApplication:
         under their declared names.
         """
         for name, builder in group.builders().items():
-            self.register_factory(name, builder)
+            self.register_provider(name, builder)
 
     # ----------------------------
     # Build lifecycle
@@ -93,8 +93,8 @@ class FlotillaApplication:
         container = FlotillaContainer(settings)
 
         # Apply factories
-        for name, builder in self._builders.items():
-            container.register_factory(name, builder)
+        for name, builder in self._providers.items():
+            container.register_provider(name, builder)
 
         return container.build()
 

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from dependency_injector import containers, providers
-from dependency_injector.providers import Provider
 
-from typing import List, Optional, Any, Type, TypeVar
+from typing import List, Optional, Any, Type, TypeVar, Callable
 
 from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.container.component_factory import ComponentFactory
+from flotilla.container.component_provider import ComponentProvider
 from flotilla.container.component_compiler import ComponentCompiler
+from flotilla.container.binding import Binding
+from flotilla.container.singleton_binding import SingletonBinding
+from flotilla.container.factory_binding import FactoryBinding
 from flotilla.utils.logger import get_logger
 from flotilla.core.errors import FlotillaConfigurationError, ReferenceResolutionError
 
@@ -22,12 +23,8 @@ class FlotillaContainer:
 
     def __init__(self, settings: FlotillaSettings):
         self.settings = settings
-
-        self.di = containers.DeclarativeContainer()
-        self.di.config = providers.Configuration()
-        self.di.config.from_dict(settings.config)
-
-        self._factories: dict[str, ComponentFactory] = {}
+        self._providers: dict[str, ComponentProvider] = {}
+        self._bindings: dict[str, Binding] = {}
 
         self._pre_compile_hooks = []
         self._post_compile_hooks = []
@@ -42,60 +39,60 @@ class FlotillaContainer:
     def config_dict(self) -> dict:
         return self.settings.config
 
-    def register_factory(self, factory_name: str, factory: ComponentFactory):
+    def register_provider(self, provider_name: str, provider: ComponentProvider):
         """
-        Register a factory function that can be referenced by name in config.
+        Register a provider function that can be referenced by name in config.
 
         Args:
-            buidler_name - The name (key) of the factory function
-            factory - The factory function
+            provider_name - The name (key) of the provider function
+            provider - The provider function
         """
-        logger.info(f"Register factory '{factory_name}'")
-        self._factories[factory_name] = factory
+        self._assert_not_built()
+        logger.info(f"Register provider '{provider_name}'")
+        self._providers[provider_name] = provider
 
-    def get_factory(self, factory_name: str) -> Optional[ComponentFactory]:
+    def get_provider(self, provider_name: str) -> Optional[ComponentProvider]:
         """
-        Gets the factory for the provided buidler_name, returns None if it doesn't exist
+        Gets the provider for the provided buidler_name, returns None if it doesn't exist
 
         Args:
-            factory_name - The name of the factory to return
+            provider_name - The name of the provider to return
 
         Returns:
-            The factory function for the name or None if it doesn't exist
+            The provider function for the name or None if it doesn't exist
         """
-        logger.info(f"Get factory for {factory_name}")
-        return self._factories.get(factory_name)
+        logger.info(f"Get provider for {provider_name}")
+        return self._providers.get(provider_name)
 
-    def wire_component(
-        self, *, component_name: str, factory: ComponentFactory, **kwargs
+    def register_component(
+        self,
+        *,
+        component_name: str,
+        component: Any,
     ):
-        """
-        Wire a singleton into the dependency container using an explicit factory function.
+        """ """
+        self._assert_not_built()
+        if component_name in self._bindings:
+            raise FlotillaConfigurationError(
+                f"Component '{component_name}' already registered"
+            )
 
-        This method performs the actual wiring by registering a singleton provider with
-        the dependency-injector container. No validation, configuration lookup, or
-        argument processing is performed. All keyword arguments are passed directly to
-        the factory function.
+        logger.info(f"Register component {component_name}")
+        self._bindings[component_name] = SingletonBinding(component)
 
-        This method is intended for framework-owned or internal components where the
-        factory function is known explicitly.
+    def register_factory(
+        self, component_name: str, factory: Callable[..., Any], **kwargs
+    ):
+        """ """
+        self._assert_not_built()
+        if component_name in self._bindings:
+            raise FlotillaConfigurationError(
+                f"Component '{component_name}' already registered"
+            )
+        logger.info(f"Register component factory {component_name}")
+        self._bindings[component_name] = FactoryBinding(factory, **kwargs)
 
-        Args:
-            name (str):
-                Attribute name under which the singleton provider will be registered on
-                the dependency container.
-            factory (Componentfactory):
-                factory function used to construct the singleton instance.
-            **kwargs:
-                Keyword arguments passed directly to the factory function.
-        """
-
-        logger.info(
-            f"Register singleton {component_name} with factory function {factory}"
-        )
-        setattr(self.di, component_name, providers.Singleton(factory, **kwargs))
-
-    def get(self, name: str) -> Optional[Any]:
+    def get(self, name: str) -> Any:
         """
         Retrieve a resolved component from the container if it exists.
 
@@ -120,15 +117,15 @@ class FlotillaContainer:
             The resolved component instance, or ``None`` if the component is
             not present.
         """
-        provider = getattr(self.di, name, None)
-        if provider is None:
-            return None
 
         try:
-            return provider()
-        except Exception:
-            logger.exception(f"Failed to resolve component '{name}'")
-            raise
+            binding = self._bindings[name]
+        except KeyError:
+            raise FlotillaConfigurationError(
+                f"Component '{name}' not found in container"
+            )
+
+        return binding.resolve()
 
     def exists(self, name: str) -> bool:
         """
@@ -148,7 +145,7 @@ class FlotillaContainer:
         bool
             True if the component is present, False otherwise.
         """
-        return hasattr(self.di, name)
+        return name in self._bindings
 
     T = TypeVar("T")
 
@@ -162,46 +159,19 @@ class FlotillaContainer:
         :return: Description
         :rtype: List[T]
         """
-        if not self._built:
-            raise FlotillaConfigurationError(
-                f"Ensure that build() is called on FlotillaContainer before attempting to find instances by type {base_type}"
-            )
+        self._assert_built()
 
         matches: List[T] = []
-        try:
-            for attr_name in dir(self.di):
-                if attr_name.startswith("_"):
-                    continue
 
-                attr = getattr(self.di, attr_name, None)
+        for binding in self._bindings.values():
+            try:
+                instance = binding.resolve()
+            except Exception:
+                # Defensive: skip bindings that cannot resolve
+                continue
 
-                if not attr:
-                    logger.warn(
-                        f"Could not find attribute {attr_name} on DI Container, continue"
-                    )
-                    continue
-
-                # Case 1: attribute is already an instance
-                if not isinstance(attr, Provider):
-                    if isinstance(attr, base_type):
-                        matches.append(attr)
-                    continue
-
-                # Case 2: attribute is a provider (assumed singleton)
-                try:
-                    instance = attr()
-                except Exception as e:
-                    logger.warn(f"Unable to resolve provier {attr}", exc_info=True)
-                    # Defensive: skip providers that cannot be resolved
-                    continue
-
-                if isinstance(instance, base_type):
-                    matches.append(instance)
-        except Exception as exc:
-            logger.error(
-                f"Error finding instances by type {base_type}",
-                exc_info=True,
-            )
+            if isinstance(instance, base_type):
+                matches.append(instance)
 
         return matches
 
@@ -224,6 +194,7 @@ class FlotillaContainer:
 
         return matches[0]
 
+    '''
     def resolve_ref(self, ref: dict) -> Any:
         """
         Docstring for resolve_ref
@@ -244,6 +215,20 @@ class FlotillaContainer:
         componnt = self.get(key)
         if componnt is None:
             raise ReferenceResolutionError(f"$ref '{key}' not found in container")
+        '''
+
+    def _assert_not_built(self):
+        """Checks to see if the container has not been built.  If it has then it raises a RuntimeError"""
+        if self._built:
+            raise RuntimeError(
+                "FlotillaContainer.build() has already finished and further changes are not allowed"
+            )
+
+    def _assert_built(self):
+        if not self._built:
+            raise RuntimeError(
+                "FlotillaContainer.build() must be called before accessing components"
+            )
 
     def build(self) -> FlotillaContainer:
         """
@@ -259,8 +244,7 @@ class FlotillaContainer:
         After build completes, the container becomes immutable.
         """
 
-        if self._built:
-            raise RuntimeError("FlotillaContainer.build() may only be called once")
+        self._assert_not_built()
 
         config = self.config_dict
 
