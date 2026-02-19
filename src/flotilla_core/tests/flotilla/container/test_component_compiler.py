@@ -40,11 +40,11 @@ def create_container(config: dict) -> FlotillaContainer:
     settings = FlotillaSettings(raw=config)
     container = FlotillaContainer(settings=settings)
 
-    container.register_factory("simple", simple_factory)
-    container.register_factory("no_arg", no_arg_factory)
-    container.register_factory("composite", composite_factory)
-    container.register_factory("list_factory", list_factory)
-    container.register_factory("map_factory", map_factory)
+    container.register_provider("simple", simple_factory)
+    container.register_provider("no_arg", no_arg_factory)
+    container.register_provider("composite", composite_factory)
+    container.register_provider("list_factory", list_factory)
+    container.register_provider("map_factory", map_factory)
 
     return container
 
