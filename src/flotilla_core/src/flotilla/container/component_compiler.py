@@ -49,21 +49,23 @@ class ComponentCompiler:
         self._topo_order.clear()
         self._instantiated.clear()
 
+        self._validate_structure(config, path_parts=[])
         self._walk_for_discovery(config, path_parts=[])
         self._discovered = True
         self._analyzed = False
 
     def _walk_for_discovery(self, node: Any, *, path_parts: List[str]) -> None:
+
         if isinstance(node, dict):
 
             # --- Directive mappings (not component definitions) ---
 
             # $ref mapping: do not treat as component, do not recurse
-            if "$ref" in node:
+            if self._TAG_REF in node:
                 return
 
             # $list mapping: recurse into list items
-            if "$list" in node:
+            if self._TAG_LIST in node:
                 for idx, item in enumerate(node["$list"]):
                     self._walk_for_discovery(
                         item,
@@ -72,7 +74,7 @@ class ComponentCompiler:
                 return
 
             # $map mapping: recurse into map values
-            if "$map" in node:
+            if self._TAG_MAP in node:
                 for key, val in node["$map"].items():
                     self._walk_for_discovery(
                         val,
@@ -129,6 +131,41 @@ class ComponentCompiler:
 
         self._component_defs[name] = node
         self._component_paths[name] = cfg_path
+
+    def _validate_structure(self, node: Any, path_parts: List[str]) -> None:
+        path = ".".join(path_parts) if path_parts else "<root>"
+
+        if isinstance(node, dict):
+            keys = set(node.keys())
+            has_factory = "factory" in keys
+            directive_keys = keys & {self._TAG_REF, self._TAG_LIST, self._TAG_MAP}
+
+            # --- Component Definition ---
+            if has_factory:
+                if directive_keys:
+                    raise FlotillaConfigurationError(
+                        f"{path}: component definitions may not contain directive keys"
+                    )
+                return  # arguments validated recursively by discovery
+
+            # --- Directive Mapping ---
+            if directive_keys:
+                if len(directive_keys) != 1 or len(keys) != 1:
+                    raise FlotillaConfigurationError(
+                        f"{path}: directive mappings must contain exactly one directive key"
+                    )
+                return
+
+            # --- Namespace Container ---
+            for key, value in node.items():
+                self._validate_structure(value, path_parts + [str(key)])
+
+        elif isinstance(node, list):
+            raise FlotillaConfigurationError(
+                f"{path}: raw lists are not allowed; use {self._TAG_LIST}"
+            )
+
+        # Scalars are allowed
 
     # ------------------------------------------------------------------
     # Phase 2 — Dependency Analysis
