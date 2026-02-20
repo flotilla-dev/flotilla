@@ -1,11 +1,21 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
-class ExecutionConfig(BaseModel):
-    thread_id: Optional[str] = Field(default=None, description="The id of the converation")
-    recursion_limit: int = Field(default=10, description="The depth of recursion allowed by the LLM")
-    trace_id: Optional[str] = Field(default=None, description="The unqiue id for a single execution")
-    stream: bool = False
 
-    class Config:
-        frozen = True  # immutable by default
+class ExecutionConfig(BaseModel):
+    """
+    Stable execution configuration for a conversation thread.
+    """
+
+    thread_id: str = Field(
+        ..., description="Unique identifier for the conversation thread"
+    )
+
+    recursion_limit: int = Field(
+        default=10, description="Maximum depth of recursive tool/LLM execution"
+    )
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )

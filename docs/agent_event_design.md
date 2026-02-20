@@ -50,11 +50,10 @@ AgentEvent defines the only contract between:
 
 ### ✅ Atomic Durable Boundaries
 
-Checkpoint-safe boundaries occur only at:
+Durable mutation boundaries occur only at:
 
 - `message_final`
 - `suspend`
-- `complete`
 - `error`
 
 **Streaming (`message_chunk`) is ephemeral.**
@@ -63,11 +62,11 @@ Checkpoint-safe boundaries occur only at:
 
 **Agents do not:**
 
-- Mutate conversation state
+- Mutate durable thread log
 - Persist state
 - Incrementally update internal state
 
-**Continuation state is emitted atomically only on `suspend` or `complete`.**
+Resume safety is achieved by reconstructing execution context entirely from ThreadContext. AgentEvent carries no continuation state.
 
 ### ✅ No Tool-Specific Events
 
@@ -90,7 +89,7 @@ Human-in-the-loop is not a special event.
 It is simply:
 
 ```python
-suspend(reason=..., continuation_state=...)
+suspend(reason=...,)
 ```
 
 **InterruptStrategy handles coordination.**
@@ -101,7 +100,7 @@ suspend(reason=..., continuation_state=...)
 
 The system intentionally uses a very small event set.
 
-### 1️⃣ message_start (Optional, Observability Only)
+### 1️ message_start (Optional, Observability Only)
 
 **Used for:**
 
@@ -114,12 +113,12 @@ The system intentionally uses a very small event set.
 ```json
 {
   "type": "message_start",
-  "role": "assistant" | "tool",
+  "role": "agent" | "tool",
   "message_id": "string"
 }
 ```
 
-### 2️⃣ message_chunk (Streaming, Text-Only)
+### 2️ message_chunk (Streaming, Text-Only)
 
 **Used for:**
 
@@ -134,15 +133,15 @@ The system intentionally uses a very small event set.
 ```json
 {
   "type": "message_chunk",
-  "role": "assistant" | "tool",
+  "role": "agent" | "tool",
   "message_id": "string",
-  "content": "partial text"
+  "content_text": "partial text"
 }
 ```
 
-### 3️⃣ message_final (Atomic Conversation Mutation)
+### 3️ message_final (Atomic Thread Log Mutation)
 
-**The only event that appends to ConversationState.**
+**The only message event that produces a durable ThreadEntry (AgentOutput/ToolOutput).**
 
 - Supports full structured multimodal content
 - Eligible checkpoint boundary
@@ -150,7 +149,7 @@ The system intentionally uses a very small event set.
 ```json
 {
   "type": "message_final",
-  "role": "assistant" | "tool",
+  "role": "agent" | "tool",
   "message_id": "string",
   "content": [ContentPart, ...],
   "metadata": { ... optional ... }
@@ -173,10 +172,14 @@ Structured list supports multimodal output.
 
 - `message_chunk` = text only
 - Structured content only allowed in `message_final`
+- If any message_chunk events are emitted for a message_id, then the concatenation of all chunk text must exactly equal the text represented in message_final for that same message_id.
+- message_final must not introduce additional user-visible text that wasn’t streamed in chunks.
+- message_final remains the canonical durable representation.
 - Binary artifacts should be referenced by URL
 - No partial structured streaming
+- There is no complete event.  Execution completion is implicit when the event stream ends without suspend or error.
 
-### 4️⃣ suspend (Execution Pause)
+### 4 suspend (Execution Pause)
 
 Represents any pause in execution:
 
@@ -188,13 +191,12 @@ Represents any pause in execution:
 
 **Not HITL-specific.**
 
-Atomic continuation boundary.
+Durable execution pause boundary.
 
 ```json
 {
   "type": "suspend",
-  "reason": "string",
-  "continuation_state": { ... deterministic state ... }
+  "reason": "string"
 }
 ```
 
@@ -204,25 +206,8 @@ Atomic continuation boundary.
 - Marks execution suspended
 - Delegates to InterruptStrategy
 
-### 5️⃣ complete (Execution Finished)
 
-Marks successful completion.
-
-Optional continuation state allowed.
-
-```json
-{
-  "type": "complete",
-  "continuation_state": { ... optional ... }
-}
-```
-
-**Runtime:**
-
-- Persists final checkpoint
-- Marks thread complete
-
-### 6️⃣ error (Execution Failure)
+### 5 error (Execution Failure)
 
 Represents failure condition.
 
@@ -230,9 +215,12 @@ Represents failure condition.
 {
   "type": "error",
   "message": "string",
-  "recoverable": true | false
+  "recoverable": true | false,
+  "metadata": { ... optional structured data ... }
 }
 ```
+
+Runtime may map error metadata into durable ErrorEntry.details.
 
 **Runtime decides:**
 
@@ -254,8 +242,9 @@ Library Engine
     → Client
 ```
 
-- **Text streaming is supported**
-- **Structured multimodal content is atomic**
+- If no message_chunk events are emitted for a message_id, message_final represents the complete output.
+- Text streaming is supported
+- Structured multimodal content is atomic
 
 **Checkpointing occurs only at semantic boundaries.**
 
@@ -276,20 +265,6 @@ message_final(content=[ContentPart...])
 
 ---
 
-## 6️⃣ Checkpoint Alignment
-
-Checkpoint remains:
-
-- Fully serializable
-- Deterministic
-- Independent of library internals
-- Atomic at suspend/complete boundaries
-
-**No incremental `internal_state_update` events.**
-
-**Continuation state is emitted atomically.**
-
----
 
 ## 7️⃣ What Was Intentionally Removed
 
@@ -304,32 +279,5 @@ To preserve simplicity and scalability, the design explicitly excludes:
 
 **These remain inside the agent/adapter layer.**
 
----
 
-## 8️⃣ Architectural Guarantees
 
-The AgentEvent contract guarantees:
-
-- ✅ Library neutrality
-- ✅ Minimal runtime complexity
-- ✅ Deterministic resume
-- ✅ Atomic artifact handling
-- ✅ Streaming safety
-- ✅ Multimodal extensibility
-- ✅ Future-proof event stability
-
----
-
-## Final Assessment
-
-The AgentEvent design is:
-
-- ✅ Tight
-- ✅ Minimal
-- ✅ Scalable
-- ✅ Durable-aware
-- ✅ Streaming-native
-- ✅ Modality-agnostic
-- ✅ Production-ready in philosophy
-
-**It provides a stable and extensible contract between reasoning engines and orchestration runtime.**
