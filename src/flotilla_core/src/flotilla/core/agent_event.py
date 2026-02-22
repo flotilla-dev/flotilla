@@ -3,6 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, model_validator
+from flotilla.core.content_part import ContentPart
 
 
 # -----------------------
@@ -18,34 +19,8 @@ class AgentEventType(str, Enum):
 
 class MessageRole(str, Enum):
     AGENT = "agent"
-    TOOL = "tool"
     USER = "user"
     SYSTEM = "system"
-
-
-# -----------------------
-# Content parts
-# -----------------------
-class TextPart(BaseModel):
-    type: str  # keep as Literal["text"] if you want; not required for this refactor
-    text: str
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class ImagePart(BaseModel):
-    type: str
-    url: str
-    mime_type: Optional[str] = None
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class JsonPart(BaseModel):
-    type: str
-    data: Dict[str, Any]
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-ContentPart = TextPart | ImagePart | JsonPart
 
 
 # -----------------------

@@ -4,7 +4,8 @@ import asyncio
 from flotilla.agents.flotilla_agent import FlotillaAgent
 from flotilla.core.thread_context import ThreadContext
 from flotilla.core.thread_entries import UserInput
-from flotilla.core.agent_event import AgentEvent, MessageRole, TextPart
+from flotilla.core.agent_event import AgentEvent, MessageRole
+from flotilla.core.content_part import TextPart
 from flotilla.core.execution_config import ExecutionConfig
 
 

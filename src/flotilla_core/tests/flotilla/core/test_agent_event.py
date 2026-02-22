@@ -1,10 +1,6 @@
 import pytest
-from flotilla.core.agent_event import (
-    AgentEvent,
-    AgentEventType,
-    MessageRole,
-    TextPart,
-)
+from flotilla.core.agent_event import AgentEvent, AgentEventType, MessageRole
+from flotilla.core.content_part import TextPart
 
 
 def make_text(text: str):

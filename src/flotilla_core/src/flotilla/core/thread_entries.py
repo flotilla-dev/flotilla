@@ -38,12 +38,6 @@ class AgentOutput(ThreadEntry):
     content: List[ContentPart] = Field(min_length=1)
 
 
-class ToolOutput(ThreadEntry):
-    role: MessageRole = MessageRole.TOOL
-    tool_name: str
-    content: List[ContentPart] = Field(min_length=1)
-
-
 class SuspendEntry(ThreadEntry):
     role: MessageRole = MessageRole.SYSTEM
     reason: str
