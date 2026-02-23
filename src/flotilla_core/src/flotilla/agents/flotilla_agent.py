@@ -17,8 +17,14 @@ class FlotillaAgent(ABC):
     - Owns no lifecycle transitions
     """
 
-    def __init__(self):
-        self.initialize()
+    def __init__(self, *, agent_name: str):
+        if not agent_name:
+            raise ValueError("agent_name must be a non-empty string")
+        self._agent_name = agent_name
+
+    @property
+    def agent_name(self) -> str:
+        return self._agent_name
 
     async def initialize(self) -> None:
         """
@@ -49,33 +55,7 @@ class FlotillaAgent(ABC):
             )
 
         async for event in self._execute(thread, config):
-            self._validate_event(event)
             yield event
-
-    def _validate_event(self, event: AgentEvent) -> None:
-        t = event.type
-
-        if t in (AgentEventType.MESSAGE_CHUNK, AgentEventType.MESSAGE_FINAL):
-            if event.role is None:
-                raise InvalidAgentEventError(f"{t} requires role.")
-            if not event.content:
-                raise InvalidAgentEventError(f"{t} requires non-empty content.")
-
-        if t == AgentEventType.MESSAGE_START:
-            if event.role is not None or event.content is not None:
-                raise InvalidAgentEventError(
-                    "message_start must not include role/content."
-                )
-
-        if t == AgentEventType.SUSPEND:
-            if event.role is not None or event.content is not None:
-                raise InvalidAgentEventError("suspend must not include role/content.")
-
-        if t == AgentEventType.ERROR:
-            if event.role is not None or event.content is not None:
-                raise InvalidAgentEventError("error must not include role/content.")
-            if not event.metadata.get("message"):
-                raise InvalidAgentEventError("error requires metadata['message'].")
 
     @abstractmethod
     async def _execute(

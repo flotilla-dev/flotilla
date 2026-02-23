@@ -1,4 +1,4 @@
-# Flotilla ContentPart Specification (v1.2)
+# Flotilla ContentPart Specification (v1.3)
 
 ## 1️⃣ Purpose
 
@@ -8,8 +8,6 @@ ContentPart is the canonical structured output unit emitted inside:
 AgentEvent(type="message_final", content=[ContentPart, ...])
 ```
 
-It represents atomic, user-visible output from an agent.
-
 It is:
 
 - JSON-serializable
@@ -17,8 +15,10 @@ It is:
 - Library-agnostic
 - Runtime-opaque
 - Streaming-compatible (atomic only)
+- ContentPart is the canonical structured payload unit for thread I/O (user + agent).
+- Not inherently user-visible; exposure is policy-controlled.
 
-**ContentPart is the core return type from the agent to the user.**
+**ContentPart is the core communication types between the user and the agent.**
 
 ---
 
@@ -181,9 +181,59 @@ Represents any file or binary artifact.
 
 - Optional integrity hash
 - Must represent SHA-256 of file contents if provided
-- Runtime does not validate it
+- If provided, MUST be a 64-character hexadecimal string.
 
 ---
+
+### 3.4 ReasoningPart
+Represents a description of the reasoning perfomed by the LLM in creating the output
+
+```json
+  { 
+    "type": "reasoning", 
+    "reason": "..." , 
+    "id": "optional" 
+  }
+```
+
+#### Required Fields
+
+- `type = "reasoning"`
+- `reason: string`
+
+#### Optional Fields
+
+- `id: string`
+
+#### Field Definitions
+**reason**
+- A textual description of how the LLM reasoned to generate its response
+
+### 3.5 ConfidencePart
+Represents the confidence score of the LLM in correctness of the response it generated
+
+```json
+  { 
+    "type": "confidence", 
+    "score": 0.37 , 
+    "id": "optional" 
+  }
+```
+
+#### Required Fields
+
+- `type = "confidence"`
+- 'score: float'
+
+#### Optional Fields
+
+- `id: string`
+
+#### Field Definitions
+**score**
+- A numeric score of confidence the LLM has in the correctness of its response to the input
+- The score range is between 0.0 and 1.0 as a float
+
 
 ## 4️⃣ ContentPart id Semantics (Normative)
 
@@ -240,7 +290,7 @@ The `id` field:
 
 ### When Streaming Text
 
-- All `message_chunk.content_text` must concatenate exactly to the `TextPart.text`
+- All streamed chunk text MUST concatenate exactly to the final TextPart.text.
 - No additional user-visible text may appear in `message_final`
 
 ### Structured Content
@@ -291,8 +341,8 @@ ContentPart must never contain:
 
 ContentPart is stored inside:
 
+- `UserInput.content`
 - `AgentOutput.content`
-- `ToolOutput.content`
 
 Therefore it must be:
 
@@ -325,7 +375,7 @@ Future types may be introduced by defining new `"type"` discriminators.
 }
 ```
 
-**No runtime changes required.**
+**New types require updating the ContentPart union and specification.**
 
 ---
 
@@ -347,9 +397,9 @@ This design guarantees:
 
 ContentPart is:
 
-- The atomic, user-visible output unit
-- The durable representation of agent/tool results
-- A strongly typed, structured payload
+- The atomic, structured content unit for both user input and agent output
+- The durable representation of thread I/O within a Flotilla application
+- A strongly typed, discriminated payload used symmetrically for inbound and outbound communication
 - Selectable via `id` within a message
 - Completely separate from execution state
 

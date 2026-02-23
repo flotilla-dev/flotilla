@@ -1,4 +1,4 @@
-# Flotilla Thread Model Specification (v3)
+# Flotilla Thread Model Specification (v3.1)
 
 ## 1️⃣ ThreadEntry — Durable Log Record
 
@@ -14,9 +14,31 @@ It is:
 
 **ThreadEntry represents state transitions, not execution steps.**
 
+## 2 Execution Phase Model
+
+An execution phase begins when a UserInput or ResumeEntry
+is appended to the thread.
+
+The phase ends when exactly one of the following entries
+is appended:
+
+- AgentOutput
+- SuspendEntry
+- ErrorEntry
+
+Terminal entries MUST include:
+
+parent_entry_id: str
+
+This MUST reference the entry_id of the initiating
+UserInput or ResumeEntry.
+
+All entry_id values are unique.
+parent_entry_id establishes causal linkage.
+
 ---
 
-## 2️⃣ Canonical ThreadEntry Types
+## 3 Canonical ThreadEntry Types
 
 ### Input
 
@@ -40,36 +62,47 @@ It is:
 
 ---
 
-## 3️⃣ Mapping: AgentEvent → ThreadEntry
+## 4 Mapping: AgentEvent → ThreadEntry
 
 | AgentEvent     | ThreadEntry   |
 |----------------|---------------|
 | message_final  | AgentOutput   |
 | suspend        | SuspendEntry  |
 | error          | ErrorEntry    |
-| stream ends    | —             |
+
 
 ### Notes
 
 - `ResumeEntry` is appended externally
 - `ClosedEntry` is runtime-controlled only
+- Only these AgentEvent types produce durable ThreadEntry records.
 
 ---
 
-## 4️⃣ AgentOutput
+## 5 Execution Phase Termination Entries
 
-Represents durable agent-visible output.
+There are three entries that can terminate an execution phase:
+
+- AgentOutput
+- SuspendEntry
+- ErrorEntry
+
+No additional AgentOutput, SuspendEntry, or ErrorEntry may follow for the same parent_entry_id.
+
+All three are durable terminal entries. Each MAY contain:
 
 ### Contains
 
 - `content: List[ContentPart]`
-- Optional metadata
+- `execution_metadata: Optional[Dict[str, Any]]` (optional JSON-serializable execution telemetry such as token usage, timing, or stack traces)
 
-**AgentOutput is the only durable output mutation.**
+`execution_metadata` is intended for internal logging, auditing, or telemetry and may not be returned to the end user.
+
+These entries represent the only durable phase termination mutations.
 
 ---
 
-## 5️⃣ ThreadContext
+## 6 ThreadContext
 
 ThreadContext is an immutable, validated snapshot of ordered ThreadEntry objects.
 
@@ -88,7 +121,7 @@ ThreadContext is an immutable, validated snapshot of ordered ThreadEntry objects
 
 ---
 
-## 6️⃣ Structural Invariants
+## 7 Structural Invariants
 
 ThreadContext must validate:
 
@@ -100,7 +133,7 @@ ThreadContext must validate:
 
 ---
 
-## 7️⃣ Thread Status
+## 8 Thread Status
 
 Derived from last entry:
 
@@ -116,7 +149,7 @@ Derived from last entry:
 
 ---
 
-## 8️⃣ Lifecycle Flow
+## 9 Lifecycle Flow
 
 1. Thread exists (append-only log)
 2. Runtime loads entries → builds ThreadContext
@@ -130,7 +163,7 @@ Derived from last entry:
 
 ---
 
-## 9️⃣ Architectural Guarantees
+## 10 Architectural Guarantees
 
 - ✅ Append-only log
 - ✅ Deterministic replay
@@ -140,7 +173,7 @@ Derived from last entry:
 
 ---
 
-## 🔟 Related Specifications
+## 11 Related Specifications
 
 - AgentEvent Specification
 - ContentPart Specification

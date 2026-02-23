@@ -43,14 +43,18 @@ FlotillaAgent may emit only:
 
 ---
 
-## 3️⃣ Message Lifecycle Contract (Mandatory)
+## 3️⃣ Execution Phase Lifecycle Contract (Mandatory)
 
-For each `message_id`:
+For each `entry_id`:
 
-1. `message_start` MUST be emitted exactly once
+1. `message_start` Required exactly once per execution phase (parent_entry_id)
 2. It MUST precede any `message_chunk` or `message_final`
-3. `message_final` MUST be emitted exactly once
-4. `message_chunk` events are optional
+3. `message_chunk` events are optional
+4. For a given parent_entry_id, exactly one of:
+  - message_final
+  - suspend
+  - error
+  must be emitted.
 
 ### Valid Lifecycle
 
@@ -60,7 +64,7 @@ message_chunk*
 message_final
 ```
 
-### If `error` Is Emitted for a message_id
+### If `error` Is Emitted for an entry_id
 
 - No `message_final` may follow
 
@@ -73,7 +77,7 @@ Observability boundary event.
 ```json
 {
   "type": "message_start",
-  "message_id": "string"
+  "parent_entry_id": "string"
 }
 ```
 
@@ -89,15 +93,16 @@ Text-only streaming event.
 ```json
 {
   "type": "message_chunk",
-  "message_id": "string",
-  "content_text": "partial text"
+  "parent_entry_id": "string",
+  "content": [
+    { "type": "text", "text": "partial text" }
+  ]
 }
 ```
 
 ### Rules
 
-- Text only
-- Never structured content
+- Content MUST contain exactly one TextPart
 - Not persisted
 - Optional
 
@@ -110,9 +115,9 @@ Atomic structured output.
 ```json
 {
   "type": "message_final",
-  "message_id": "string",
+  "parent_entry_id": "string",
   "content": [ContentPart, ...],
-  "metadata": { ... optional ... }
+  "execution_metadata": { ... optional ... }
 }
 ```
 
@@ -122,6 +127,7 @@ Atomic structured output.
 - Must be JSON-serializable
 - Persisted as `AgentOutput`
 - No partial structured streaming
+- Execution metadata is optional execution telemetry (token usage, timing, stack trace)
 
 ### Streaming Invariant
 
@@ -139,12 +145,15 @@ Durable execution pause.
 ```json
 {
   "type": "suspend",
-  "reason": "string"
+  "parent_entry_id": "...",
+  "content": [ContentPart, ...],
+  "execution_metadata": { ... optional ... }
 }
 ```
 
 - Persisted as `SuspendEntry`
 - Execution stops after suspend
+- Execution metadata is optional execution telemetry (token usage, timing, stack trace)
 
 ---
 
@@ -155,16 +164,15 @@ Execution failure.
 ```json
 {
   "type": "error",
-  "message": "string",
-  "recoverable": true,
-  "metadata": { ... optional ... }
+  "parent_entry_id": "...",
+  "content": [ContentPart, ...],
+  "execution_metadata": { ... optional ... }
 }
 ```
 
 ### Rules
 
-- `recoverable` defaults to `true`
-- Metadata must be JSON-serializable
+- Execution metadata is optional execution telemetry (token usage, timing, stack trace)
 - No `message_final` after error
 - Persisted as `ErrorEntry`
 

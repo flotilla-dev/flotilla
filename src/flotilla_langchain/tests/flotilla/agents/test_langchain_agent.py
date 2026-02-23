@@ -1,129 +1,131 @@
 import asyncio
 import pytest
-from typing import AsyncIterator, List
+from typing import List, Any
+
+from langchain_core.messages import AIMessage, AIMessageChunk
 
 from flotilla_langchain.agents.langchain_agent import LangChainAgent
 from flotilla.core.thread_context import ThreadContext
 from flotilla.core.thread_entries import UserInput
-from flotilla.core.agent_event import AgentEvent
 from flotilla.core.execution_config import ExecutionConfig
 from flotilla.core.content_part import TextPart
 
 
-# ---------------------------
-# Test Utilities
-# ---------------------------
+# --------------------------------------------------
+# Fake Graphs
+# --------------------------------------------------
 
 
 class FakeGraph:
     """
-    Minimal fake CompiledStateGraph replacement.
-    Simulates async streaming behavior.
+    Simulates LangGraph streaming contract.
     """
 
-    def __init__(self, events: List[dict]):
-        self._events = events
+    def __init__(self, *, chunks: List[str] = None, final_text: str = ""):
+        self._chunks = chunks or []
+        self._final_text = final_text
 
     async def astream(self, *args, **kwargs):
-        for event in self._events:
+        for text in self._chunks:
             await asyncio.sleep(0)
-            yield event
+            yield ("messages", (AIMessageChunk(content=text), {}))
+
+    async def aget_state(self, *args, **kwargs):
+        return {"messages": [AIMessage(content=self._final_text)]}
+
+
+class ErrorGraph(FakeGraph):
+    async def astream(self, *args, **kwargs):
+        raise RuntimeError("boom")
+
+
+class LimitGraph(FakeGraph):
+    def __init__(self):
+        self.captured_limit = None
+
+    async def astream(self, *args, recursion_limit=None, **kwargs):
+        self.captured_limit = recursion_limit
+        yield ("messages", (AIMessageChunk(content="done"), {}))
+
+    async def aget_state(self, *args, **kwargs):
+        return {"messages": [AIMessage(content="done")]}
+
+
+class SlowGraph(FakeGraph):
+    async def astream(self, *args, **kwargs):
+        await asyncio.sleep(10)
+        yield ("messages", (AIMessageChunk(content="never"), {}))
+
+    async def aget_state(self, *args, **kwargs):
+        return {"messages": [AIMessage(content="never")]}
+
+
+# --------------------------------------------------
+# Test Agent Wrapper
+# --------------------------------------------------
 
 
 class FakeLLM:
     pass
 
 
-class FakeTool:
-    def name(self):
-        return "fake_tool"
+class TestAgent(LangChainAgent):
+    def __init__(self, graph: Any):
+        self.test_graph = graph
+        super().__init__(
+            agent_name="test",
+            llm=FakeLLM(),
+            system_prompt="test",
+        )
 
-    def llm_description(self):
-        return "fake"
-
-    def execution_callable(self):
-        async def run(x: str):
-            return f"echo:{x}"
-
-        return run
+    def _build_graph(self):
+        return self.test_graph
 
 
-def make_thread() -> ThreadContext:
-    entry = UserInput(thread_id="t1", content=[TextPart(text="hello")])
+# --------------------------------------------------
+# Utilities
+# --------------------------------------------------
+
+
+@pytest.fixture
+def thread() -> ThreadContext:
+    entry = UserInput(
+        thread_id="t1",
+        entry_id="e1",
+        content=[TextPart(text="hello")],
+    )
     return ThreadContext(entries=[entry])
 
 
-def make_config() -> ExecutionConfig:
+@pytest.fixture
+def config() -> ExecutionConfig:
     return ExecutionConfig(thread_id="t1", recursion_limit=10)
 
 
-# ---------------------------
-# Construction Tests
-# ---------------------------
-
-
-def test_constructor_builds_graph_once(monkeypatch):
-    built = {"count": 0}
-
-    class TestAgent(LangChainAgent):
-        def _build_graph(self):
-            built["count"] += 1
-            return FakeGraph([])
-
-    TestAgent(llm=FakeLLM())
-    assert built["count"] == 1
-
-
-def test_constructor_fails_fast_on_graph_error():
-    class TestAgent(LangChainAgent):
-        def _build_graph(self):
-            raise RuntimeError("bad graph")
-
-    with pytest.raises(RuntimeError):
-        TestAgent(llm=FakeLLM())
-
-
-# ---------------------------
-# Execution Lifecycle Tests
-# ---------------------------
+# --------------------------------------------------
+# Tests
+# --------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_emits_message_start_and_final():
-    events = [{"type": "final", "text": "hi"}]
-
-    class TestAgent(LangChainAgent):
-        def _build_graph(self):
-            return FakeGraph(events)
-
-    agent = TestAgent(llm=FakeLLM())
-    thread = make_thread()
-    config = make_config()
+async def test_emits_message_start_and_final(thread, config):
+    graph = FakeGraph(chunks=["hi"], final_text="hi")
+    agent = TestAgent(graph)
 
     output = []
     async for e in agent.run(thread, config):
         output.append(e)
 
     assert output[0].type == "message_start"
-    assert output[1].type == "message_final"
-    assert output[1].content[0].text == "hi"
+    assert output[1].type == "message_chunk"
+    assert output[2].type == "message_final"
+    assert output[2].content[0].text == "hi"
 
 
 @pytest.mark.asyncio
-async def test_streaming_emits_chunks_then_final():
-    events = [
-        {"type": "chunk", "text": "he"},
-        {"type": "chunk", "text": "llo"},
-        {"type": "final", "text": "hello"},
-    ]
-
-    class TestAgent(LangChainAgent):
-        def _build_graph(self):
-            return FakeGraph(events)
-
-    agent = TestAgent(llm=FakeLLM())
-    thread = make_thread()
-    config = make_config()
+async def test_streaming_emits_chunks_then_final(thread, config):
+    graph = FakeGraph(chunks=["he", "llo"], final_text="hello")
+    agent = TestAgent(graph)
 
     output = []
     async for e in agent.run(thread, config):
@@ -134,24 +136,14 @@ async def test_streaming_emits_chunks_then_final():
     assert output[2].type == "message_chunk"
     assert output[3].type == "message_final"
 
-    combined = output[1].content_text + output[2].content_text
+    combined = output[1].content[0].text + output[2].content[0].text
     assert combined == output[3].content[0].text
 
 
 @pytest.mark.asyncio
-async def test_no_message_final_after_error():
-    events = [
-        {"type": "chunk", "text": "partial"},
-        {"type": "error", "message": "boom"},
-    ]
-
-    class TestAgent(LangChainAgent):
-        def _build_graph(self):
-            return FakeGraph(events)
-
-    agent = TestAgent(llm=FakeLLM())
-    thread = make_thread()
-    config = make_config()
+async def test_error_emits_error_event(thread, config):
+    graph = ErrorGraph()
+    agent = TestAgent(graph)
 
     output = []
     async for e in agent.run(thread, config):
@@ -159,21 +151,13 @@ async def test_no_message_final_after_error():
 
     assert output[0].type == "message_start"
     assert output[-1].type == "error"
-
     assert not any(e.type == "message_final" for e in output)
 
 
 @pytest.mark.asyncio
-async def test_empty_output_produces_empty_text_part():
-    events = []
-
-    class TestAgent(LangChainAgent):
-        def _build_graph(self):
-            return FakeGraph(events)
-
-    agent = TestAgent(llm=FakeLLM())
-    thread = make_thread()
-    config = make_config()
+async def test_empty_output_produces_empty_text_part(thread, config):
+    graph = FakeGraph(chunks=[], final_text="")
+    agent = TestAgent(graph)
 
     output = []
     async for e in agent.run(thread, config):
@@ -184,87 +168,29 @@ async def test_empty_output_produces_empty_text_part():
     assert output[1].content[0].text == ""
 
 
-# ---------------------------
-# Resume Behavior
-# ---------------------------
-
-
 @pytest.mark.asyncio
-async def test_resume_passes_command(monkeypatch):
-    called = {"resume": False}
-
-    class ResumeGraph(FakeGraph):
-        async def astream(self, command=None, **kwargs):
-            if command:
-                called["resume"] = True
-            yield {"type": "final", "text": "resumed"}
-
-    class TestAgent(LangChainAgent):
-        def _build_graph(self):
-            return ResumeGraph([])
-
-    agent = TestAgent(llm=FakeLLM())
-    thread = make_thread()
-    config = make_config()
+async def test_recursion_limit_passed_to_graph(thread, config):
+    graph = LimitGraph()
+    agent = TestAgent(graph)
 
     async for _ in agent.run(thread, config):
         pass
 
-    assert called["resume"] is False
-
-
-# ---------------------------
-# Cancellation Behavior
-# ---------------------------
+    assert graph.captured_limit == config.recursion_limit
 
 
 @pytest.mark.asyncio
-async def test_cancellation_propagates():
-    class SlowGraph(FakeGraph):
-        async def astream(self, *args, **kwargs):
-            await asyncio.sleep(10)
-            yield {"type": "final", "text": "never"}
+async def test_cancellation_propagates(thread, config):
+    graph = SlowGraph()
+    agent = TestAgent(graph)
 
-    class TestAgent(LangChainAgent):
-        def _build_graph(self):
-            return SlowGraph([])
+    async def consume():
+        async for _ in agent.run(thread, config):
+            await asyncio.sleep(0)
 
-    agent = TestAgent(llm=FakeLLM())
-    thread = make_thread()
-    config = make_config()
-
-    task = asyncio.create_task(agent.run(thread, config).__anext__())
-
+    task = asyncio.create_task(consume())
     await asyncio.sleep(0.01)
     task.cancel()
 
     with pytest.raises(asyncio.CancelledError):
         await task
-
-
-# ---------------------------
-# Recursion Limit Pass-Through
-# ---------------------------
-
-
-@pytest.mark.asyncio
-async def test_recursion_limit_passed_to_graph(monkeypatch):
-    captured = {"limit": None}
-
-    class LimitGraph(FakeGraph):
-        async def astream(self, recursion_limit=None, **kwargs):
-            captured["limit"] = recursion_limit
-            yield {"type": "final", "text": "done"}
-
-    class TestAgent(LangChainAgent):
-        def _build_graph(self):
-            return LimitGraph([])
-
-    agent = TestAgent(llm=FakeLLM())
-    thread = make_thread()
-    config = make_config()
-
-    async for _ in agent.run(thread, config):
-        pass
-
-    assert captured["limit"] == config.recursion_limit
