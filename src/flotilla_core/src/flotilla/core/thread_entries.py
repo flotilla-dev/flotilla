@@ -1,7 +1,8 @@
 from typing import Union, List, Dict, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
-from flotilla.core.agent_event import MessageRole, ContentPart
+from flotilla.core.content_part import ContentPart
+from flotilla.core.message_role import MessageRole
 
 
 class ThreadEntry(BaseModel):
@@ -35,12 +36,6 @@ class UserInput(ThreadEntry):
 class AgentOutput(ThreadEntry):
     role: MessageRole = MessageRole.AGENT
     agent_id: Optional[str] = None
-    content: List[ContentPart] = Field(min_length=1)
-
-
-class ToolOutput(ThreadEntry):
-    role: MessageRole = MessageRole.TOOL
-    tool_name: str
     content: List[ContentPart] = Field(min_length=1)
 
 

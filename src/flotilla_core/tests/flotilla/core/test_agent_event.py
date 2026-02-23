@@ -1,10 +1,6 @@
 import pytest
-from flotilla.core.agent_event import (
-    AgentEvent,
-    AgentEventType,
-    MessageRole,
-    TextPart,
-)
+from flotilla.core.agent_event import AgentEvent, AgentEventType
+from flotilla.core.content_part import TextPart
 
 
 def make_text(text: str):
@@ -12,7 +8,7 @@ def make_text(text: str):
 
 
 def test_message_start_valid():
-    event = AgentEvent.message_start(MessageRole.AGENT, "m1")
+    event = AgentEvent.message_start(entry_id="m1")
     assert event.type == AgentEventType.MESSAGE_START
 
 
@@ -20,15 +16,13 @@ def test_message_chunk_requires_text():
     with pytest.raises(Exception):
         AgentEvent(
             type=AgentEventType.MESSAGE_CHUNK,
-            role=MessageRole.AGENT,
-            message_id="m1",
+            parent_entry_id="m1",
         )
 
 
 def test_message_final_requires_content():
     with pytest.raises(Exception):
         AgentEvent.message_final(
-            MessageRole.AGENT,
             "m1",
             content=[],
         )

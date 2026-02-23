@@ -7,7 +7,7 @@ from flotilla.core.thread_entries import (
     ResumeEntry,
     ClosedEntry,
 )
-from flotilla.core.agent_event import TextPart
+from flotilla.core.content_part import TextPart
 
 
 def make_text(text: str):

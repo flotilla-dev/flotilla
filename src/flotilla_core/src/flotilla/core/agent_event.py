@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from flotilla.core.content_part import (
+    ContentPart,
+    TextPart,
+)
 
 
 # -----------------------
@@ -16,100 +20,42 @@ class AgentEventType(str, Enum):
     ERROR = "error"
 
 
-class MessageRole(str, Enum):
-    AGENT = "agent"
-    TOOL = "tool"
-    USER = "user"
-    SYSTEM = "system"
-
-
-# -----------------------
-# Content parts
-# -----------------------
-class TextPart(BaseModel):
-    type: str  # keep as Literal["text"] if you want; not required for this refactor
-    text: str
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class ImagePart(BaseModel):
-    type: str
-    url: str
-    mime_type: Optional[str] = None
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class JsonPart(BaseModel):
-    type: str
-    data: Dict[str, Any]
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-ContentPart = TextPart | ImagePart | JsonPart
-
-
 # -----------------------
 # AgentEvent
 # -----------------------
 class AgentEvent(BaseModel):
-    type: AgentEventType
-
-    role: Optional[MessageRole] = None
-    message_id: Optional[str] = None
-
-    content_text: Optional[str] = None
-    content: Optional[List[ContentPart]] = None
-
-    metadata: Optional[Dict[str, Any]] = None
-
-    reason: Optional[str] = None
-
-    message: Optional[str] = None
-    recoverable: Optional[bool] = None
+    type: AgentEventType = Field(
+        ..., description="The type of Event from the AgentEventType Enum"
+    )
+    parent_entry_id: str = Field(
+        ..., description="The id of the ThreadEntry that started this execution phase"
+    )
+    content: List[ContentPart] = Field(
+        default_factory=list,
+        description="The list of ContentPart objects that are emitted by the Agent",
+    )
+    execution_metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional metadata that is used to capture data about execution of the Agent",
+    )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     @model_validator(mode="after")
-    def validate_semantics(self) -> "AgentEvent":
-        t = self.type
+    def validate_event(self):
+        if self.type == AgentEventType.MESSAGE_START:
+            if self.content:
+                raise ValueError("message_start must not contain content")
 
-        if t is AgentEventType.MESSAGE_START:
-            if self.role is None or self.message_id is None:
-                raise ValueError("message_start requires role and message_id")
-            if self.content_text is not None or self.content is not None:
-                raise ValueError(
-                    "message_start must not include content_text or content"
-                )
+        elif self.type == AgentEventType.MESSAGE_CHUNK:
+            if len(self.content) != 1:
+                raise ValueError("message_chunk must contain exactly one ContentPart")
+            if not isinstance(self.content[0], TextPart):
+                raise ValueError("message_chunk must contain a TextPart")
 
-        elif t is AgentEventType.MESSAGE_CHUNK:
-            if self.role is None or self.message_id is None:
-                raise ValueError("message_chunk requires role and message_id")
-            if self.content_text is None:
-                raise ValueError("message_chunk requires content_text")
-            if self.content is not None:
-                raise ValueError("message_chunk must not contain structured content")
-
-        elif t is AgentEventType.MESSAGE_FINAL:
-            if self.role is None or self.message_id is None:
-                raise ValueError("message_final requires role and message_id")
+        elif self.type == AgentEventType.MESSAGE_FINAL:
             if not self.content:
-                raise ValueError("message_final requires non-empty content list")
-            if self.content_text is not None:
-                raise ValueError("message_final must not use content_text")
-
-        elif t is AgentEventType.SUSPEND:
-            if not self.reason:
-                raise ValueError("suspend requires reason")
-            if self.role or self.message_id or self.content_text or self.content:
-                raise ValueError("suspend must not include message fields")
-
-        elif t is AgentEventType.ERROR:
-            if not self.message:
-                raise ValueError("error requires message")
-            if self.recoverable is None:
-                raise ValueError("error requires recoverable")
-            if self.role or self.message_id or self.content_text or self.content:
-                raise ValueError("error must not include message fields")
+                raise ValueError("message_final must contain content")
 
         return self
 
@@ -117,49 +63,66 @@ class AgentEvent(BaseModel):
     # Factory methods (Enum-based)
     # -----------------------
     @classmethod
-    def message_start(cls, role: MessageRole, message_id: str) -> AgentEvent:
+    def message_start(cls, *, entry_id: str) -> AgentEvent:
         return cls(
             type=AgentEventType.MESSAGE_START,
-            role=role,
-            message_id=message_id,
+            parent_entry_id=entry_id,
         )
 
     @classmethod
-    def message_chunk(cls, role: MessageRole, message_id: str, text: str) -> AgentEvent:
+    def message_chunk(
+        cls,
+        *,
+        entry_id: str,
+        text: str,
+    ) -> AgentEvent:
         return cls(
             type=AgentEventType.MESSAGE_CHUNK,
-            role=role,
-            message_id=message_id,
-            content_text=text,
+            parent_entry_id=entry_id,
+            content=[TextPart(text=text)],
         )
 
     @classmethod
     def message_final(
         cls,
-        role: MessageRole,
-        message_id: str,
+        *,
+        entry_id: str,
         content: List[ContentPart],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> AgentEvent:
         return cls(
             type=AgentEventType.MESSAGE_FINAL,
-            role=role,
-            message_id=message_id,
+            parent_entry_id=entry_id,
             content=content,
-            metadata=metadata,
+            execution_metadata=metadata,
         )
 
     @classmethod
-    def suspend(cls, reason: str) -> AgentEvent:
+    def suspend(
+        cls,
+        *,
+        entry_id: str,
+        content: List[ContentPart],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> AgentEvent:
         return cls(
             type=AgentEventType.SUSPEND,
-            reason=reason,
+            parent_entry_id=entry_id,
+            content=content,
+            execution_metadata=metadata,
         )
 
     @classmethod
-    def error(cls, message: str, recoverable: bool) -> AgentEvent:
+    def error(
+        cls,
+        *,
+        entry_id: str,
+        content: List[ContentPart],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> AgentEvent:
         return cls(
             type=AgentEventType.ERROR,
-            message=message,
-            recoverable=recoverable,
+            parent_entry_id=entry_id,
+            content=content,
+            execution_metadata=metadata,
         )

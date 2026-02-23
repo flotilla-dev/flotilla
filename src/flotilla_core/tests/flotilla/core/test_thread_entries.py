@@ -3,12 +3,9 @@ from flotilla.core.thread_entries import (
     ThreadEntry,
     UserInput,
     AgentOutput,
-    ToolOutput,
     SuspendEntry,
-    ResumeEntry,
-    ClosedEntry,
 )
-from flotilla.core.agent_event import TextPart
+from flotilla.core.content_part import TextPart
 from pydantic import ValidationError
 
 
