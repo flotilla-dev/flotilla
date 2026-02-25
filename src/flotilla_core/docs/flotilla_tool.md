@@ -1,219 +1,290 @@
-# FlotillaTool — Behavior & API Design Specification (v2.1)
+# FlotillaTool Specification (v2.1)
 
-## 1️⃣ Design Intent
+## 1. Executive Summary
+
+### Purpose
 
 FlotillaTool represents a:
 
-- DI-managed
+- Dependency-injection managed
 - Stateless
-- LLM-callable capability
+- LLM-callable
 - Framework-neutral execution unit
 
-**It encapsulates business logic and exposes a single executable callable for agent/adapters to wrap into library-native tool constructs.**
+It encapsulates business logic and exposes a single executable callable. This callable is wrapped by a library-specific agent or adapter (e.g., LangChain, Haystack) into a library-native tool construct.
+
+FlotillaTool exists to provide a strict boundary between:
+
+- Business logic execution
+- Agent reasoning
+- Runtime durability
+- Library integration
+
+It explicitly does **not**:
+
+- Emit `AgentEvent`
+- Mutate `ThreadEntry`
+- Access `ThreadContext`
+- Persist state
+- Enforce transport or schema contracts
+- Participate in durability or orchestration
+
+### Architectural Role
+
+| Property | Value |
+|---|---|
+| Layer | Execution layer (internal to Agent) |
+| Durable | No |
+| Persisted | No |
+| Library-agnostic | Yes |
+| Externally pluggable | Yes (via DI container) |
+| Stateless | Yes (required) |
+| Deterministic | Expected (for same inputs unless external I/O) |
+
+Deterministic behavior is defined by:
+
+- Callable input parameters
+- Injected dependencies
+- External I/O behavior (if applicable)
 
 ---
 
-## 2️⃣ Architectural Position
+## 2. System Architecture Context
+
+### Position in Flotilla
+
+FlotillaTool sits beneath the Agent layer and above injected infrastructure dependencies.
+
+Relationship to core systems:
+
+| System | Interaction |
+|---|---|
+| Thread Model | No direct interaction |
+| AgentEvent | Does not emit |
+| Runtime | Unknown to tool |
+| ContentPart | Not directly produced |
+| Checkpointing | Not involved |
+| External libraries | Wrapped by adapter |
+
+### Interaction Diagram (Conceptual)
 
 ```
-FlotillaTool (execution callable)
-        ↓
-Library-Specific Agent/Adapter (wrap into library tool)
-        ↓
-LLM / Graph Engine (invokes tool)
-        ↓
-Agent (decides what becomes externally visible)
-        ↓
-AgentEvent (agent-only protocol)
-        ↓
-Runtime (durability boundaries)
+UserInput
+  → Runtime
+    → Agent
+      → FlotillaTool.execution_callable()
+        → (returns data)
+      → AgentEvent (message_final / error / suspend)
+    → Runtime
+      → ThreadEntry
 ```
 
-### Critical Boundary
+### Boundary Ownership
 
-**Tools:**
+FlotillaTool **owns**:
+- Business logic execution
 
-- Do NOT emit `AgentEvent`
-- Do NOT mutate `ThreadEntry`
-- Do NOT know about `ThreadContext` or runtime
-- Are internal to agent execution
+FlotillaTool **must NOT**:
+- Cross into durability boundary
+- Interpret thread history
+- Emit agent protocol events
+- Control streaming semantics externally
 
-**Only agent `message_final` mutates thread state.**
-
----
-
-## 3️⃣ Separation of Concerns
-
-| Layer                        | Responsibility                                                      |
-|------------------------------|---------------------------------------------------------------------|
-| Tool                         | Business logic + executable callable                                |
-| Agent                        | Executes reasoning and decides externally visible output            |
-| Adapter / Library Agent      | Wraps the tool callable into library-native tool representation     |
-| Runtime                      | Orchestration + durability (persists agent state transitions only)  |
+> Only the Agent determines externally visible state.
 
 ---
 
-## 4️⃣ Public API
+## 3. Canonical Types / Interfaces
 
-### 4.1 Base Class Contract
+### Base Interface
 
 ```python
-from __future__ import annotations
-
-from abc import ABC, abstractmethod
-from typing import Callable
-
-
 class FlotillaTool(ABC):
-    """
-    Framework-neutral tool definition.
-
-    A tool exposes metadata for tool selection and a single executable callable
-    that will be wrapped by a library-specific agent/adapter (LangChain, etc.).
-    """
 
     @property
     @abstractmethod
     def name(self) -> str:
-        """Human-readable name."""
+        ...
 
     @property
     @abstractmethod
     def llm_description(self) -> str:
-        """LLM-facing description used for tool selection."""
+        ...
 
     @abstractmethod
     def execution_callable(self) -> Callable:
-        """
-        Return the underlying executable callable.
-
-        The returned callable may be:
-          - sync function
-          - async function
-          - sync generator function
-          - async generator function
-
-        Agents/adapters are responsible for wrapping this callable into
-        library-native tool constructs and bridging invocation semantics.
-        """
+        ...
 ```
 
-### Notes
+### Supported Callable Return Types (Closed Set)
 
-- There is no `id` on the tool
-- Uniqueness is achieved by container keys / registration keys (outside tool object)
-- Tools are DI-managed instances; the callable may be a bound method
+| Callable Type | Durable? | Notes |
+|---|---|---|
+| `def → Any` | No | Sync |
+| `async def → Any` | No | Async |
+| `def → Iterator[Any]` | No | Sync streaming |
+| `async def → AsyncIterator[Any]` | No | Async streaming |
 
----
-
-## 5️⃣ Statelessness Requirement
-
-**Tools:**
-
-- MUST NOT rely on mutable in-memory state across calls
-- MUST accept all required input via callable parameters
-- MAY be invoked concurrently
-- SHOULD be deterministic for same inputs (unless explicitly performing external I/O)
-
-**Tools may use injected dependencies (clients, repos, configs), but must remain free of per-thread mutable state.**
+Only these callable forms are supported. No additional lifecycle methods are defined.
 
 ---
 
-## 6️⃣ Execution Model
+## 4. Behavioral Contract
 
-The callable returned by `execution_callable()` may be:
+### Core Lifecycle Rules
 
-- `def f(...) -> Any`
-- `async def f(...) -> Any`
-- `def f(...) -> Iterator[Any]`
-- `async def f(...) -> AsyncIterator[Any]`
+A FlotillaTool **MUST** expose:
+- `name`
+- `llm_description`
+- `execution_callable()`
 
-**Tool streaming (yielding) is permitted internally, but it is not automatically a protocol feature; the agent decides what becomes externally visible.**
-
----
-
-## 7️⃣ Output Visibility Model
-
-- Tool outputs are internal intermediate computation
-- Tool completion does not change thread state
-- Tool output is not persisted as `ThreadEntry`
-
-**The agent may choose to expose tool-derived information via agent `message_*` events, but that is an agent-level concern.**
-
----
-
-## 8️⃣ Streaming Model
-
-Tools may yield values (generators/async generators). However:
-
-**Tool yields are internal to agent execution.**
-
-The agent may:
-
-- Aggregate tool yields and emit agent `message_final`
-- Emit agent `message_chunk` progress derived from tool yields
-- Discard intermediate yields
-
-**No tool-specific `message_*` events exist.**
+- `execution_callable()` MUST return a callable.
+- The callable MUST accept all required input via parameters.
+- The callable MAY be invoked concurrently.
+- The tool MUST NOT mutate thread state.
+- The tool MUST NOT emit `AgentEvent`.
+- The tool MUST NOT access runtime state.
+- The tool MUST NOT assume its output is externally visible.
+- The tool MAY raise exceptions.
+- Tool exceptions MUST propagate to the agent.
+- The tool MAY yield intermediate values (if generator).
+- EXACTLY ONE callable is exposed per tool instance.
 
 ---
 
-## 9️⃣ Adapter / Library-Agent Responsibilities
+## 5. Structural Schema
 
-Library-specific agent/adapters must:
+### Required Properties
 
-- Wrap `FlotillaTool.execution_callable()` into the library's tool abstraction (e.g., LangChain `StructuredTool`)
-- Bridge sync/async invocation correctly
-- Handle argument passing and type handling per library needs
-- Ensure tool exceptions surface to the agent so the agent can emit `error` (or fail)
+| Field | Type | Nullable | JSON-Serializable | Notes |
+|---|---|---|---|---|
+| `name` | `str` | No | Yes | Human-readable |
+| `llm_description` | `str` | No | Yes | LLM-facing |
+| `execution_callable` | `Callable` | No | No | Runtime-only |
 
-### Adapters Must Not
+### JSON Requirements
 
-- Modify business logic
-- Inject durable state behavior
-- Assume tool outputs are externally visible
+- Tool metadata must be JSON-serializable.
+- The callable itself is not serialized.
+- Tools MUST NOT embed unserializable state intended for durability.
 
----
+### Immutability Constraints
 
-## 🔟 What This Design Intentionally Avoids
-
-- ❌ Tool-level `AgentEvent` emission
-- ❌ Tool-level `ThreadEntry` durability
-- ❌ Tool lifecycle events
-- ❌ Schema enforcement requirements (beyond what a library adapter may infer)
-- ❌ Transport contracts inside tool
+- Tool instances SHOULD be immutable after construction.
+- Tools MUST NOT rely on mutable per-thread in-memory state.
+- Injected dependencies MAY maintain their own internal state.
 
 ---
 
-## 1️⃣1️⃣ Example
+## 6. Durable Mutation Boundaries
 
-```python
-from typing import Callable, AsyncIterator
+FlotillaTool produces **no durable mutations**.
 
-class SearchUsersTool(FlotillaTool):
-    def __init__(self, repo):
-        self.repo = repo
+It does **NOT**:
+- Append `ThreadEntry`
+- Emit `AgentEvent`
+- Write `ExecutionSnapshot`
+- Modify `Checkpoint`
 
-    @property
-    def name(self) -> str:
-        return "Search Users"
+These are the ONLY durable mutations permitted by Flotilla:
+- Agent-emitted events handled by Runtime
 
-    @property
-    def llm_description(self) -> str:
-        return "Search users by name."
-
-    def execution_callable(self) -> Callable:
-        return self.search
-
-    async def search(self, name: str, limit: int = 20) -> AsyncIterator[dict]:
-        async for user in self.repo.stream_users(name, limit):
-            yield {"user": user}
-```
+Tools are excluded from durable boundaries.
 
 ---
 
-## 🔥 Final Invariant
+## 7. Invariants
 
-- **FlotillaTool provides an executable callable + metadata**
-- **Tools are internal to agents**
-- **Thread state changes only when the agent emits `message_final`, `suspend`, or `error`**
+The following must always hold:
+
+- Tool is stateless across calls.
+- Tool execution does not mutate thread state.
+- Tool execution does not produce durable entries.
+- Tool exposes exactly one execution callable.
+- Tool callable accepts all required inputs explicitly.
+- Tool output visibility is controlled exclusively by Agent.
+- Tool yields are internal to Agent unless surfaced.
+- Tool does not reorder or buffer externally.
+
+---
+
+## 8. Extension & Override Points
+
+Subclassing is allowed.
+
+Subclasses **MUST**:
+- Implement required abstract methods.
+- Preserve statelessness invariant.
+- Preserve execution isolation.
+- Avoid hidden durability behavior.
+
+Subclasses **MUST NOT**:
+- Emit agent events.
+- Perform runtime coordination.
+- Introduce thread awareness.
+
+Adapters may wrap tools but must not alter business logic.
+
+---
+
+## 9. Error Handling Rules
+
+- Tool exceptions MUST propagate to Agent.
+- Tool MUST NOT swallow execution errors silently.
+- Tool MUST NOT emit durable error records.
+- Agent decides whether to emit: `error`, `message_final`, or `suspend`.
+
+Fail-fast behavior is expected for:
+- Invalid inputs
+- Dependency failures
+- External API errors
+
+Adapters MUST NOT convert tool failures into durable behavior.
+
+---
+
+## 10. Observability & Telemetry
+
+Tools **MAY**:
+- Log internally
+- Emit metrics
+- Use injected telemetry dependencies
+
+Tools **MUST NOT**:
+- Persist telemetry
+- Attach metadata to `ThreadEntry`
+- Emit reasoning
+
+Observability MUST NOT alter deterministic behavior.
+
+---
+
+## 11. Ordering Guarantees
+
+Tools:
+- MUST execute deterministically given identical inputs (except external I/O)
+- MUST NOT reorder internal yields artificially
+- MUST NOT buffer externally visible data
+- MUST NOT emit partial durable state
+
+If streaming:
+- Streaming remains internal to Agent.
+- No tool-specific streaming protocol exists.
+
+---
+
+## 12. Architectural Guarantees
+
+- No hidden durable state
+- Strict execution boundary
+- Library-agnostic contract
+- Deterministic replay at Agent boundary
+- Stateless by design
+- Internal-only execution
+- Durable state controlled exclusively by Agent + Runtime
+
+---
+
+## 13. Related Specifications
+
+- FlotillaAgent Specification

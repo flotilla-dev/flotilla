@@ -1,23 +1,112 @@
 # FlotillaAgent Specification (v3)
 
-## 1️⃣ Purpose
+## 1. Executive Summary
 
-FlotillaAgent is a stateless execution boundary between:
+### Purpose
 
-- ThreadContext (durable log snapshot)
-- Reasoning engine (LangChain, etc.)
-- AgentEvent protocol
+FlotillaAgent is the stateless execution boundary between:
+
+- `ThreadContext` (durable thread snapshot)
+- A reasoning engine (e.g., LangChain)
+- The canonical `AgentEvent` protocol
 
 It is:
 
 - Stateless
 - Async-only
 - Streaming-native
-- Library-agnostic
+- Library-agnostic at the contract boundary
+
+FlotillaAgent owns the transformation of reasoning-engine output into canonical `AgentEvent` instances.
+
+It explicitly does **not**:
+
+- Mutate durable state
+- Append `ThreadEntry`
+- Persist checkpoints
+- Maintain continuation state
+- Store per-thread memory
+- Emit non-canonical events
+
+All durable state mutation occurs outside the agent boundary.
+
+### Architectural Role
+
+| Property | Value |
+|---|---|
+| Layer | Execution / Agent boundary layer |
+| Durable | No |
+| Persisted | No |
+| Library-agnostic | Yes (at `AgentEvent` boundary) |
+| Externally pluggable | Yes |
+| Stateless | Yes (required) |
+| Deterministic | Yes (given same `ThreadContext` + config) |
+
+Deterministic behavior is defined by:
+
+- `ThreadContext` contents
+- `ExecutionConfig`
+- Injected reasoning engine behavior
 
 ---
 
-## 2️⃣ Public API
+## 2. System Architecture Context
+
+### Position in Flotilla
+
+FlotillaAgent sits between durable thread state and runtime orchestration.
+
+It interacts directly with:
+
+- `ThreadContext`
+- `AgentEvent`
+- `FlotillaTool`
+- `ContentPart`
+
+It does **not** interact directly with:
+
+- Durable storage
+- `ThreadEntry` persistence
+- Checkpoint storage
+
+### Interaction Diagram (Conceptual)
+
+```
+ThreadContext
+    ↓
+FlotillaAgent.run()
+    ↓
+Reasoning Engine
+    ↓
+Tool Invocation (internal)
+    ↓
+AgentEvent (canonical)
+```
+
+Followed by:
+
+```
+AgentEvent → Runtime → ThreadEntry (durable boundary)
+```
+
+### Boundary Ownership
+
+FlotillaAgent **owns**:
+- `AgentEvent` lifecycle correctness
+- Canonical output normalization
+- Streaming emission ordering
+
+FlotillaAgent **must NOT**:
+- Interpret durable mutation policies
+- Persist data
+- Control checkpointing
+- Access database or storage layers
+
+---
+
+## 3. Canonical Types / Interfaces
+
+### Public API (Single Entry Point)
 
 ```python
 async def run(
@@ -27,154 +116,194 @@ async def run(
 ) -> AsyncIterator[AgentEvent]
 ```
 
-**Single entry point.**
+Rules:
 
-**No separate resume method.**
+- Async-only
+- Streaming-native
+- No separate resume method
+- Resume safety achieved via reconstructed `ThreadContext`
 
----
+### Closed Set: Emitted Event Types
 
-## 3️⃣ Statelessness Contract
-
-### A FlotillaAgent Instance May Hold
-
-- Compiled execution engine
-- Wrapped tool definitions
-- Static configuration
-
-### It Must Not Hold
-
-- Per-thread mutable state
-- Durable memory
-- Continuation state
-- Conversation mutation logic
-
-**Resume safety is achieved via ThreadContext reconstruction.**
-
-**AgentEvent carries no continuation state.**
+The agent may emit only canonical `AgentEvent` types defined in the AgentEvent specification. No additional event types are allowed. No tool-specific events exist.
 
 ---
 
-## 4️⃣ Template Method Structure
+## 4. Behavioral Contract
 
-### Base Class Defines
+### Core Lifecycle Rules
 
-```python
-async def run(...)
+- Agent MUST validate `thread.status == RUNNABLE` before execution.
+- Agent MUST emit canonical `AgentEvent` only.
+- Agent MUST forward events immediately (no buffering unless engine requires).
+- Agent MUST enforce legal event ordering.
+- Agent MUST NOT emit durable entries directly.
+- Agent MUST NOT mutate `ThreadContext`.
+- Agent MUST NOT store continuation state.
+- EXACTLY ONE terminal event MUST be emitted per execution phase.
+- Agent MUST propagate tool exceptions into an `error` event.
+- Agent MUST NOT emit both `error` and `message_final`.
+
+### Empty Output Rule
+
+If the reasoning engine produces no output, the agent MUST emit:
+
 ```
-
-### Subclass Implements
-
-```python
-async def _execute(...)
-```
-
----
-
-## 5️⃣ Base Class Responsibilities
-
-- Validate `thread.status == RUNNABLE`
-- Enforce AgentEvent lifecycle contract
-- Enforce ordering invariants
-- Forward events immediately
-- Prevent illegal event sequences
-
----
-
-## 6️⃣ Subclass Responsibilities
-
-- Invoke reasoning engine
-- Wrap FlotillaTool execution callables
-- Normalize output into `List[ContentPart]`
-- Emit canonical AgentEvent only
-
----
-
-## 7️⃣ Tool Handling
-
-FlotillaTool execution is internal.
-
-### Tools
-
-- Do not emit AgentEvent
-- Do not mutate ThreadEntry
-- Do not stream directly to runtime
-
-**Agent decides what tool-derived data becomes externally visible.**
-
----
-
-## 8️⃣ ExecutionConfig Handling
-
-### Agent
-
-- Must not mutate config
-- Must pass recursion_limit to execution engine
-- Must not enforce recursion internally
-
----
-
-## 9️⃣ Empty Output Rule
-
-If reasoning engine produces no output:
-
-Agent must emit:
-
-```python
 message_start
 message_final(content=[TextPart("")])
 ```
 
-**Never emit nothing.**
+Agent MUST NEVER emit zero events.
 
 ---
 
-## 🔟 Error Semantics
+## 5. Structural Schema
 
-If execution fails:
+### `run()` Parameters
 
-- Emit `error`
-- Do not emit `message_final`
-- Initialization errors must raise at construction (fail-fast)
+| Field | Type | Nullable | Notes |
+|---|---|---|---|
+| `thread` | `ThreadContext` | No | Durable snapshot |
+| `config` | `ExecutionConfig` | No | Immutable config |
 
----
+### Emitted Event Requirements
 
-## 1️⃣1️⃣ Cancellation Semantics
+- All emitted events must conform to `AgentEvent` schema.
+- All `message_final` events must contain non-null `List[ContentPart]`.
+- Events must be JSON-serializable.
 
-If coroutine is cancelled:
+### Immutability Constraints
 
-- Cancellation propagates
-- No additional events emitted
-- Runtime handles durability implications
-
----
-
-## 1️⃣2️⃣ Architectural Guarantees
-
-- ✅ Stateless execution
-- ✅ Deterministic replay
-- ✅ Strict durable boundaries
-- ✅ No hidden continuation state
-- ✅ Library-agnostic protocol boundary
+- Agent instances MUST be stateless across calls.
+- `ThreadContext` MUST be treated as read-only.
+- `ExecutionConfig` MUST NOT be mutated.
+- No internal mutable state allowed per execution.
 
 ---
 
-## 1️⃣3️⃣ Related Specifications
+## 6. Durable Mutation Boundaries
+
+FlotillaAgent produces **no durable mutations**.
+
+It does **NOT**:
+- Append `ThreadEntry`
+- Persist checkpoints
+- Modify durable thread state
+
+Durable mutations occur only after `AgentEvent` leaves the agent boundary.
+
+---
+
+## 7. Invariants
+
+The following must always hold:
+
+- Stateless execution across calls.
+- No per-thread memory retained.
+- Exactly one terminal event per execution phase.
+- No illegal event ordering.
+- No mixed terminal events.
+- No mutation of `ThreadContext`.
+- Tool invocation is internal only.
+- Event emission preserves causal order.
+- Resume safety depends solely on `ThreadContext` reconstruction.
+
+Each invariant must be directly testable.
+
+---
+
+## 8. Extension & Override Points
+
+### Template Method Pattern
+
+Base class defines:
+```python
+async def run(...)
+```
+
+Subclass implements:
+```python
+async def _execute(...)
+```
+
+Subclasses **MUST**:
+- Emit canonical `AgentEvent` only.
+- Preserve ordering invariants.
+- Preserve statelessness.
+- Normalize outputs to `List[ContentPart]`.
+
+Subclasses **MUST NOT**:
+- Emit durable mutations.
+- Maintain continuation state.
+- Introduce non-canonical event types.
+
+---
+
+## 9. Error Handling Rules
+
+### Execution Failures
+
+If reasoning execution fails:
+- Agent MUST emit `error`.
+- Agent MUST NOT emit `message_final` afterward.
+
+### Initialization Failures
+
+- MUST raise at construction (fail-fast).
+- MUST NOT defer to runtime.
+
+### Tool Exceptions
+
+- MUST propagate to agent.
+- MUST result in `error` event (unless subclass explicitly transforms).
+- Silent failure is forbidden.
+
+---
+
+## 10. Observability & Telemetry
+
+Agent **MAY**:
+- Include metadata within `AgentEvent`.
+- Normalize reasoning outputs.
+- Attach optional content parts (if allowed by policy).
+
+Agent **MUST NOT**:
+- Persist telemetry.
+- Modify durable storage.
+- Alter determinism based on logging.
+
+Observability MUST NOT affect ordering or determinism.
+
+---
+
+## 11. Ordering Guarantees
+
+- Events MUST be emitted in causal order.
+- No artificial reordering.
+- No delayed emission.
+- Streaming MUST be pass-through.
+- No hidden buffering beyond reasoning engine constraints.
+- No hidden mutation of event stream.
+
+---
+
+## 12. Architectural Guarantees
+
+- Stateless execution
+- Deterministic replay from `ThreadContext`
+- Strict durable boundary separation
+- Library-agnostic canonical protocol
+- No hidden continuation state
+- Streaming-native design
+- Single execution entry point
+
+---
+
+## 13. Related Specifications
+
+Only specifications directly interacting with FlotillaAgent:
 
 - AgentEvent Specification
-- Thread Model Specification
+- ThreadContext Specification
 - ContentPart Specification
 - FlotillaTool Specification
-
----
-
-## ✅ Result
-
-You now have:
-
-- ✅ No role field
-- ✅ No ToolOutput
-- ✅ No duplicate lifecycle descriptions
-- ✅ No duplicate durable rules
-- ✅ Clear separation of concerns
-- ✅ Clean cross-referencing
-- ✅ Single source of truth per concept
