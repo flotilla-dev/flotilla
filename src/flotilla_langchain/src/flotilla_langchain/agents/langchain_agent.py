@@ -13,10 +13,10 @@ from langchain_core.tools import StructuredTool
 
 from flotilla.agents.flotilla_agent import FlotillaAgent
 from flotilla.core.agent_event import AgentEvent
-from flotilla.core.content_part import ContentPart, TextPart
+from flotilla.core.content_part import ContentPart, TextPart, JsonPart
 from flotilla.core.execution_config import ExecutionConfig
 from flotilla.core.thread_context import ThreadContext
-from flotilla.core.thread_entries import ResumeEntry
+from flotilla.core.thread_entries import ThreadEntry, ResumeEntry
 from flotilla.tools.flotilla_tool import FlotillaTool
 from flotilla.utils.logger import get_logger
 
@@ -162,6 +162,14 @@ class LangChainAgent(FlotillaAgent):
                         last_ai_message = m
                         break
 
+            if last_ai_message is None:
+                yield AgentEvent.error(
+                    entry_id=entry_id,
+                    content=[TextPart(text="No AIMessage found in final state")],
+                    metadata={"reason": "missing_ai_message"},
+                )
+                return
+
             final_text = "".join(chunk_buffer)
 
             parts = self._map_final_output_to_content_parts(
@@ -264,10 +272,36 @@ class LangChainAgent(FlotillaAgent):
             }
         }
 
-    def _resume_command(self, entry) -> Optional[Command]:
-        if isinstance(entry, ResumeEntry):
-            return Command(
-                action=getattr(entry, "action", None),
-                resume=getattr(entry, "payload", None),
-            )
-        return None
+    def _resume_command(self, entry: ThreadEntry) -> Optional[Command]:
+        if not isinstance(entry, ResumeEntry):
+            return None
+
+        payload = self._map_resume_content_to_payload(entry.content)
+
+        return Command(resume=payload)
+
+    def _map_resume_content_to_payload(self, content: List[ContentPart]) -> Any:
+        """
+        Convert ResumeEntry content into a JSON-serializable
+        payload suitable for LangGraph Command(resume=...).
+
+        Default behavior:
+        - Single JsonPart → return .data
+        - Single TextPart → return .text
+        - Otherwise → return list of serialized parts
+        """
+
+        if not content:
+            return None
+
+        if len(content) == 1:
+            part = content[0]
+
+            if isinstance(part, JsonPart):
+                return part.data
+
+            if isinstance(part, TextPart):
+                return part.text
+
+        # Fallback: structured representation
+        return [p.model_dump() for p in content]

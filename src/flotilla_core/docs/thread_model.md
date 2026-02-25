@@ -58,8 +58,25 @@ parent_entry_id establishes causal linkage.
 
 - `ClosedEntry` (terminal)
 
-**There is no ToolOutput.**
+Only the entry types defined above are supported in the durable thread log.
 
+### Content Symmetry
+
+All agent-visible input and output MUST be expressed as:
+
+`content: List[ContentPart]`
+
+This applies to:
+
+- UserInput
+- ResumeEntry
+- AgentOutput
+- SuspendEntry
+- ErrorEntry
+
+No alternative payload channels are permitted.
+
+ContentPart is the canonical structured I/O boundary for Flotilla.
 ---
 
 ## 4 Mapping: AgentEvent → ThreadEntry
@@ -89,16 +106,35 @@ There are three entries that can terminate an execution phase:
 
 No additional AgentOutput, SuspendEntry, or ErrorEntry may follow for the same parent_entry_id.
 
-All three are durable terminal entries. Each MAY contain:
 
 ### Contains
+All three are durable terminal entries. Each MUST contain:
 
 - `content: List[ContentPart]`
+
+Each MAY additionally contain:
+
 - `execution_metadata: Optional[Dict[str, Any]]` (optional JSON-serializable execution telemetry such as token usage, timing, or stack traces)
 
 `execution_metadata` is intended for internal logging, auditing, or telemetry and may not be returned to the end user.
 
 These entries represent the only durable phase termination mutations.
+
+### ResumeEntry Semantics
+
+`ResumeEntry` represents an external continuation of a previously suspended execution phase.
+
+Its `content` field contains structured input for the agent.
+
+If specific semantic meaning is required (e.g., approval of an interrupt),
+a `ContentPart.id` value MAY be used to designate intent.
+
+Example:
+
+- `id="approval"` — indicates approval of a prior SuspendEntry
+- `id="correction"` — provides revised input
+
+The meaning of specific `ContentPart.id` values is defined by higher-level application or runtime policy.
 
 ---
 
@@ -130,7 +166,8 @@ ThreadContext must validate:
 - Resume must follow Suspend
 - No entries after `ClosedEntry`
 - Suspend must be followed by Resume unless it is last entry
-
+- Input entries (`UserInput`, `ResumeEntry`) MUST NOT include `parent_entry_id`
+- Terminal entries MUST include `parent_entry_id`
 ---
 
 ## 8 Thread Status
