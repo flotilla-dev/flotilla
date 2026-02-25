@@ -1,32 +1,109 @@
-# Flotilla ContentPart Specification (v1.3)
+# ContentPart Specification (v1.3)
 
-## 1️⃣ Purpose
+## 1. Executive Summary
 
-ContentPart is the canonical structured output unit emitted inside:
+### Purpose
 
-```python
-AgentEvent(type="message_final", content=[ContentPart, ...])
-```
+`ContentPart` is the canonical structured payload unit used for thread I/O in Flotilla.
 
-It is:
+It is used symmetrically in:
+
+- `UserInput.content`
+- `AgentEvent.message_final.content`
+- Durable `AgentOutput.content`
+
+It represents content only — never execution mechanics.
+
+`ContentPart` is:
 
 - JSON-serializable
 - Durable-log safe
 - Library-agnostic
 - Runtime-opaque
 - Streaming-compatible (atomic only)
-- ContentPart is the canonical structured payload unit for thread I/O (user + agent).
-- Not inherently user-visible; exposure is policy-controlled.
+- Deterministic and replayable
 
-**ContentPart is the core communication types between the user and the agent.**
+It explicitly does **not**:
+
+- Encode execution state
+- Encode continuation state
+- Represent tool invocation
+- Contain raw binary payloads
+- Contain runtime references
+- Imply mutability or lifecycle semantics
+
+### Architectural Role
+
+| Property | Value |
+|---|---|
+| Layer | Thread I/O content layer |
+| Durable | Yes (when persisted in thread) |
+| Persisted | Yes |
+| Library-agnostic | Yes |
+| Externally pluggable | Closed union with controlled extension |
+| Stateless | Yes |
+| Deterministic | Yes |
+
+Determinism is defined by:
+
+- JSON-serializable structure
+- Immutable representation once written
 
 ---
 
-## 2️⃣ Design Principles
+## 2. System Architecture Context
 
-### ✅ Discriminated Union
+### Position in Flotilla
 
-Every ContentPart must include:
+`ContentPart` sits inside:
+
+- `AgentEvent` (`message_final`, `suspend`, `error`)
+- `ThreadEntry` durable records
+- `UserInput`
+
+It interacts directly with:
+
+- `AgentEvent`
+- Thread Model
+- `FlotillaAgent`
+
+It does **not** interact with:
+
+- Runtime orchestration logic
+- Tool execution
+- Checkpointing
+
+### Interaction Diagram (Conceptual)
+
+```
+UserInput.content → ThreadEntry (durable)
+                         ↓
+                  FlotillaAgent
+                         ↓
+                AgentEvent.message_final
+                         ↓
+                  ThreadEntry (durable)
+```
+
+### Boundary Ownership
+
+`ContentPart` **owns**:
+- Structured content modeling
+- Typed payload semantics
+- Deterministic durable representation
+
+It **must NOT**:
+- Contain execution mechanics
+- Influence runtime behavior
+- Encode graph or workflow state
+
+---
+
+## 3. Canonical Types / Interfaces
+
+### Discriminated Union (Closed Set)
+
+Every `ContentPart` MUST contain a `"type"` field that determines the allowed fields:
 
 ```json
 {
@@ -34,107 +111,93 @@ Every ContentPart must include:
 }
 ```
 
-The `"type"` field determines the allowed fields.
+No implicit modality, no open metadata blobs, no dynamic field injection.
 
-- No implicit modality
-- No runtime interpretation
+### Supported Types (Closed Set)
 
-### ✅ Atomic Emission Only
+| Type | Durable? | Description |
+|---|---|---|
+| `text` | Yes | Plain text |
+| `json` | Yes | Structured JSON object |
+| `file` | Yes | External file reference |
+| `reasoning` | Yes | LLM reasoning description |
+| `confidence` | Yes | LLM confidence score |
 
-Structured content:
-
-- MUST only be emitted in `message_final`
-- MUST NOT be partially streamed
-- MUST be complete and self-contained
-
-### ✅ Explicit Optional Attributes Per Type
-
-Optional attributes must be:
-
-- Explicitly defined
-- Strictly typed
-- Valid only for that ContentPart type
-
-**No open-ended metadata objects are allowed.**
-
-### ✅ Runtime-Opaque
-
-The runtime:
-
-- Stores ContentPart as-is
-- Does not inspect or modify fields
-- Does not interpret MIME types
-- Does not render content
-
-**Consumers determine rendering behavior.**
+Only these five types are supported.
 
 ---
 
-## 3️⃣ Canonical ContentPart Types
+## 4. Behavioral Contract
 
-### 3.1 TextPart
+### Core Rules
 
-Represents plain text output.
+- `ContentPart` MUST include `"type"`.
+- Fields MUST conform exactly to the type schema.
+- Structured content MUST be emitted only in `message_final`.
+- Structured content MUST NOT be partially streamed.
+- Runtime MUST treat `ContentPart` as opaque.
+- `ContentPart` MUST be JSON-serializable.
+- IDs (if present) MUST be unique within a single message.
+- `ContentPart` MUST NOT contain raw binary.
+- `ContentPart` MUST NOT contain execution state.
+- `ContentPart` MUST be immutable once persisted.
+
+### Atomic Emission Rule
+
+Structured parts (`json`, `file`, `reasoning`, `confidence`) MUST:
+
+- Appear only in `message_final`
+- Be complete and self-contained
+- Not be streamed incrementally
+
+---
+
+## 5. Structural Schema
+
+### Common Optional Field
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | Optional | Unique within message |
+
+If `id` is present, it MUST be unique within a single `message_final` and has no cross-message or lifecycle semantics.
+
+### 5.1 TextPart
 
 ```json
 {
   "type": "text",
   "text": "Hello world",
-  "id": "part_1"
+  "id": "optional"
 }
 ```
 
-#### Required Fields
+Required fields: `type = "text"`, `text` (string)
 
-- `type = "text"`
-- `text: string`
-
-#### Optional Fields
-
-- `id: string`
-
-#### Rules
-
+Rules:
 - May be empty string
-- Streaming text must reconstruct exactly into this value
+- Streaming reconstruction must match final value exactly
 - No MIME type
 - No binary
 
----
-
-### 3.2 JsonPart
-
-Represents structured JSON data.
+### 5.2 JsonPart
 
 ```json
 {
   "type": "json",
   "data": { "key": "value" },
-  "id": "ui_data"
+  "id": "optional"
 }
 ```
 
-#### Required Fields
+Required fields: `type = "json"`, `data` (JSON-serializable object)
 
-- `type = "json"`
-- `data: JSON-serializable object`
-
-#### Optional Fields
-
-- `id: string`
-
-#### Rules
-
+Rules:
 - Must be JSON-serializable
 - No custom objects
-- No binary
 - No execution metadata
 
----
-
-### 3.3 FilePart
-
-Represents any file or binary artifact.
+### 5.3 FilePart
 
 ```json
 {
@@ -143,264 +206,151 @@ Represents any file or binary artifact.
   "mime_type": "application/pdf",
   "bytes": 1048576,
   "sha256": "abc123...",
-  "id": "attachment_1"
+  "id": "optional"
 }
 ```
 
-#### Required Fields
+Required fields: `type = "file"`, `url` (string), `mime_type` (string)
 
-- `type = "file"`
-- `url: string`
-- `mime_type: string`
+Optional fields: `bytes` (integer), `sha256` (string)
 
-#### Optional Fields
+Rules:
+- URL must reference external content
+- No raw binary allowed
+- If `sha256` is present, MUST be a 64-character hex string
+- Runtime does not interpret MIME type
 
-- `id: string`
-- `bytes: integer`
-- `sha256: string`
-
-#### Field Definitions
-
-**url**
-
-- Must reference externally accessible content
-- Must not contain raw binary payload
-
-**mime_type**
-
-- Must accurately describe file format
-- Used by client to determine rendering behavior
-- Runtime does not interpret it
-
-**bytes**
-
-- Optional size hint
-- Must reflect actual file size if provided
-
-**sha256**
-
-- Optional integrity hash
-- Must represent SHA-256 of file contents if provided
-- If provided, MUST be a 64-character hexadecimal string.
-
----
-
-### 3.4 ReasoningPart
-Represents a description of the reasoning perfomed by the LLM in creating the output
-
-```json
-  { 
-    "type": "reasoning", 
-    "reason": "..." , 
-    "id": "optional" 
-  }
-```
-
-#### Required Fields
-
-- `type = "reasoning"`
-- `reason: string`
-
-#### Optional Fields
-
-- `id: string`
-
-#### Field Definitions
-**reason**
-- A textual description of how the LLM reasoned to generate its response
-
-### 3.5 ConfidencePart
-Represents the confidence score of the LLM in correctness of the response it generated
-
-```json
-  { 
-    "type": "confidence", 
-    "score": 0.37 , 
-    "id": "optional" 
-  }
-```
-
-#### Required Fields
-
-- `type = "confidence"`
-- 'score: float'
-
-#### Optional Fields
-
-- `id: string`
-
-#### Field Definitions
-**score**
-- A numeric score of confidence the LLM has in the correctness of its response to the input
-- The score range is between 0.0 and 1.0 as a float
-
-
-## 4️⃣ ContentPart id Semantics (Normative)
-
-The `id` field is:
-
-- Optional but strongly recommended when emitting multiple structured parts
-- A semantic handle for selecting a specific part within a single `message_final`
-- Opaque to the runtime
-
-### Uniqueness Rules
-
-- If present, `id` MUST be unique within a single `message_final`
-- No global uniqueness requirement
-- No cross-message identity implied
-
-### Intended Usage
-
-`id` enables clients to:
-
-- Select specific structured parts (e.g., "ui_data" vs "ui_schema")
-- Render specific components deterministically
-- Perform client-side mapping
-- Avoid positional inference
-- Avoid structural guessing
-
-#### Example
-
-```json
-[
-  { "type": "json", "id": "ui_data", "data": {...} },
-  { "type": "json", "id": "ui_schema", "data": {...} },
-  { "type": "text", "text": "Rendering instructions attached." }
-]
-```
-
-The consumer may directly select "ui_data" and "ui_schema".
-
-### Explicit Non-Semantics of id
-
-The `id` field:
-
-- Does NOT imply durability semantics
-- Does NOT imply cross-message identity
-- Does NOT imply mutability
-- Does NOT imply patch/update semantics
-- Does NOT imply incremental rendering
-- Does NOT imply lifecycle state
-
-**It is strictly a content-level selector.**
-
----
-
-## 5️⃣ Streaming Compatibility Rules
-
-### When Streaming Text
-
-- All streamed chunk text MUST concatenate exactly to the final TextPart.text.
-- No additional user-visible text may appear in `message_final`
-
-### Structured Content
-
-- Must not be streamed
-- Must appear only in `message_final`
-
-**File parts are never streamed.**
-
----
-
-## 6️⃣ Multiple ContentParts in a Message
-
-A single `message_final` may contain multiple parts:
-
-```json
-[
-  { "type": "text", "text": "Here is your report." },
-  { "type": "file", "url": "...", "mime_type": "application/pdf", "id": "report_pdf" }
-]
-```
-
-### Rules
-
-- Order is preserved
-- Clients render in order
-- Each part is independent
-- IDs (if present) must be unique within the message
-
----
-
-## 7️⃣ What ContentPart Must NOT Contain
-
-ContentPart must never contain:
-
-- ❌ Raw binary payloads
-- ❌ Runtime-specific references
-- ❌ Execution state
-- ❌ Continuation state
-- ❌ Tool call arguments
-- ❌ Graph structure
-- ❌ Non-JSON-serializable types
-- ❌ Open-ended metadata blobs
-
----
-
-## 8️⃣ Durable Log Alignment
-
-ContentPart is stored inside:
-
-- `UserInput.content`
-- `AgentOutput.content`
-
-Therefore it must be:
-
-- Deterministic
-- Replayable
-- Immutable once written
-- Fully serializable
-
----
-
-## 9️⃣ Extensibility Model
-
-Future types may be introduced by defining new `"type"` discriminators.
-
-### Requirements
-
-- JSON-serializable
-- Runtime-opaque
-- No execution leakage
-- Durable-safe
-
-### Example
+### 5.4 ReasoningPart
 
 ```json
 {
-  "type": "audio",
-  "url": "...",
-  "mime_type": "audio/mpeg",
-  "bytes": 12345
+  "type": "reasoning",
+  "reason": "...",
+  "id": "optional"
 }
 ```
 
-**New types require updating the ContentPart union and specification.**
+Required fields: `type = "reasoning"`, `reason` (string)
+
+Rules:
+- Textual explanation of LLM reasoning
+- Policy-controlled exposure
+- No execution metadata
+
+### 5.5 ConfidencePart
+
+```json
+{
+  "type": "confidence",
+  "score": 0.37,
+  "id": "optional"
+}
+```
+
+Required fields: `type = "confidence"`, `score` (float)
+
+Rules:
+- Score range MUST be between `0.0` and `1.0` inclusive
+- Represents model confidence
+- No execution state
 
 ---
 
-## 🔟 Architectural Guarantees
+## 6. Durable Mutation Boundaries
 
-This design guarantees:
+`ContentPart` itself does not mutate durable state. Durability occurs when `ContentPart` is stored inside:
 
-- ✅ Strict execution/content separation
-- ✅ Deterministic durable representation
-- ✅ Streaming-safe structured output
-- ✅ Client-level selection via `id`
-- ✅ No runtime modality logic
-- ✅ File integrity support
-- ✅ Infinite extensibility without schema chaos
+- `UserInput`
+- `AgentOutput`
+- `SuspendEntry`
+- `ErrorEntry`
+
+These are the ONLY durable contexts for `ContentPart`.
 
 ---
 
-## Final Mental Model
+## 7. Invariants
 
-ContentPart is:
+The following must always hold:
 
-- The atomic, structured content unit for both user input and agent output
-- The durable representation of thread I/O within a Flotilla application
-- A strongly typed, discriminated payload used symmetrically for inbound and outbound communication
-- Selectable via `id` within a message
-- Completely separate from execution state
+- `"type"` discriminator must be present.
+- Only defined types are allowed.
+- No extra undefined fields permitted.
+- IDs (if present) unique within message.
+- No raw binary payloads.
+- All values JSON-serializable.
+- Streaming invariant must hold for text.
+- Structured content not streamed.
+- Immutable once written.
+- Deterministic representation for replay.
 
-**It contains content only — never execution mechanics.**
+Each invariant must be testable.
+
+---
+
+## 8. Extension & Override Points
+
+`ContentPart` union is closed but extensible via spec revision. To introduce a new type:
+
+- Define new `"type"` discriminator
+- Define full schema
+- Ensure JSON-serializability
+- Ensure runtime opacity
+- Ensure durability safety
+
+No dynamic runtime registration allowed. Spec revision required for extension.
+
+---
+
+## 9. Error Handling Rules
+
+Contract violations include:
+
+- Missing `"type"`
+- Unknown type discriminator
+- Non-JSON-serializable values
+- Duplicate `id` within message
+- Streaming structured content
+- Raw binary embedded
+
+Violations MUST fail-fast during validation. Silent coercion is forbidden.
+
+---
+
+## 10. Observability & Telemetry
+
+`ContentPart` MAY contain `reasoning` and `confidence` parts. These are content-level constructs, not runtime telemetry.
+
+Execution telemetry belongs in `AgentEvent.execution_metadata`, not `ContentPart`. Runtime must not interpret `ContentPart` fields.
+
+---
+
+## 11. Ordering Guarantees
+
+- Order of parts within `message_final` MUST be preserved.
+- Clients MUST render in order.
+- No implicit reordering.
+- No structural guessing by runtime.
+
+---
+
+## 12. Architectural Guarantees
+
+- Deterministic durable representation
+- Strict separation of execution and content
+- Runtime opacity
+- Streaming-safe structured output
+- Closed discriminated union
+- Client-selectable content via `id`
+- Replay-safe
+- No lifecycle semantics embedded
+
+---
+
+## 13. Related Specifications
+
+Only specifications directly interacting with `ContentPart`:
+
+- AgentEvent Specification
+- Thread Model Specification
+- FlotillaAgent Specification

@@ -1,216 +1,299 @@
-# Flotilla Thread Model Specification (v3.1)
+# Thread Model Specification (v3.1)
 
-## 1️⃣ ThreadEntry — Durable Log Record
+## 1. Executive Summary
 
-ThreadEntry represents an immutable, append-only record in a thread.
+### Purpose
 
-It is:
+The Thread Model defines the durable, append-only log structure for Flotilla threads.
 
-- Store-assigned identity
-- Store-assigned timestamp
-- Deterministic
-- Replayable
-- Fully auditable
+It provides:
 
-**ThreadEntry represents state transitions, not execution steps.**
+- Immutable, replayable execution history
+- Deterministic state reconstruction
+- Explicit execution phase boundaries
+- Causal linkage between input and output
+- Auditability and durability guarantees
 
-## 2 Execution Phase Model
+`ThreadEntry` represents state transitions, not execution steps.
 
-An execution phase begins when a UserInput or ResumeEntry
-is appended to the thread.
+The thread model explicitly does **not**:
 
-The phase ends when exactly one of the following entries
-is appended:
+- Contain execution logic
+- Model streaming events
+- Encode tool execution
+- Store continuation state
+- Perform orchestration
+- Interpret content
 
-- AgentOutput
-- SuspendEntry
-- ErrorEntry
+> Execution lifecycle is modeled by `AgentEvent`. Durable state is modeled by `ThreadEntry`.
 
-Terminal entries MUST include:
+### Architectural Role
 
-parent_entry_id: str
+| Property | Value |
+|---|---|
+| Layer | Durable thread state layer |
+| Durable | Yes |
+| Persisted | Yes |
+| Library-agnostic | Yes |
+| Externally pluggable | No |
+| Stateless | `ThreadContext` is immutable |
+| Deterministic | Yes (append-only replay model) |
 
-This MUST reference the entry_id of the initiating
-UserInput or ResumeEntry.
+Determinism is defined by:
 
-All entry_id values are unique.
-parent_entry_id establishes causal linkage.
+- Ordered sequence of `ThreadEntry` records
+- Immutable content
+- Store-assigned identity and timestamps
 
 ---
 
-## 3 Canonical ThreadEntry Types
+## 2. System Architecture Context
 
-### Input
+### Position in Flotilla
+
+Thread Model sits beneath:
+
+- `FlotillaRuntime`
+- `FlotillaAgent`
+
+It interacts directly with:
+
+- `AgentEvent` (via mapping)
+- `ContentPart`
+- `ThreadContext`
+
+It does **not** interact with:
+
+- Tool layer
+- Reasoning engine
+- External libraries
+
+### Interaction Diagram (Conceptual)
+
+```
+UserInput → ThreadEntry (durable)
+    ↓
+Runtime → ThreadContext
+    ↓
+Agent → AgentEvent
+    ↓
+Runtime → ThreadEntry (durable append)
+```
+
+### Boundary Ownership
+
+Thread Model **owns**:
+- Durable append-only log
+- Execution phase linkage
+- Thread status derivation
+- Structural invariants
+
+Thread Model **must NOT**:
+- Execute agents
+- Interpret reasoning
+- Perform streaming
+- Persist `AgentEvent` directly
+
+---
+
+## 3. Canonical Types / Interfaces
+
+### Closed Set of ThreadEntry Types
+
+| Type | Durable? | Description |
+|---|---|---|
+| `UserInput` | Yes | External user input |
+| `ResumeEntry` | Yes | External continuation input |
+| `AgentOutput` | Yes | Durable agent output |
+| `SuspendEntry` | Yes | Durable execution pause |
+| `ErrorEntry` | Yes | Durable execution failure |
+| `ClosedEntry` | Yes | Explicit thread closure |
+
+Only the above entry types are permitted in the durable thread log. No additional entry types are allowed.
+
+### Content Symmetry Rule
+
+All agent-visible input and output MUST be expressed as `content: List[ContentPart]`. Applies to: `UserInput`, `ResumeEntry`, `AgentOutput`, `SuspendEntry`, and `ErrorEntry`. No alternative payload channels are permitted.
+
+---
+
+## 4. Behavioral Contract
+
+### Execution Phase Model
+
+An execution phase begins when one of the following is appended:
 
 - `UserInput`
 - `ResumeEntry`
 
-### Output
+The phase ends when EXACTLY ONE of the following is appended:
 
 - `AgentOutput`
-
-### Execution Control
-
 - `SuspendEntry`
 - `ErrorEntry`
 
-### Lifecycle
+Terminal entries MUST include `parent_entry_id` referencing the initiating entry's `entry_id`.
 
-- `ClosedEntry` (terminal)
+Rules:
+- All `entry_id` values MUST be unique.
+- `parent_entry_id` establishes causal linkage.
+- No additional terminal entries may follow for the same `parent_entry_id`.
 
-Only the entry types defined above are supported in the durable thread log.
+### `AgentEvent` → `ThreadEntry` Mapping
 
-### Content Symmetry
+| `AgentEvent` | `ThreadEntry` |
+|---|---|
+| `message_final` | `AgentOutput` |
+| `suspend` | `SuspendEntry` |
+| `error` | `ErrorEntry` |
 
-All agent-visible input and output MUST be expressed as:
-
-`content: List[ContentPart]`
-
-This applies to:
-
-- UserInput
-- ResumeEntry
-- AgentOutput
-- SuspendEntry
-- ErrorEntry
-
-No alternative payload channels are permitted.
-
-ContentPart is the canonical structured I/O boundary for Flotilla.
----
-
-## 4 Mapping: AgentEvent → ThreadEntry
-
-| AgentEvent     | ThreadEntry   |
-|----------------|---------------|
-| message_final  | AgentOutput   |
-| suspend        | SuspendEntry  |
-| error          | ErrorEntry    |
-
-
-### Notes
-
-- `ResumeEntry` is appended externally
-- `ClosedEntry` is runtime-controlled only
-- Only these AgentEvent types produce durable ThreadEntry records.
+Only these `AgentEvent` types produce durable `ThreadEntry` records. `message_start` and `message_chunk` are never persisted.
 
 ---
 
-## 5 Execution Phase Termination Entries
+## 5. Structural Schema
 
-There are three entries that can terminate an execution phase:
+### Common Fields (All Entries)
 
-- AgentOutput
-- SuspendEntry
-- ErrorEntry
+| Field | Type | Required |
+|---|---|---|
+| `entry_id` | string | Yes |
+| `thread_id` | string | Yes |
+| `created_at` | timestamp | Yes |
+| `type` | enum | Yes |
 
-No additional AgentOutput, SuspendEntry, or ErrorEntry may follow for the same parent_entry_id.
+### Input Entries
 
+`UserInput` and `ResumeEntry`:
+- MUST NOT include `parent_entry_id`
+- MUST include `content: List[ContentPart]`
 
-### Contains
-All three are durable terminal entries. Each MUST contain:
+### Terminal Entries
 
-- `content: List[ContentPart]`
+`AgentOutput`, `SuspendEntry`, `ErrorEntry`:
 
-Each MAY additionally contain:
+Required: `parent_entry_id` (string), `content` (`List[ContentPart]`)
 
-- `execution_metadata: Optional[Dict[str, Any]]` (optional JSON-serializable execution telemetry such as token usage, timing, or stack traces)
+Optional: `execution_metadata` (`Optional[Dict[str, Any]]`)
 
-`execution_metadata` is intended for internal logging, auditing, or telemetry and may not be returned to the end user.
+Rules:
+- `execution_metadata` MUST be JSON-serializable.
+- `execution_metadata` is telemetry only.
+- Metadata exposure to end-user is policy-controlled.
 
-These entries represent the only durable phase termination mutations.
+### `ClosedEntry`
 
-### ResumeEntry Semantics
+- No `parent_entry_id`
+- Marks lifecycle termination of thread
+- Runtime-controlled only — agents cannot emit
 
-`ResumeEntry` represents an external continuation of a previously suspended execution phase.
+### JSON Requirements
 
-Its `content` field contains structured input for the agent.
-
-If specific semantic meaning is required (e.g., approval of an interrupt),
-a `ContentPart.id` value MAY be used to designate intent.
-
-Example:
-
-- `id="approval"` — indicates approval of a prior SuspendEntry
-- `id="correction"` — provides revised input
-
-The meaning of specific `ContentPart.id` values is defined by higher-level application or runtime policy.
-
----
-
-## 6 ThreadContext
-
-ThreadContext is an immutable, validated snapshot of ordered ThreadEntry objects.
-
-### It Provides
-
-- Structural validation
-- Status derivation
-- Protocol invariants
-- Convenience accessors
-
-### It Is
-
-- Not mutable
-- Not a store
-- Not a runtime
+- All entries MUST be JSON-serializable.
+- No hidden fields permitted.
+- No implicit defaults allowed.
+- `ContentPart` must conform to the ContentPart specification.
 
 ---
 
-## 7 Structural Invariants
+## 6. Durable Mutation Boundaries
 
-ThreadContext must validate:
+The ONLY durable mutations permitted:
 
-- Non-empty
-- All entries share same `thread_id`
-- Resume must follow Suspend
-- No entries after `ClosedEntry`
-- Suspend must be followed by Resume unless it is last entry
-- Input entries (`UserInput`, `ResumeEntry`) MUST NOT include `parent_entry_id`
-- Terminal entries MUST include `parent_entry_id`
----
+- Append `UserInput`
+- Append `ResumeEntry`
+- Append `AgentOutput`
+- Append `SuspendEntry`
+- Append `ErrorEntry`
+- Append `ClosedEntry`
 
-## 8 Thread Status
-
-Derived from last entry:
-
-| Last Entry    | Status    |
-|---------------|-----------|
-| SuspendEntry  | SUSPENDED |
-| ClosedEntry   | CLOSED    |
-| Anything else | RUNNABLE  |
-
-**There is no COMPLETED state.**
-
-**Execution completion does not terminate thread.**
+No in-place modification allowed. No deletion allowed. Append-only invariant is absolute.
 
 ---
 
-## 9 Lifecycle Flow
+## 7. Invariants
 
-1. Thread exists (append-only log)
-2. Runtime loads entries → builds ThreadContext
-3. Runtime invokes Agent
-4. Agent emits AgentEvent
-5. Runtime maps durable events to ThreadEntry
-6. ResumeEntry may be appended
-7. ClosedEntry may be appended
+`ThreadContext` MUST validate:
 
-**Agents cannot close threads.**
+- Thread is non-empty.
+- All entries share same `thread_id`.
+- `entry_id` uniqueness.
+- `ResumeEntry` must follow `SuspendEntry`.
+- No entries after `ClosedEntry`.
+- `SuspendEntry` must be followed by `ResumeEntry` unless it is the last entry.
+- Input entries MUST NOT include `parent_entry_id`.
+- Terminal entries MUST include `parent_entry_id`.
+- Exactly one terminal entry per execution phase.
+- `parent_entry_id` must reference valid initiating entry.
 
----
-
-## 10 Architectural Guarantees
-
-- ✅ Append-only log
-- ✅ Deterministic replay
-- ✅ Execution ≠ lifecycle
-- ✅ No hidden state
-- ✅ Durable boundaries strictly enforced
+Each invariant must be directly testable.
 
 ---
 
-## 11 Related Specifications
+## 8. Extension & Override Points
+
+`ThreadEntry` type set is closed. No subclassing permitted. New durable entry types require specification revision.
+
+`ThreadContext` may provide convenience accessors but must preserve immutability.
+
+---
+
+## 9. Error Handling Rules
+
+Contract violations include:
+
+- Multiple terminal entries for same `parent_entry_id`
+- Missing terminal entry for a phase
+- `ResumeEntry` without preceding `SuspendEntry`
+- Entry appended after `ClosedEntry`
+- `parent_entry_id` referencing invalid entry
+- Mixed `thread_id` values
+- Non-JSON-serializable content
+
+Violations MUST fail-fast during validation. Silent recovery is forbidden.
+
+---
+
+## 10. Observability & Telemetry
+
+`execution_metadata`:
+- May include token usage, timing, stack traces
+- Must be JSON-serializable
+- Is optional
+- Is durable
+- Exposure is runtime policy-controlled
+
+Thread model does not interpret metadata.
+
+---
+
+## 11. Ordering Guarantees
+
+- Entries MUST be strictly append-only.
+- Order MUST reflect causal execution order.
+- No reordering permitted.
+- Replay of ordered entries MUST reconstruct identical `ThreadContext`.
+- No implicit state reconstruction outside the log.
+
+---
+
+## 12. Architectural Guarantees
+
+- Append-only durable log
+- Deterministic replay
+- Strict execution/durability separation
+- Explicit execution phase modeling
+- Causal linkage via `parent_entry_id`
+- No hidden continuation state
+- Immutable `ThreadContext` snapshot
+- Agents cannot close threads
+- Execution completion does not imply thread termination
+
+---
+
+## 13. Related Specifications
+
+Only specifications directly interacting with the Thread Model:
 
 - AgentEvent Specification
 - ContentPart Specification
