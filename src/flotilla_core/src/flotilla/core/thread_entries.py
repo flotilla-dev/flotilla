@@ -41,13 +41,13 @@ class AgentOutput(ThreadEntry):
 
 class SuspendEntry(ThreadEntry):
     role: MessageRole = MessageRole.SYSTEM
-    reason: str
+    content: List[ContentPart] = Field(min_length=1)
 
 
 class ResumeEntry(ThreadEntry):
     role: MessageRole = MessageRole.USER
     user_id: Optional[str] = None
-    resume_payload: Dict[str, Any]
+    content: List[ContentPart] = Field(min_length=1)
 
 
 class ClosedEntry(ThreadEntry):
