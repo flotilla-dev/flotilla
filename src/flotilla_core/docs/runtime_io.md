@@ -190,8 +190,10 @@ Derived from durable suspend state:
 - MUST NOT contain `ContentPart`.
 - MUST be validated against durable thread state.
 - MUST become invalid if: already consumed, expired, mismatched to thread, or mismatched to `runtime_key`.
+- ResumeToken validation alone does not guarantee resume permission. Runtime MUST additionally enforce resume authorization via ResumeAuthorizationPolicy as defined in the FlotillaRuntime specification.
 
 Runtime MUST treat the token as opaque except for validation. Implementation MAY encode as a signed token, Base64 JSON, or opaque ID referencing a durable record.
+
 
 ---
 

@@ -1,4 +1,4 @@
-# Thread Model Specification (v3.1)
+# Thread Model Specification (v3.2)
 
 ## 1. Executive Summary
 
@@ -114,6 +114,33 @@ Only the above entry types are permitted in the durable thread log. No additiona
 ### Content Symmetry Rule
 
 All agent-visible input and output MUST be expressed as `content: List[ContentPart]`. Applies to: `UserInput`, `ResumeEntry`, `AgentOutput`, `SuspendEntry`, and `ErrorEntry`. No alternative payload channels are permitted.
+
+### SuspendEntry: `resume_audience`
+
+#### Field Definition
+
+`SuspendEntry` MAY include the following optional field:
+```json
+{  
+ "resume_audience": "string | null"  
+}
+```
+
+#### Field Semantics
+
+-   Opaque string.
+-   JSON-serializable.
+-   May contain:
+    
+    -   Base64-encoded blob
+    -   Opaque identifier
+    -   Signed audience descriptor
+    -   Application-defined metadata
+        
+
+Flotilla core MUST treat this field as opaque.
+
+Flotilla MUST NOT interpret, parse, or enforce semantics of `resume_audience` directly.
 
 ---
 

@@ -220,39 +220,6 @@ Rules:
 - If `sha256` is present, MUST be a 64-character hex string
 - Runtime does not interpret MIME type
 
-### 5.4 ReasoningPart
-
-```json
-{
-  "type": "reasoning",
-  "reason": "...",
-  "id": "optional"
-}
-```
-
-Required fields: `type = "reasoning"`, `reason` (string)
-
-Rules:
-- Textual explanation of LLM reasoning
-- Policy-controlled exposure
-- No execution metadata
-
-### 5.5 ConfidencePart
-
-```json
-{
-  "type": "confidence",
-  "score": 0.37,
-  "id": "optional"
-}
-```
-
-Required fields: `type = "confidence"`, `score` (float)
-
-Rules:
-- Score range MUST be between `0.0` and `1.0` inclusive
-- Represents model confidence
-- No execution state
 
 ---
 

@@ -8,8 +8,6 @@ import re
 
 class ContentPartType(str, Enum):
     TEXT = "text"
-    REASONING = "reasoning"
-    CONFIDENCE = "confidence"
     JSON = "json"
     FILE = "file"
 
@@ -45,27 +43,6 @@ class ContentPartBase(BaseModel):
 class TextPart(ContentPartBase):
     type: Literal[ContentPartType.TEXT] = ContentPartType.TEXT
     text: str = Field(..., description="Plain text content.")
-
-
-# ============================================================
-# Reasoning Part
-# ============================================================
-class ReasoningPart(ContentPartBase):
-    type: Literal[ContentPartType.REASONING] = ContentPartType.REASONING
-    reason: str = Field(..., description="LLM reasoning description")
-
-
-# ============================================================
-# Confidence Part
-# ============================================================
-class ConfidencePart(ContentPartBase):
-    type: Literal[ContentPartType.CONFIDENCE] = ContentPartType.CONFIDENCE
-    score: float = Field(
-        ...,
-        le=1.0,
-        ge=0.0,
-        description="Numerical confidence score between 0.0 and 1.0",
-    )
 
 
 # ============================================================

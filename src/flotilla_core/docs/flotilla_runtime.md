@@ -12,6 +12,7 @@ FlotillaRuntime is a stateless orchestration kernel that:
 - Enforces thread-scoped concurrency via CAS
 - Enforces lazy timeout closure of orphaned phases
 - Emits user-facing results via `RuntimeResponse` (sync) or `RuntimeEvent` (streaming)
+- Enforces resume authorization via injected ResumeAuthorizationPolicy
 
 ### Out of Scope
 
@@ -55,19 +56,67 @@ Runtime MUST receive `ExecutionConfig` as input. `ExecutionConfig` MUST be const
 
 ### 3.3 OrchestrationStrategy (Required)
 
-Runtime MUST invoke `OrchestrationStrategy` with the reconstructed `ThreadContext` and provided `ExecutionConfig`. `OrchestrationStrategy` MUST yield only `AgentEvent` and MUST yield `AgentEvent.error` for failures (no raised execution errors).
+Runtime MUST invoke OrchestrationStrategy with the reconstructed ThreadContext and the provided immutable ExecutionConfig.
+
+OrchestrationStrategy defines how a single execution phase proceeds. It may coordinate one or more FlotillaAgent or nested OrchestrationStrategy instances, including multi-agent workflows and ephemeral inter-agent data passing. All such coordination occurs within the phase and does not modify durable thread state.
+
+OrchestrationStrategy MUST yield only canonical AgentEvent and MUST yield exactly one terminal AgentEvent per invocation. Execution failures MUST be represented as AgentEvent.error rather than raised exceptions.
+
+Runtime treats OrchestrationStrategy as an execution engine and lifecycle-neutral producer of AgentEvent. Durable mutation and lifecycle enforcement remain exclusively owned by FlotillaRuntime.
+
+For full behavioral rules, see the OrchestrationStrategy Specification.
 
 ### 3.4 SuspendPolicy (Required)
 
-Runtime MUST invoke `SuspendPolicy` synchronously after durably appending `SuspendEntry`. `SuspendPolicy` failure MUST be non-fatal.
+Runtime MUST invoke SuspendPolicy synchronously after durably appending a SuspendEntry.
+
+SuspendPolicy is responsible for any external side-effects triggered by suspension (e.g., notifications, callbacks, or workflow signaling). It does not participate in lifecycle enforcement or durable mutation.
+
+Failure of SuspendPolicy MUST be non-fatal and MUST NOT affect execution state or resume semantics.
+
+For full behavioral rules, see the SuspendPolicy Specification.
 
 ### 3.5 TelemetryPolicy (Optional)
 
-Default no-op.
+Runtime MAY invoke TelemetryPolicy to emit execution telemetry events at defined lifecycle points.
+
+TelemetryPolicy is observational only. It MUST NOT mutate durable state, influence execution flow, or affect determinism.
+
+Failure of TelemetryPolicy MUST be non-fatal.
+
+For full behavioral rules, see the TelemetryPolicy Specification.
 
 ### 3.6 ExecutionTimeoutPolicy (Required)
 
-Timeout enforcement is lazy and measured against the store-assigned timestamp of the most recent initiating entry.
+Runtime MUST invoke ExecutionTimeoutPolicy to determine whether an active execution phase has exceeded its timeout duration.
+
+The policy evaluates expiration based on durable thread state and returns a boolean decision only. It does not enforce timeout directly or perform durable mutation.
+
+Timeout enforcement remains owned by FlotillaRuntime.
+
+For full behavioral rules, see the ExecutionTimeoutPolicy Specification.
+
+### 3.7 ResumeAuthorizationPolicy (Required)
+
+Runtime MUST invoke `ResumeAuthorizationPolicy` during resume validation.
+
+Runtime MUST:
+1.  Validate ResumeToken integrity and suspend state.
+2.  Load the associated `SuspendEntry`.
+3.  Invoke:
+    
+```python
+resume_authorization_policy.is_authorized(  
+  request=request,  
+  suspend_entry=suspend_entry  
+)
+```
+
+If the policy returns `False`, runtime MUST reject the resume attempt.
+
+ResumeToken possession alone MUST NOT be sufficient for resume when the policy denies authorization.
+
+ResumeAuthorizationPolicy MUST NOT perform durable mutations.
 
 ---
 
@@ -111,6 +160,28 @@ If `append` succeeds:
 - MUST reload and reconstruct `ThreadContext`
 - MUST invoke `OrchestrationStrategy`
 
+### 5.2.1 Resume Handling (NEW)
+
+If `RuntimeRequest.resume_token` is present:
+
+Runtime MUST:
+
+1.  Validate ResumeToken integrity (signature / lookup / expiry).
+2.  Validate that:
+   
+    -   `thread_id` matches     
+    -   `runtime_key` matches
+    -   referenced `SuspendEntry` exists
+    -   referenced suspend has no terminal child
+        
+3.  Invoke `ResumeAuthorizationPolicy`.
+4.  If authorization fails, reject resume.
+5.  Append `ResumeEntry` referencing the `SuspendEntry`.
+6.  Reload thread (Durable Reload Rule).
+7.  Invoke `OrchestrationStrategy`.
+    
+Resume MUST NOT proceed without successful authorization.
+
 ### 5.3 Lazy Timeout Enforcement
 
 If `ThreadContext` indicates an active phase and `now - initiating_entry.timestamp > timeout_duration`, then runtime MUST:
@@ -136,6 +207,10 @@ On success:
 - MUST reload thread
 - MUST emit response
 
+When appending SuspendEntry, runtime MUST persist any resume_audience value included by the agent or orchestration strategy without interpretation.
+
+Runtime MUST treat resume_audience as opaque.
+
 ---
 
 ## 6. Thread-Scoped Concurrency
@@ -159,3 +234,4 @@ Only specifications that interact with `FlotillaRuntime`:
 - Thread Model (`ThreadEntry` / `ThreadContext`)
 - AgentEvent
 - ContentPart
+- ResumeAuthorizationPolicy Specification
