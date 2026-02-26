@@ -1,9 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import AsyncIterator
+from typing import AsyncIterator, List, Optional
 from flotilla.core.agent_event import AgentEvent
 from flotilla.core.execution_config import ExecutionConfig
 from flotilla.core.thread_context import ThreadContext, ThreadStatus
-from flotilla.agents.agent_errors import ThreadIdMismatchError, InvalidAgentEventError
+from flotilla.core.content_part import ContentPart
+from flotilla.agents.agent_errors import (
+    ThreadIdMismatchError,
+    InvalidAgentEventError,
+    ThreadNotRunnableError,
+)
 from flotilla.core.agent_event import AgentEventType, AgentEvent
 
 
@@ -44,6 +49,7 @@ class FlotillaAgent(ABC):
         self,
         thread: ThreadContext,
         config: ExecutionConfig,
+        input_parts: Optional[List[ContentPart]],
     ) -> AsyncIterator[AgentEvent]:
         if thread.status != ThreadStatus.RUNNABLE:
             raise ThreadNotRunnableError(thread.status)
@@ -62,4 +68,5 @@ class FlotillaAgent(ABC):
         self,
         thread: ThreadContext,
         config: ExecutionConfig,
+        input_parts: Optional[List[ContentPart]],
     ) -> AsyncIterator[AgentEvent]: ...

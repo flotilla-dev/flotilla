@@ -86,6 +86,7 @@ class LangChainAgent(FlotillaAgent):
         self,
         thread: ThreadContext,
         config: ExecutionConfig,
+        input_parts: Optional[List[ContentPart]],
     ) -> AsyncIterator[AgentEvent]:
 
         if not thread.entries:

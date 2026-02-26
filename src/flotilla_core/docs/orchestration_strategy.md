@@ -65,7 +65,6 @@ async def execute(
 ) -> AsyncIterator[AgentEvent]
 ```
 
-This signature is intentionally identical in shape to `FlotillaAgent` execution.
 
 ---
 
@@ -152,6 +151,16 @@ It MUST NOT:
 
 All orchestration occurs within a single phase.
 
+### 5.7 Ephemeral Coordination Rule (NEW)
+
+`OrchestrationStrategy` MUST:
+-   Treat all inter-agent handoff data as ephemeral.
+-   Use `ContentPart` injection as the sole coordination mechanism.
+-   Avoid introducing temporary durable entries.
+-   Avoid passing raw `AgentEvent` between agents.
+    
+Agent-to-agent coordination MUST occur via structured `ContentPart` objects only.
+
 ---
 
 ## 6. Composition Rules
@@ -168,6 +177,18 @@ All orchestration occurs within a single phase.
 
 The framework does not prescribe or restrict execution topology. The only requirement is adherence to the `AgentEvent` contract.
 
+### Multi-Agent Coordination
+
+When coordinating multiple agents within a single execution phase:
+-   `OrchestrationStrategy` MAY invoke one or more `FlotillaAgent` instances sequentially or conditionally.   
+-   Terminal output `ContentPart` from one agent MAY be transformed into `input_parts` for a subsequent agent.
+-   Such `input_parts` are ephemeral.
+-   Such `input_parts` MUST NOT be appended to `ThreadContext`.
+-   Such `input_parts` MUST NOT be durably persisted.
+-   Such coordination MUST occur entirely within the execution phase.
+    
+This mechanism enables multi-agent workflows without modifying the durable thread model.
+
 ---
 
 ## 7. Ordering Guarantees
@@ -178,6 +199,12 @@ The framework does not prescribe or restrict execution topology. The only requir
 - Not reorder events emitted by sub-components
 - Not emit events after terminal
 - Not suppress terminal events
+
+When invoking multiple agents:
+- Only one outward-facing AgentEvent stream may be emitted.
+- Strategy MAY suppress intermediate agent streaming events.
+- Strategy MUST preserve causal ordering for all emitted events.
+- Exactly one terminal event MUST be yielded per phase.
 
 If internal parallelism is implemented, emitted `AgentEvent` order MUST remain deterministic and causal.
 
@@ -230,6 +257,8 @@ For every invocation:
 - `thread_context` MUST remain immutable.
 - `execution_config` MUST remain immutable.
 - No durable mutation occurs within strategy.
+- Inter-agent coordination MUST NOT modify durable state.
+- No ContentPart used for coordination may be durably appended.
 
 ---
 

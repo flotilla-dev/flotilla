@@ -113,6 +113,7 @@ async def run(
     self,
     thread: ThreadContext,
     config: ExecutionConfig,
+    input_parts: Optional[List[ContentPart]]
 ) -> AsyncIterator[AgentEvent]
 ```
 
@@ -122,6 +123,18 @@ Rules:
 - Streaming-native
 - No separate resume method
 - Resume safety achieved via reconstructed `ThreadContext`
+
+#### Invocation Assembly Contract
+
+FlotillaAgent MUST:
+
+ - Build base reasoning messages strictly from ThreadContext.
+ - Treat input_parts as additive and ephemeral.
+ - Append input_parts after durable history when constructing reasoning engine input.
+ - Never assume input_parts contains initiating user input.
+ - Never duplicate the most recent durable UserInput or ResumeEntry.
+
+  If input_parts is None, it MUST be treated as an empty list.
 
 ### Closed Set: Emitted Event Types
 
@@ -143,6 +156,22 @@ The agent may emit only canonical `AgentEvent` types defined in the AgentEvent s
 - EXACTLY ONE terminal event MUST be emitted per execution phase.
 - Agent MUST propagate tool exceptions into an `error` event.
 - Agent MUST NOT emit both `error` and `message_final`.
+
+### Determinism Definition (Revised)
+
+Deterministic behavior is defined by:
+-   `ThreadContext` contents
+-   `ExecutionConfig`
+-   `input_parts`
+-   Injected reasoning engine behavior
+- 
+### No Durable Mutation (Clarified)
+FlotillaAgent MUST NOT:
+-   Persist `input_parts`
+-   Mutate `ThreadContext`
+-   Convert `input_parts` into durable entries
+    
+`input_parts` are phase-local and ephemeral.
 
 ### Empty Output Rule
 
@@ -205,6 +234,8 @@ The following must always hold:
 - No mixed terminal events.
 - No mutation of `ThreadContext`.
 - Tool invocation is internal only.
+- input_parts MUST NOT be persisted.
+- input_parts MUST NOT duplicate initiating durable content.
 - Event emission preserves causal order.
 - Resume safety depends solely on `ThreadContext` reconstruction.
 
@@ -290,12 +321,13 @@ Observability MUST NOT affect ordering or determinism.
 ## 12. Architectural Guarantees
 
 - Stateless execution
-- Deterministic replay from `ThreadContext`
+- Deterministic replay from `ThreadContext` + ivocation delta
 - Strict durable boundary separation
 - Library-agnostic canonical protocol
 - No hidden continuation state
 - Streaming-native design
 - Single execution entry point
+- Clean separation between durable history and ephemeral coordination
 
 ---
 
