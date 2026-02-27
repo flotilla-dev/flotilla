@@ -7,8 +7,8 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from flotilla_langchain.agents.langchain_agent import LangChainAgent
 from flotilla.core.thread_context import ThreadContext
 from flotilla.core.thread_entries import UserInput, SuspendEntry
-from flotilla.core.execution_config import ExecutionConfig
-from flotilla.core.content_part import TextPart
+from flotilla.runtime.execution_config import ExecutionConfig
+from flotilla.runtime.content_part import TextPart
 
 
 # --------------------------------------------------
@@ -273,7 +273,7 @@ async def test_authoritative_final_state_wins(thread, config):
     assert final.content[0].text == "complete"
 
 
-from flotilla.core.content_part import JsonPart
+from flotilla.runtime.content_part import JsonPart
 
 
 @pytest.mark.asyncio

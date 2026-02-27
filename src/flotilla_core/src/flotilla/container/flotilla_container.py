@@ -10,7 +10,7 @@ from flotilla.container.binding import Binding
 from flotilla.container.singleton_binding import SingletonBinding
 from flotilla.container.factory_binding import FactoryBinding
 from flotilla.utils.logger import get_logger
-from flotilla.core.errors import FlotillaConfigurationError, ReferenceResolutionError
+from flotilla.config.errors import FlotillaConfigurationError, ReferenceResolutionError
 
 
 logger = get_logger(__name__)

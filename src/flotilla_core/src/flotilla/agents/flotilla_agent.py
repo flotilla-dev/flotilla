@@ -1,15 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import AsyncIterator, List, Optional
-from flotilla.core.agent_event import AgentEvent
-from flotilla.core.execution_config import ExecutionConfig
+from flotilla.agents.agent_event import AgentEvent
+from flotilla.runtime.execution_config import ExecutionConfig
 from flotilla.core.thread_context import ThreadContext, ThreadStatus
-from flotilla.core.content_part import ContentPart
-from flotilla.agents.agent_errors import (
-    ThreadIdMismatchError,
-    InvalidAgentEventError,
-    ThreadNotRunnableError,
-)
-from flotilla.core.agent_event import AgentEventType, AgentEvent
+from flotilla.runtime.content_part import ContentPart
+from flotilla.agents.agent_errors import ThreadIdMismatchError, ThreadNotRunnableError
+from flotilla.agents.agent_event import AgentEvent
 
 
 class FlotillaAgent(ABC):

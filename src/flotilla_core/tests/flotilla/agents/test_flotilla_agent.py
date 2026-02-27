@@ -3,9 +3,9 @@ import pytest
 from flotilla.agents.flotilla_agent import FlotillaAgent
 from flotilla.core.thread_context import ThreadContext
 from flotilla.core.thread_entries import UserInput
-from flotilla.core.agent_event import AgentEvent, AgentEventType
-from flotilla.core.content_part import TextPart
-from flotilla.core.execution_config import ExecutionConfig
+from flotilla.agents.agent_event import AgentEvent, AgentEventType
+from flotilla.runtime.content_part import TextPart
+from flotilla.runtime.execution_config import ExecutionConfig
 
 
 # ----------------------------

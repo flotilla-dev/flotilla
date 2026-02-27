@@ -9,7 +9,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from flotilla.core.flotilla_runtime import FlotillaRuntime
+from flotilla.runtime.flotilla_runtime import FlotillaRuntime
 from flotilla.tools.flotilla_tool import FlotillaTool
 
 

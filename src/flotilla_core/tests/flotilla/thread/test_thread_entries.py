@@ -5,7 +5,7 @@ from flotilla.core.thread_entries import (
     AgentOutput,
     SuspendEntry,
 )
-from flotilla.core.content_part import TextPart
+from flotilla.runtime.content_part import TextPart
 from pydantic import ValidationError
 
 

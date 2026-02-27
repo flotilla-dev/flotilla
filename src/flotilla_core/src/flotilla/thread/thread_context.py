@@ -2,7 +2,7 @@ from typing import List
 from pydantic import BaseModel, model_validator
 from enum import Enum
 
-from flotilla.core.thread_entries import (
+from flotilla.thread.thread_entries import (
     ThreadEntry,
     SuspendEntry,
     ResumeEntry,
@@ -47,7 +47,7 @@ class ThreadContext(BaseModel):
         return self.entries[0].thread_id
 
     @property
-    def last_entry(self) -> "ThreadEntry":
+    def last_entry(self) -> ThreadEntry:
         return self.entries[-1]
 
     @property

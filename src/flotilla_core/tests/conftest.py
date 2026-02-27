@@ -7,7 +7,7 @@ from typing import List, Optional, Callable
 from flotilla.tools.flotilla_tool import FlotillaTool
 
 from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.core.flotilla_runtime import FlotillaRuntime
+from flotilla.runtime.flotilla_runtime import FlotillaRuntime
 
 
 class MockFlotillaRuntime(FlotillaRuntime):

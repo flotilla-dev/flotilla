@@ -53,7 +53,7 @@ It provides:
 ```python
 class ThreadEntryStore:
 
-    async def create_thread(self, thread_id: str | None = None) -> str:
+    async def create_thread(self) -> str:
         ...
 
     async def load(self, thread_id: str) -> list[ThreadEntry]:

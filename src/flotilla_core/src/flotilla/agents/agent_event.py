@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from flotilla.core.content_part import (
+from flotilla.runtime.content_part import (
     ContentPart,
     TextPart,
 )

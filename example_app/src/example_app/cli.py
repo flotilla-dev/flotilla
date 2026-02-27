@@ -21,7 +21,7 @@ from flotilla.config.resolvers.env_secret_resolver import EnvSecretResolver
 from flotilla.config.sources.yaml_configuration_source import YamlConfigurationSource
 from flotilla.config.sources.local_env_source import LocalEnvSource
 from flotilla.core.agent_input import AgentInput
-from flotilla.core.execution_config import ExecutionConfig
+from flotilla.runtime.execution_config import ExecutionConfig
 from flotilla_core.src.flotilla.flotilla_application import FlotillaApplication
 from flotilla.utils.logger import get_logger
 

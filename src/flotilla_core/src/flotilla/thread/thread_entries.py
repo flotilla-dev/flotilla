@@ -1,8 +1,8 @@
 from typing import Union, List, Dict, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
-from flotilla.core.content_part import ContentPart
-from flotilla.core.message_role import MessageRole
+from flotilla.runtime.content_part import ContentPart
+from flotilla.runtime.message_role import MessageRole
 
 
 class ThreadEntry(BaseModel):

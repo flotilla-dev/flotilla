@@ -1,10 +1,11 @@
 import os
 from typing import Any
 
-from flotilla.core.errors import SecretResolutionError
+from flotilla.config.errors import SecretResolutionError
 from flotilla.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
 
 class EnvSecretResolver:
     """Resolve secrets from environment variables."""

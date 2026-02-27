@@ -2,7 +2,7 @@ import pytest
 
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.core.errors import FlotillaConfigurationError, ReferenceResolutionError
+from flotilla.config.errors import FlotillaConfigurationError, ReferenceResolutionError
 
 
 @pytest.fixture

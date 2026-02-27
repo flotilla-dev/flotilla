@@ -1,5 +1,5 @@
 from typing import Any, Dict, Optional
-from flotilla.core.errors import ConfigurationResolutionError
+from flotilla.config.errors import ConfigurationResolutionError
 
 
 class ConfigUtils:

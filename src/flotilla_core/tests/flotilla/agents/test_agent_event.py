@@ -1,6 +1,6 @@
 import pytest
-from flotilla.core.agent_event import AgentEvent, AgentEventType
-from flotilla.core.content_part import TextPart
+from flotilla.agents.agent_event import AgentEvent, AgentEventType
+from flotilla.runtime.content_part import TextPart
 
 
 def make_text(text: str):

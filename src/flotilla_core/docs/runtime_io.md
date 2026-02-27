@@ -34,28 +34,22 @@ Represents a single execution phase attempt. Each valid `RuntimeRequest` results
 
 ```json
 {
-  "runtime_key": "string",
   "thread_id": "string",
   "user_id": "string",
-  "request_id": "string",
   "timestamp": "ISO-8601 string",
   "correlation_id": "string | null",
   "trace_id": "string | null",
   "resume_token": "string | null",
-  "input": [ "ContentPart" ],
+  "content": [ "ContentPart" ],
   "transport_metadata": { "...": "..." }
 }
 ```
 
 ### Field Definitions
 
-**`runtime_key`** (REQUIRED) — Identifies which runtime implementation to use. MUST match a registered runtime. MUST be supplied at application boundary.
-
 **`thread_id`** (REQUIRED) — Identifies the thread to execute against. MUST refer to an existing thread. Runtime MUST fail if thread does not exist. Runtime MUST NOT create thread.
 
 **`user_id`** (REQUIRED) — Identifies the requesting user. Used for auditing and may influence policy decisions.
-
-**`request_id`** (REQUIRED) — Globally unique identifier for the request. MUST be unique across all requests. MUST be treated as immutable. Used for logging and telemetry correlation.
 
 **`timestamp`** (REQUIRED) — Request creation timestamp. Used for logging only. Runtime MUST NOT use this for timeout enforcement or durable ordering. Durable store timestamps remain authoritative.
 
@@ -65,7 +59,7 @@ Represents a single execution phase attempt. Each valid `RuntimeRequest` results
 
 **`resume_token`** (OPTIONAL, string) — Opaque token representing prior suspension. If present, indicates this request resumes a suspended execution; runtime MUST validate token against durable thread state and MUST reject invalid or expired tokens. If absent, treated as new phase initiation.
 
-**`input`** — REQUIRED when `resume_token` is null. OPTIONAL when `resume_token` is non-null. Represents user-provided `ContentPart` objects.
+**`content`** — REQUIRED in all cases. Represents user-provided `ContentPart` objects.
 
 **`transport_metadata`** (OPTIONAL) — Opaque JSON payload. May include transport-layer information (headers, etc.). Runtime MUST treat as opaque and MUST NOT depend on it for correctness.
 
@@ -84,7 +78,6 @@ Represents the terminal result of a synchronous invocation. Exactly one `Runtime
   "type": "enum",
   "request_id": "string",
   "thread_id": "string",
-  "runtime_key": "string",
   "timestamp": "ISO-8601 string",
   "correlation_id": "string | null",
   "trace_id": "string | null",
@@ -122,9 +115,8 @@ Represents streaming execution progress. Returned as an `AsyncIterator` when run
 ```json
 {
   "type": "enum",
-  "request_id": "string",
+  "phase_id": "string",
   "thread_id": "string",
-  "runtime_key": "string",
   "timestamp": "ISO-8601 string",
   "correlation_id": "string | null",
   "trace_id": "string | null",
@@ -143,7 +135,7 @@ Terminal: `COMPLETE`, `SUSPEND`, `ERROR`
 
 **`START`** — Indicates beginning of streaming execution output. Lifecycle enforcement and durable state alignment are defined in the Runtime specification.
 
-**`DELTA`** — Represents incremental streaming content. Typically contains a single `ContentPart` of type `TEXT`. May repeat multiple times.
+**`PART`** — Represents incremental streaming content. Typically contains a single `ContentPart` of type `TEXT`. May repeat multiple times.
 
 **`COMPLETE`** (Terminal) — Represents successful execution. Corresponds to durable `AgentOutput`. MUST include final content. MUST NOT include `resume_token`.
 

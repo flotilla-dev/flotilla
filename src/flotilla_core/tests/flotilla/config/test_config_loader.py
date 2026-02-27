@@ -6,7 +6,7 @@ from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.sources.dict_configuration_source import DictConfigurationSource
 from flotilla.config.configuration_source import ConfigurationSource
 from flotilla.config.secret_resolver import SecretResolver
-from flotilla.core.errors import ConfigurationResolutionError
+from flotilla.config.errors import ConfigurationResolutionError
 
 
 # ---------------------------------------------------------------------

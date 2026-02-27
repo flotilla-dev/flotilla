@@ -12,9 +12,9 @@ from langchain.agents import create_agent
 from langchain_core.tools import StructuredTool
 
 from flotilla.agents.flotilla_agent import FlotillaAgent
-from flotilla.core.agent_event import AgentEvent
-from flotilla.core.content_part import ContentPart, TextPart, JsonPart
-from flotilla.core.execution_config import ExecutionConfig
+from flotilla.agents.agent_event import AgentEvent
+from flotilla.runtime.content_part import ContentPart, TextPart, JsonPart
+from flotilla.runtime.execution_config import ExecutionConfig
 from flotilla.core.thread_context import ThreadContext
 from flotilla.core.thread_entries import ThreadEntry, ResumeEntry
 from flotilla.tools.flotilla_tool import FlotillaTool
