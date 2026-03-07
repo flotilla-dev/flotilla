@@ -8,6 +8,7 @@ from flotilla.config.secret_resolver import SecretResolver
 from flotilla.config.configuration_source import ConfigurationSource
 from flotilla.config.config_loader import ConfigLoader
 from flotilla.runtime.flotilla_runtime import FlotillaRuntime
+from flotilla.thread.thread_service import ThreadService
 
 
 class FlotillaApplication:
@@ -38,9 +39,7 @@ class FlotillaApplication:
     (CLI, FastAPI, workers, etc.).
     """
 
-    def __init__(
-        self, sources: List[ConfigurationSource], secrets: List[SecretResolver]
-    ):
+    def __init__(self, sources: List[ConfigurationSource], secrets: List[SecretResolver]):
         """
         Create a new FlotillaApplication.
 
@@ -60,6 +59,7 @@ class FlotillaApplication:
         self._loader: ConfigLoader = ConfigLoader(sources=sources, secrets=secrets)
         self._container = None
         self._runtime = None
+        self._thead_service = None
         self._started = False
 
     # ----------------------------
@@ -145,8 +145,7 @@ class FlotillaApplication:
             RuntimeError:
                 If the application has not been started or has been shut down.
         """
-        if not self._started:
-            raise RuntimeError("Application not started")
+        self._assert_started()
         return self._container
 
     @property
@@ -155,7 +154,18 @@ class FlotillaApplication:
 
     @property
     def runtime(self) -> FlotillaRuntime:
+        self._assert_started()
+        return self._runtime
+
+    @property
+    def thread_service(self) -> ThreadService:
+        self._assert_started()
+        return self._thead_service
+
+    # -------------------------------
+    # Private Helpers
+    # -------------------------------
+
+    def _assert_started(self):
         if not self.started:
             raise RuntimeError("Application not started")
-
-        return self._runtime
