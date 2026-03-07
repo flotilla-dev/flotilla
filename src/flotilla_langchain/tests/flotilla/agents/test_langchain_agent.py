@@ -152,7 +152,7 @@ class TestAgent(LangChainAgent):
 
 
 @pytest.fixture
-def thread() -> ThreadContext:
+def thread_context() -> ThreadContext:
     entry = UserInput(
         thread_id="t1",
         phase_id="p1",
@@ -164,7 +164,7 @@ def thread() -> ThreadContext:
 
 
 @pytest.fixture
-def config() -> PhaseContext:
+def phase_context() -> PhaseContext:
     return PhaseContext(thread_id="t1", phase_id="p1", user_id="u1")
 
 
@@ -174,12 +174,12 @@ def config() -> PhaseContext:
 
 
 @pytest.mark.asyncio
-async def test_emits_message_start_and_final(thread, config):
+async def test_emits_message_start_and_final(thread_context, phase_context):
     graph = FakeGraph(chunks=["hi"], final_text="hi")
     agent = TestAgent(graph)
 
     output = []
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         output.append(e)
 
     assert output[0].type == "message_start"
@@ -189,12 +189,12 @@ async def test_emits_message_start_and_final(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_streaming_emits_chunks_then_final(thread, config):
+async def test_streaming_emits_chunks_then_final(thread_context, phase_context):
     graph = FakeGraph(chunks=["he", "llo"], final_text="hello")
     agent = TestAgent(graph)
 
     output = []
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         output.append(e)
 
     assert output[0].type == "message_start"
@@ -207,12 +207,12 @@ async def test_streaming_emits_chunks_then_final(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_error_emits_error_event(thread, config):
+async def test_error_emits_error_event(thread_context, phase_context):
     graph = ErrorGraph()
     agent = TestAgent(graph)
 
     output = []
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         output.append(e)
 
     assert output[0].type == "message_start"
@@ -221,12 +221,12 @@ async def test_error_emits_error_event(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_empty_output_produces_empty_text_part(thread, config):
+async def test_empty_output_produces_empty_text_part(thread_context, phase_context):
     graph = FakeGraph(chunks=[], final_text="")
     agent = TestAgent(graph)
 
     output = []
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         output.append(e)
 
     assert output[0].type == "message_start"
@@ -235,12 +235,12 @@ async def test_empty_output_produces_empty_text_part(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_cancellation_propagates(thread, config):
+async def test_cancellation_propagates(thread_context, phase_context):
     graph = SlowGraph()
     agent = TestAgent(graph)
 
     async def consume():
-        async for _ in agent.run(thread, config):
+        async for _ in agent.run(thread_context, phase_context):
             await asyncio.sleep(0)
 
     task = asyncio.create_task(consume())
@@ -252,12 +252,12 @@ async def test_cancellation_propagates(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_authoritative_final_state_wins(thread, config):
+async def test_authoritative_final_state_wins(thread_context, phase_context):
     graph = AuthoritativeGraph()
     agent = TestAgent(graph)
 
     output = []
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         output.append(e)
 
     final = next(e for e in output if e.type == "message_final")
@@ -265,12 +265,12 @@ async def test_authoritative_final_state_wins(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_default_agent_treats_json_as_text(thread, config):
+async def test_default_agent_treats_json_as_text(thread_context, phase_context):
     graph = JsonGraph()
     agent = TestAgent(graph)
 
     output = []
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         output.append(e)
 
     final = next(e for e in output if e.type == "message_final")
@@ -278,12 +278,12 @@ async def test_default_agent_treats_json_as_text(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_execution_metadata_aggregated(thread, config):
+async def test_execution_metadata_aggregated(thread_context, phase_context):
     graph = MetadataGraph()
     agent = TestAgent(graph)
 
     output = []
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         output.append(e)
 
     final = next(e for e in output if e.type == "message_final")
@@ -294,12 +294,12 @@ async def test_execution_metadata_aggregated(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_interrupt_emits_suspend(thread, config):
+async def test_interrupt_emits_suspend(thread_context, phase_context):
     graph = InterruptGraph()
     agent = TestAgent(graph)
 
     output = []
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         output.append(e)
 
     assert output[0].type == "message_start"
@@ -308,12 +308,12 @@ async def test_interrupt_emits_suspend(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_no_ai_message_yields_error(thread, config):
+async def test_no_ai_message_yields_error(thread_context, phase_context):
     graph = NoAIMessageGraph()
     agent = TestAgent(graph)
 
     output = []
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         output.append(e)
 
     assert output[0].type == "message_start"
@@ -323,7 +323,7 @@ async def test_no_ai_message_yields_error(thread, config):
 
 @pytest.mark.asyncio
 @pytest.mark.asyncio
-async def test_resume_command_passed_to_graph(config):
+async def test_resume_command_passed_to_graph(phase_context):
     user = UserInput(
         thread_id="t1",
         entry_id="e1",
@@ -355,21 +355,21 @@ async def test_resume_command_passed_to_graph(config):
     graph = ResumeCaptureGraph()
     agent = TestAgent(graph)
 
-    async for _ in agent.run(thread, config):
+    async for _ in agent.run(thread, phase_context):
         pass
 
     assert graph.captured_command is not None
 
 
 @pytest.mark.asyncio
-async def test_streaming_text_matches_final(thread, config):
+async def test_streaming_text_matches_final(thread_context, phase_context):
     graph = FakeGraph(chunks=["a", "b", "c"], final_text="abc")
     agent = TestAgent(graph)
 
     chunks = []
     final_text = None
 
-    async for e in agent.run(thread, config):
+    async for e in agent.run(thread_context, phase_context):
         if e.type == "message_chunk":
             chunks.append(e.content[0].text)
         if e.type == "message_final":

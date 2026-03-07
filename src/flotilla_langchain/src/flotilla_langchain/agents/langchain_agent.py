@@ -98,7 +98,7 @@ class LangChainAgent(FlotillaAgent):
         if not entry_id:
             raise RuntimeError("Triggering entry must have a non-null entry_id.")
 
-        yield AgentEvent.message_start(entry_id=entry_id)
+        yield AgentEvent.message_start(entry_id=entry_id, agent_id=self.agent_name)
 
         chunk_buffer: List[str] = []
         stream_metadata: Dict[str, Any] = {}
@@ -132,6 +132,7 @@ class LangChainAgent(FlotillaAgent):
 
                             yield AgentEvent.message_chunk(
                                 entry_id=entry_id,
+                                agent_id=self.agent_name,
                                 text=message.content,
                             )
 
@@ -145,6 +146,7 @@ class LangChainAgent(FlotillaAgent):
 
                         yield AgentEvent.suspend(
                             entry_id=entry_id,
+                            agent_id=self.agent_name,
                             content=[TextPart(text=reason)],
                         )
                         return
@@ -165,6 +167,7 @@ class LangChainAgent(FlotillaAgent):
             if last_ai_message is None:
                 yield AgentEvent.error(
                     entry_id=entry_id,
+                    agent_id=self.agent_name,
                     content=[TextPart(text="No AIMessage found in final state")],
                     metadata={"reason": "missing_ai_message"},
                 )
@@ -187,6 +190,7 @@ class LangChainAgent(FlotillaAgent):
 
             yield AgentEvent.message_final(
                 entry_id=entry_id,
+                agent_id=self.agent_name,
                 content=parts,
                 metadata=execution_metadata,
             )
@@ -202,6 +206,7 @@ class LangChainAgent(FlotillaAgent):
 
             yield AgentEvent.error(
                 entry_id=entry_id,
+                agent_id=self.agent_name,
                 content=[TextPart(text=str(e))],
             )
 
