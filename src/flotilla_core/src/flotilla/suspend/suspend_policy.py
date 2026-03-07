@@ -1,7 +1,7 @@
 from typing import Protocol
 from flotilla.thread.thread_context import ThreadContext
 from flotilla.thread.thread_entries import SuspendEntry
-from flotilla.runtime.execution_config import ExecutionConfig
+from flotilla.runtime.phase_context import PhaseContext
 
 
 class SuspendPolicy(Protocol):
@@ -10,5 +10,5 @@ class SuspendPolicy(Protocol):
         thread_context: ThreadContext,
         suspend_entry: SuspendEntry,
         resume_token: str,
-        execution_config: ExecutionConfig,
+        execution_config: PhaseContext,
     ) -> None: ...

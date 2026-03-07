@@ -62,9 +62,8 @@ class ThreadEntryStore:
     async def append(
         self,
         entry: ThreadEntry,
-        expected_last_entry_id: str | None = None,
-        require_no_terminal_for_parent: str | None = None,
-    ) -> str | None:
+        expected_previous_entry_id: str | None = None,
+    ) -> ThreadEntry:
         ...
 ```
 
@@ -72,7 +71,15 @@ class ThreadEntryStore:
 
 - `create_thread()` creates a durable thread identity record and returns the durable `thread_id`.
 - `load()` returns all entries for `thread_id` in strict durable order.
-- `append()` is atomic and conditional. It returns `entry_id` (string) if appended, or `None` if a conditional predicate fails.
+- `append()` is atomic and conditional. On success, it returns the fully realized immutable `ThreadEntry` with store-assigned `entry_id` and `timestamp`. On predicate failure, it MUST raise `AppendConflictError`.
+
+
+### AppendConflictError
+
+AppendConflictError
+- Raised when expected_previous_entry_id does not match current tail.
+- Represents a CAS conflict.
+- Does NOT imply storage failure.
 
 ---
 
@@ -106,13 +113,14 @@ Thread creation is used by `ThreadService` (outside runtime).
 
 - Persist `ThreadEntry` as immutable records
 - Never update or delete an existing entry
+- If entry.entry_id or entry.timestamp is non-null at append time, the store MUST reject the append and raise an `AppendConflictError`
 
 ### 4.4 Store-Assigned Identity
 
 On successful `append()`:
 
-- Store MUST generate and persist a globally unique `entry_id`.
-- Store MUST return that `entry_id`.
+- Store MUST generate and persist a globally unique `entry_id` and assign a timestamp of when the entry was appended to the log in UTC
+- Return fully realized immutable ThreadEntry
 
 ### 4.5 Store-Assigned Timestamp
 
@@ -131,19 +139,25 @@ For a given `thread_id`:
 - `load(thread_id)` MUST return entries in that order.
 - The store MUST NOT reorder entries.
 
-### 4.7 Conditional Append Semantics
+### 4.7 Append Semantics (Model 2)
 
-**`expected_last_entry_id`**
+`expected_previous_entry_id` enforces strict linked-list CAS.
 
-If `expected_last_entry_id` is provided, `append()` MUST succeed if and only if the current last entry for `entry.thread_id` has `entry_id == expected_last_entry_id`. If the predicate fails, return `None` and perform no durable mutation.
+Append MUST succeed if and only if:
+-   If thread is empty:
+    -   `expected_previous_entry_id` is `None`
+    -   `entry.previous_entry_id` is `None`
+        
+-   If thread is non-empty:
+    -   `current_tail.entry_id == expected_previous_entry_id`
+    -   `entry.previous_entry_id == current_tail.entry_id`
 
-If `expected_last_entry_id` is `None`, `append()` MUST succeed only when the thread has no entries.
+The store MUST validate that entry.previous_entry_id == expected_previous_entry_id.        
 
-**`require_no_terminal_for_parent`**
-
-If `require_no_terminal_for_parent` is provided, `append()` MUST succeed if and only if no terminal `ThreadEntry` already exists with `parent_entry_id == require_no_terminal_for_parent` for the same thread. If the predicate fails, return `None` and perform no durable mutation.
-
-The store MUST verify parent existence when this predicate is provided.
+If predicate fails:
+-   Store MUST raise `AppendConflictError`
+-   No durable mutation performed
+    
 
 ---
 
@@ -160,9 +174,9 @@ The store MUST verify parent existence when this predicate is provided.
 
 ## 6. Error Handling Rules
 
-- Predicate failures MUST return `None`.
 - Storage/constraint failures not representable as predicate failure MUST raise a store error.
 - Thread-not-found on `append()` MUST raise a store error.
+- Predicate failure raises error in `append()`
 
 ---
 

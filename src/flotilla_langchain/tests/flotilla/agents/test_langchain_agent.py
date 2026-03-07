@@ -5,9 +5,9 @@ from typing import List, Any
 from langchain_core.messages import AIMessage, AIMessageChunk
 
 from flotilla_langchain.agents.langchain_agent import LangChainAgent
-from flotilla.core.thread_context import ThreadContext
-from flotilla.core.thread_entries import UserInput, SuspendEntry
-from flotilla.runtime.execution_config import ExecutionConfig
+from flotilla.thread.thread_context import ThreadContext
+from flotilla.thread.thread_entries import UserInput, SuspendEntry, ResumeEntry
+from flotilla.runtime.phase_context import PhaseContext
 from flotilla.runtime.content_part import TextPart
 
 
@@ -155,15 +155,17 @@ class TestAgent(LangChainAgent):
 def thread() -> ThreadContext:
     entry = UserInput(
         thread_id="t1",
+        phase_id="p1",
         entry_id="e1",
+        user_id="u1",
         content=[TextPart(text="hello")],
     )
     return ThreadContext(entries=[entry])
 
 
 @pytest.fixture
-def config() -> ExecutionConfig:
-    return ExecutionConfig(thread_id="t1", recursion_limit=10)
+def config() -> PhaseContext:
+    return PhaseContext(thread_id="t1", phase_id="p1", user_id="u1")
 
 
 # --------------------------------------------------
@@ -233,17 +235,6 @@ async def test_empty_output_produces_empty_text_part(thread, config):
 
 
 @pytest.mark.asyncio
-async def test_recursion_limit_passed_to_graph(thread, config):
-    graph = LimitGraph()
-    agent = TestAgent(graph)
-
-    async for _ in agent.run(thread, config):
-        pass
-
-    assert graph.captured_limit == config.recursion_limit
-
-
-@pytest.mark.asyncio
 async def test_cancellation_propagates(thread, config):
     graph = SlowGraph()
     agent = TestAgent(graph)
@@ -271,9 +262,6 @@ async def test_authoritative_final_state_wins(thread, config):
 
     final = next(e for e in output if e.type == "message_final")
     assert final.content[0].text == "complete"
-
-
-from flotilla.runtime.content_part import JsonPart
 
 
 @pytest.mark.asyncio
@@ -333,27 +321,32 @@ async def test_no_ai_message_yields_error(thread, config):
     assert not any(e.type == "message_final" for e in output)
 
 
-from flotilla.core.thread_entries import ResumeEntry
-
-
 @pytest.mark.asyncio
 @pytest.mark.asyncio
 async def test_resume_command_passed_to_graph(config):
     user = UserInput(
         thread_id="t1",
         entry_id="e1",
+        phase_id="p1",
+        user_id="u1",
         content=[TextPart(text="hello")],
     )
 
     suspend = SuspendEntry(
         thread_id="t1",
         entry_id="e2",
+        phase_id="p1",
+        agent_id="a1",
+        previous_entry_id="e1",
         content=[TextPart(text="need approval")],
     )
 
     resume = ResumeEntry(
         thread_id="t1",
         entry_id="e3",
+        phase_id="p2",
+        user_id="u1",
+        previous_entry_id="e2",
         content=[TextPart(text="continue")],
     )
 

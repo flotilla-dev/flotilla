@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import AsyncIterator, List, Optional
 from flotilla.agents.agent_event import AgentEvent
-from flotilla.runtime.execution_config import ExecutionConfig
-from flotilla.core.thread_context import ThreadContext, ThreadStatus
+from flotilla.runtime.phase_context import PhaseContext
+from flotilla.thread.thread_context import ThreadContext, ThreadStatus
 from flotilla.runtime.content_part import ContentPart
 from flotilla.agents.agent_errors import ThreadIdMismatchError, ThreadNotRunnableError
 from flotilla.agents.agent_event import AgentEvent
@@ -44,25 +44,27 @@ class FlotillaAgent(ABC):
     async def run(
         self,
         thread: ThreadContext,
-        config: ExecutionConfig,
-        input_parts: Optional[List[ContentPart]],
+        phase_context: PhaseContext,
+        input_parts: Optional[List[ContentPart]] = None,
     ) -> AsyncIterator[AgentEvent]:
-        if thread.status != ThreadStatus.RUNNABLE:
+        if thread.status != ThreadStatus.RUNNING:
             raise ThreadNotRunnableError(thread.status)
 
-        if config.thread_id != thread.thread_id:
+        if phase_context.thread_id != thread.thread_id:
             raise ThreadIdMismatchError(
-                expected=config.thread_id,
+                expected=phase_context.thread_id,
                 actual=thread.thread_id,
             )
 
-        async for event in self._execute(thread, config):
+        async for event in self._execute(
+            thread, phase_context, input_parts=input_parts
+        ):
             yield event
 
     @abstractmethod
     async def _execute(
         self,
         thread: ThreadContext,
-        config: ExecutionConfig,
-        input_parts: Optional[List[ContentPart]],
+        phase_context: PhaseContext,
+        input_parts: Optional[List[ContentPart]] = None,
     ) -> AsyncIterator[AgentEvent]: ...

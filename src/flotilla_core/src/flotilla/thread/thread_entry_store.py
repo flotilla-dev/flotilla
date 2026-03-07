@@ -11,6 +11,5 @@ class ThreadEntryStore(ABC):
     async def append(
         self,
         entry: ThreadEntry,
-        expected_last_entry_id: str | None = None,
-        require_no_terminal_for_parent: str | None = None,
-    ) -> str | None: ...
+        expected_previous_entry_id: str | None = None,
+    ) -> None: ...

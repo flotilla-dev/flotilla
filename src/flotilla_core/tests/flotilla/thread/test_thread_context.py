@@ -1,12 +1,15 @@
 import pytest
-from flotilla.core.thread_context import ThreadContext, ThreadStatus
-from flotilla.core.thread_entries import (
+
+from flotilla.thread.thread_context import ThreadContext, ThreadStatus
+from flotilla.thread.thread_entries import (
     UserInput,
     AgentOutput,
     SuspendEntry,
     ResumeEntry,
+    ErrorEntry,
     ClosedEntry,
 )
+
 from flotilla.runtime.content_part import TextPart
 
 
@@ -14,32 +17,173 @@ def make_text(text: str):
     return TextPart(type="text", text=text)
 
 
-def test_empty_thread_rejected():
-    with pytest.raises(ValueError):
-        ThreadContext(entries=[])
+# ----------------------------------------------------------
+# EMPTY THREAD
+# ----------------------------------------------------------
+
+
+def test_empty_thread_valid_and_ready():
+    ctx = ThreadContext(entries=[])
+    assert ctx.status == ThreadStatus.READY
+
+
+# ----------------------------------------------------------
+# THREAD ID VALIDATION
+# ----------------------------------------------------------
 
 
 def test_thread_id_mismatch_rejected():
-    e1 = UserInput(thread_id="t1", content=[make_text("hi")])
-    e2 = AgentOutput(thread_id="t2", content=[make_text("hello")])
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("hi")],
+    )
+
+    e2 = AgentOutput(
+        thread_id="t2",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        agent_id="a1",
+        content=[make_text("hello")],
+    )
 
     with pytest.raises(ValueError):
         ThreadContext(entries=[e1, e2])
 
 
-def test_closed_entry_must_be_last():
-    e1 = UserInput(thread_id="t1", content=[make_text("hi")])
-    e2 = ClosedEntry(thread_id="t1")
-    e3 = AgentOutput(thread_id="t1", content=[make_text("bad")])
+# ----------------------------------------------------------
+# LINKED LIST VALIDATION
+# ----------------------------------------------------------
+
+
+def test_previous_entry_link_must_match():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("hi")],
+    )
+
+    e2 = AgentOutput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="wrong",
+        agent_id="a1",
+        content=[make_text("bad")],
+    )
 
     with pytest.raises(ValueError):
-        ThreadContext(entries=[e1, e2, e3])
+        ThreadContext(entries=[e1, e2])
 
 
-def test_suspend_as_last_entry_is_valid_and_sets_status():
-    e1 = UserInput(thread_id="t1", entry_id="e1", content=[make_text("hi")])
+def test_first_entry_previous_must_be_none():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        previous_entry_id="illegal",
+        user_id="u1",
+        content=[make_text("hi")],
+    )
+
+    with pytest.raises(ValueError):
+        ThreadContext(entries=[e1])
+
+
+# ----------------------------------------------------------
+# START ENTRY TRANSITIONS
+# ----------------------------------------------------------
+
+
+def test_start_entry_must_be_followed_by_terminal():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("hi")],
+    )
+
+    e2 = UserInput(
+        thread_id="t1",
+        phase_id="p2",
+        entry_id="e2",
+        previous_entry_id="e1",
+        user_id="u1",
+        content=[make_text("invalid")],
+    )
+
+    with pytest.raises(ValueError):
+        ThreadContext(entries=[e1, e2])
+
+
+def test_userinput_followed_by_agentoutput_valid():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("hi")],
+    )
+
+    e2 = AgentOutput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        agent_id="a1",
+        content=[make_text("done")],
+    )
+
+    ctx = ThreadContext(entries=[e1, e2])
+
+    assert ctx.status == ThreadStatus.READY
+
+
+def test_userinput_followed_by_error_valid():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("hi")],
+    )
+
+    e2 = ErrorEntry(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        agent_id="a1",
+        content=[make_text("done")],
+    )
+
+    ctx = ThreadContext(entries=[e1, e2])
+
+    assert ctx.status == ThreadStatus.READY
+
+
+def test_userinput_followed_by_suspend_valid():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("start")],
+    )
+
     e2 = SuspendEntry(
-        thread_id="t1", entry_id="e2", content=[TextPart(text="approval")]
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        agent_id="a1",
+        content=[make_text("approval needed")],
     )
 
     ctx = ThreadContext(entries=[e1, e2])
@@ -47,45 +191,196 @@ def test_suspend_as_last_entry_is_valid_and_sets_status():
     assert ctx.status == ThreadStatus.SUSPENDED
 
 
-def test_suspend_not_last_requires_resume():
-    e1 = UserInput(thread_id="t1", content=[make_text("hi")])
-    e2 = SuspendEntry(thread_id="t1", content=[TextPart(text="approval")])
-    e3 = UserInput(thread_id="t1", content=[make_text("illegal")])
+# ----------------------------------------------------------
+# TERMINAL ENTRY TRANSITIONS
+# ----------------------------------------------------------
+
+
+def test_terminal_entry_must_be_followed_by_start():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("start")],
+    )
+
+    e2 = AgentOutput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        agent_id="a1",
+        content=[make_text("done")],
+    )
+
+    e3 = AgentOutput(
+        thread_id="t1",
+        phase_id="p2",
+        entry_id="e3",
+        previous_entry_id="e2",
+        agent_id="a1",
+        content=[make_text("invalid")],
+    )
 
     with pytest.raises(ValueError):
         ThreadContext(entries=[e1, e2, e3])
 
 
-def test_resume_without_suspend_rejected():
-    e1 = UserInput(thread_id="t1", entry_id="e1", content=[make_text("hi")])
-    e2 = ResumeEntry(thread_id="t1", entry_id="e2", content=[TextPart(text="approved")])
+def test_terminal_followed_by_userinput_valid():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("start")],
+    )
+
+    e2 = AgentOutput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        agent_id="a1",
+        content=[make_text("done")],
+    )
+
+    e3 = UserInput(
+        thread_id="t1",
+        phase_id="p2",
+        entry_id="e3",
+        previous_entry_id="e2",
+        user_id="u1",
+        content=[make_text("next")],
+    )
+
+    ctx = ThreadContext(entries=[e1, e2, e3])
+
+    assert ctx.status == ThreadStatus.RUNNING
+
+
+# ----------------------------------------------------------
+# SUSPEND / RESUME TRANSITIONS
+# ----------------------------------------------------------
+
+
+def test_suspend_requires_resume():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("start")],
+    )
+
+    e2 = SuspendEntry(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        agent_id="a1",
+        content=[make_text("approval")],
+    )
+
+    e3 = UserInput(
+        thread_id="t1",
+        phase_id="p2",
+        entry_id="e3",
+        previous_entry_id="e2",
+        user_id="u1",
+        content=[make_text("invalid")],
+    )
 
     with pytest.raises(ValueError):
-        ThreadContext(entries=[e1, e2])
+        ThreadContext(entries=[e1, e2, e3])
 
 
-def test_status_runnable():
-    e1 = UserInput(thread_id="t1", content=[make_text("hi")])
-    ctx = ThreadContext(entries=[e1])
-    assert ctx.status == ThreadStatus.RUNNABLE
+def test_suspend_followed_by_resume_valid():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("start")],
+    )
 
-
-def test_status_suspended():
-    e1 = UserInput(thread_id="t1", entry_id="e1", content=[make_text("hi")])
     e2 = SuspendEntry(
-        thread_id="t1", entry_id="e2", content=[TextPart(text="apporoval needed")]
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        agent_id="a1",
+        content=[make_text("approval needed")],
     )
-    e3 = ResumeEntry(thread_id="t1", entry_id="e3", content=[TextPart(text="approved")])
-    e4 = SuspendEntry(
-        thread_id="t1", entry_id="e4", content=[TextPart(text="approval needed")]
+
+    e3 = ResumeEntry(
+        thread_id="t1",
+        phase_id="p2",
+        entry_id="e3",
+        previous_entry_id="e2",
+        user_id="u1",
+        content=[make_text("approved")],
     )
 
-    ctx = ThreadContext(entries=[e1, e2, e3, e4])
-    assert ctx.status == ThreadStatus.SUSPENDED
+    ctx = ThreadContext(entries=[e1, e2, e3])
+
+    assert ctx.status == ThreadStatus.RUNNING
 
 
-def test_status_closed():
-    e1 = UserInput(thread_id="t1", content=[make_text("hi")])
-    e2 = ClosedEntry(thread_id="t1")
+# ----------------------------------------------------------
+# CLOSED THREAD
+# ----------------------------------------------------------
+
+
+def test_closed_entry_sets_closed_status():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("start")],
+    )
+
+    e2 = ClosedEntry(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        user_id="u1",
+        content=[make_text("deleted")],
+    )
+
     ctx = ThreadContext(entries=[e1, e2])
+
     assert ctx.status == ThreadStatus.CLOSED
+
+
+def test_closed_entry_prevents_future_entries():
+    e1 = UserInput(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e1",
+        user_id="u1",
+        content=[make_text("start")],
+    )
+
+    e2 = ClosedEntry(
+        thread_id="t1",
+        phase_id="p1",
+        entry_id="e2",
+        previous_entry_id="e1",
+        user_id="u1",
+        content=[make_text("close")],
+    )
+
+    e3 = UserInput(
+        thread_id="t1",
+        phase_id="p2",
+        entry_id="e3",
+        previous_entry_id="e2",
+        user_id="u1",
+        content=[make_text("illegal")],
+    )
+
+    with pytest.raises(ValueError):
+        ThreadContext(entries=[e1, e2, e3])

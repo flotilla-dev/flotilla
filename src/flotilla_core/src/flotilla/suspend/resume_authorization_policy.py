@@ -1,13 +1,13 @@
 from typing import Protocol
-from flotilla.runtime.runtime_request import RuntimeRequest
 from flotilla.thread.thread_entries import SuspendEntry
+from flotilla.suspend.resume_token_payload import ResumeTokenPayload
 
 
 class ResumeAuthorizationPolicy(Protocol):
 
-    def is_authorized(
+    async def is_authorized(
         self,
         *,
-        request: RuntimeRequest,
+        payload: ResumeTokenPayload,
         suspend_entry: SuspendEntry,
     ) -> bool: ...

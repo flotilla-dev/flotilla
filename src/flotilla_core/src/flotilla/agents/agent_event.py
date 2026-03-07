@@ -24,12 +24,9 @@ class AgentEventType(str, Enum):
 # AgentEvent
 # -----------------------
 class AgentEvent(BaseModel):
-    type: AgentEventType = Field(
-        ..., description="The type of Event from the AgentEventType Enum"
-    )
-    parent_entry_id: str = Field(
-        ..., description="The id of the ThreadEntry that started this execution phase"
-    )
+    type: AgentEventType = Field(..., description="The type of Event from the AgentEventType Enum")
+    previous_entry_id: str = Field(..., description="The id of the ThreadEntry that started this execution phase")
+    agent_id: str = Field(..., description="The ID of the Agnet that emitted this event")
     content: List[ContentPart] = Field(
         default_factory=list,
         description="The list of ContentPart objects that are emitted by the Agent",
@@ -38,6 +35,7 @@ class AgentEvent(BaseModel):
         default=None,
         description="Optional metadata that is used to capture data about execution of the Agent",
     )
+    is_terminal: bool = Field(..., description="Dictates if the AgentEvent type is terminal or not")
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -63,23 +61,23 @@ class AgentEvent(BaseModel):
     # Factory methods (Enum-based)
     # -----------------------
     @classmethod
-    def message_start(cls, *, entry_id: str) -> AgentEvent:
-        return cls(
-            type=AgentEventType.MESSAGE_START,
-            parent_entry_id=entry_id,
-        )
+    def message_start(cls, *, entry_id: str, agent_id: str) -> AgentEvent:
+        return cls(type=AgentEventType.MESSAGE_START, previous_entry_id=entry_id, agent_id=agent_id, is_terminal=False)
 
     @classmethod
     def message_chunk(
         cls,
         *,
         entry_id: str,
+        agent_id: str,
         text: str,
     ) -> AgentEvent:
         return cls(
             type=AgentEventType.MESSAGE_CHUNK,
-            parent_entry_id=entry_id,
+            previous_entry_id=entry_id,
+            agent_id=agent_id,
             content=[TextPart(text=text)],
+            is_terminal=False,
         )
 
     @classmethod
@@ -87,14 +85,17 @@ class AgentEvent(BaseModel):
         cls,
         *,
         entry_id: str,
+        agent_id: str,
         content: List[ContentPart],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> AgentEvent:
         return cls(
             type=AgentEventType.MESSAGE_FINAL,
-            parent_entry_id=entry_id,
+            previous_entry_id=entry_id,
+            agent_id=agent_id,
             content=content,
             execution_metadata=metadata,
+            is_terminal=True,
         )
 
     @classmethod
@@ -102,14 +103,17 @@ class AgentEvent(BaseModel):
         cls,
         *,
         entry_id: str,
+        agent_id: str,
         content: List[ContentPart],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> AgentEvent:
         return cls(
             type=AgentEventType.SUSPEND,
-            parent_entry_id=entry_id,
+            previous_entry_id=entry_id,
+            agent_id=agent_id,
             content=content,
             execution_metadata=metadata,
+            is_terminal=True,
         )
 
     @classmethod
@@ -117,12 +121,15 @@ class AgentEvent(BaseModel):
         cls,
         *,
         entry_id: str,
+        agent_id: str,
         content: List[ContentPart],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> AgentEvent:
         return cls(
             type=AgentEventType.ERROR,
-            parent_entry_id=entry_id,
+            previous_entry_id=entry_id,
+            agent_id=agent_id,
             content=content,
             execution_metadata=metadata,
+            is_terminal=True,
         )

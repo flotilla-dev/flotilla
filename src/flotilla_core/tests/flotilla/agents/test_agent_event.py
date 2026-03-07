@@ -8,22 +8,20 @@ def make_text(text: str):
 
 
 def test_message_start_valid():
-    event = AgentEvent.message_start(entry_id="m1")
+    event = AgentEvent.message_start(entry_id="m1", agent_id="a1")
     assert event.type == AgentEventType.MESSAGE_START
 
 
 def test_message_chunk_requires_text():
     with pytest.raises(Exception):
-        AgentEvent(
-            type=AgentEventType.MESSAGE_CHUNK,
-            parent_entry_id="m1",
-        )
+        AgentEvent(type=AgentEventType.MESSAGE_CHUNK, previous_entry_id="m1", agent_id="a1")
 
 
 def test_message_final_requires_content():
     with pytest.raises(Exception):
         AgentEvent.message_final(
-            "m1",
+            entry_id="m1",
+            agent_id="a1",
             content=[],
         )
 

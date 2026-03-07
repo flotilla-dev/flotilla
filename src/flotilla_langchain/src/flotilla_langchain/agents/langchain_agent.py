@@ -14,9 +14,9 @@ from langchain_core.tools import StructuredTool
 from flotilla.agents.flotilla_agent import FlotillaAgent
 from flotilla.agents.agent_event import AgentEvent
 from flotilla.runtime.content_part import ContentPart, TextPart, JsonPart
-from flotilla.runtime.execution_config import ExecutionConfig
-from flotilla.core.thread_context import ThreadContext
-from flotilla.core.thread_entries import ThreadEntry, ResumeEntry
+from flotilla.runtime.phase_context import PhaseContext
+from flotilla.thread.thread_context import ThreadContext
+from flotilla.thread.thread_entries import ThreadEntry, ResumeEntry
 from flotilla.tools.flotilla_tool import FlotillaTool
 from flotilla.utils.logger import get_logger
 
@@ -85,8 +85,8 @@ class LangChainAgent(FlotillaAgent):
     async def _execute(
         self,
         thread: ThreadContext,
-        config: ExecutionConfig,
-        input_parts: Optional[List[ContentPart]],
+        config: PhaseContext,
+        input_parts: Optional[List[ContentPart]] = None,
     ) -> AsyncIterator[AgentEvent]:
 
         if not thread.entries:
@@ -114,7 +114,6 @@ class LangChainAgent(FlotillaAgent):
                 stream_mode=["messages", "updates"],
                 subgraphs=self._subgraphs,
                 config=graph_config,
-                recursion_limit=config.recursion_limit,
             ):
 
                 # -------------------------------------------------
@@ -255,7 +254,7 @@ class LangChainAgent(FlotillaAgent):
     def _graph_input(
         self,
         thread: ThreadContext,
-        config: ExecutionConfig,
+        config: PhaseContext,
     ) -> Dict[str, Any]:
         """
         Override to customize graph input structure.
@@ -266,7 +265,7 @@ class LangChainAgent(FlotillaAgent):
             }
         }
 
-    def _graph_config(self, config: ExecutionConfig) -> Dict[str, Any]:
+    def _graph_config(self, config: PhaseContext) -> Dict[str, Any]:
         return {
             "configurable": {
                 "thread_id": config.thread_id,

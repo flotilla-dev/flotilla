@@ -3,5 +3,5 @@ from flotilla.suspend.resume_authorization_policy import ResumeAuthorizationPoli
 
 class PermissiveResumeAuthorization(ResumeAuthorizationPolicy):
 
-    def is_authorized(self, *, request, suspend_entry):
+    def is_authorized(self, *, payload, suspend_entry):
         return True

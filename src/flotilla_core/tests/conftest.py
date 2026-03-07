@@ -3,6 +3,7 @@ import pytest
 import yaml
 from pathlib import Path
 from typing import List, Optional, Callable
+from unittest.mock import Mock
 
 from flotilla.tools.flotilla_tool import FlotillaTool
 
@@ -10,26 +11,10 @@ from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.runtime.flotilla_runtime import FlotillaRuntime
 
 
-class MockFlotillaRuntime(FlotillaRuntime):
-    def run(self, *, agent_input, execution_config, checkpoint=None):
-        return super().run(
-            agent_input=agent_input,
-            execution_config=execution_config,
-            checkpoint=checkpoint,
-        )
-
-    def stream(self, *, agent_input, execution_config, checkpoint=None):
-        return super().stream(
-            agent_input=agent_input,
-            execution_config=execution_config,
-            checkpoint=checkpoint,
-        )
-
-
 @pytest.fixture
 def mock_flotilla_runtime_factory():
     def factory(**kwargs):
-        return MockFlotillaRuntime()
+        return Mock(spec=FlotillaRuntime)
 
     return factory
 

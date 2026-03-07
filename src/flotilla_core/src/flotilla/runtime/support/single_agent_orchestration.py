@@ -1,5 +1,5 @@
 from flotilla.runtime.orchestration_strategy import OrchestrationStrategy
-from flotilla.runtime.execution_config import ExecutionConfig
+from flotilla.runtime.phase_context import PhaseContext
 from flotilla.thread.thread_context import ThreadContext
 from flotilla.agents.flotilla_agent import FlotillaAgent
 from flotilla.telemetry.telemetry_policy import TelemetryPolicy
@@ -15,9 +15,7 @@ class SingleAgentOrchestration(OrchestrationStrategy):
         self._agent = agent
         self._telemetry = telemetry
 
-    async def execute(
-        self, thread_context: ThreadContext, execution_config: ExecutionConfig
-    ):
+    async def execute(self, thread_context: ThreadContext, phase_context: PhaseContext):
         self._telemetry.emit(
             TelemetryEvent.info(
                 type=TelemeryType.AGENT_RUN_START,
@@ -29,7 +27,7 @@ class SingleAgentOrchestration(OrchestrationStrategy):
 
             async for event in self._agent.run(
                 thread_context=thread_context,
-                execution_config=execution_config,
+                phase_context=phase_context,
                 input_parts=[],
             ):
                 yield event
