@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 import copy
 
-from flotilla.core.errors import SecretResolutionError, ConfigurationResolutionError
+from flotilla.config.errors import SecretResolutionError, ConfigurationResolutionError
 from flotilla.config.config_utils import ConfigUtils
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.secret_resolver import SecretResolver

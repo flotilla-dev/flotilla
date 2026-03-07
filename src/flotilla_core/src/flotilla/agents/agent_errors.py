@@ -1,4 +1,4 @@
-from flotilla.core.thread_context import ThreadStatus
+from flotilla.thread.thread_context import ThreadStatus
 
 
 class FlotillaAgentError(RuntimeError):

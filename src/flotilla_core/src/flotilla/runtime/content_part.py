@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional, Union, Literal, Annotated
-from pydantic import BaseModel, Field, HttpUrl, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from enum import Enum
 import re
 
@@ -63,7 +63,7 @@ class JsonPart(ContentPartBase):
 class FilePart(ContentPartBase):
     type: Literal[ContentPartType.FILE] = ContentPartType.FILE
 
-    url: HttpUrl = Field(description="Externally accessible URL to file content.")
+    url: str = Field(description="Externally accessible URL to file content.")
 
     mime_type: str = Field(description="MIME type describing the file format.")
 
@@ -90,6 +90,6 @@ class FilePart(ContentPartBase):
 # ============================================================
 
 ContentPart = Annotated[
-    Union[TextPart, JsonPart, FilePart, ReasoningPart, ConfidencePart],
+    Union[TextPart, JsonPart, FilePart],
     Field(discriminator="type"),
 ]

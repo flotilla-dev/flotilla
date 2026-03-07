@@ -1,11 +1,11 @@
 import pytest
-from flotilla.core.thread_entries import (
+from flotilla.thread.thread_entries import (
     ThreadEntry,
     UserInput,
     AgentOutput,
     SuspendEntry,
 )
-from flotilla.core.content_part import TextPart
+from flotilla.runtime.content_part import TextPart
 from pydantic import ValidationError
 
 
@@ -14,7 +14,9 @@ def make_text(text: str):
 
 
 def test_thread_entry_is_immutable():
-    entry = ThreadEntry(thread_id="t1")
+    entry = UserInput(
+        thread_id="t1", phase_id="p1", user_id="u1", content=[TextPart(text="stuff")]
+    )
     with pytest.raises(ValidationError):
         entry.thread_id = "t2"
 
@@ -25,7 +27,13 @@ def test_user_input_requires_content():
 
 
 def test_agent_output_is_serializable():
-    entry = AgentOutput(thread_id="t1", content=[make_text("hello")])
+    entry = AgentOutput(
+        thread_id="t1",
+        phase_id="p1",
+        previous_entry_id="e1",
+        agent_id="a1",
+        content=[make_text("hello")],
+    )
     dumped = entry.model_dump()
     assert dumped["thread_id"] == "t1"
 

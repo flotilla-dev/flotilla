@@ -7,7 +7,7 @@ from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.secret_resolver import SecretResolver
 from flotilla.config.configuration_source import ConfigurationSource
 from flotilla.config.config_loader import ConfigLoader
-from flotilla.core.flotilla_runtime import FlotillaRuntime
+from flotilla.runtime.flotilla_runtime import FlotillaRuntime
 
 
 class FlotillaApplication:

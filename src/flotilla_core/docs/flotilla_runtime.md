@@ -1,42 +1,55 @@
-# FlotillaRuntime Specification (v1.4-draft)
+# FlotillaRuntime Specification (v1.5-draft)
+
+----------
 
 ## 1. Executive Summary
 
 FlotillaRuntime is a stateless orchestration kernel that:
 
-- Is the entry point for user execution requests
-- Initiates execution phases by appending `UserInput` or `ResumeEntry`
-- Invokes `OrchestrationStrategy` to obtain canonical `AgentEvent`
-- Appends terminal entries (`AgentOutput`, `SuspendEntry`, `ErrorEntry`)
-- Issues `ResumeToken`s on suspend
-- Enforces thread-scoped concurrency via CAS
-- Enforces lazy timeout closure of orphaned phases
-- Emits user-facing results via `RuntimeResponse` (sync) or `RuntimeEvent` (streaming)
-- Enforces resume authorization via injected ResumeAuthorizationPolicy
+-   Serves as the entry point for user execution requests    
+-   Constructs `PhaseContext` internally via `PhaseContextService`
+-   Initiates execution phases by appending `UserInput` or `ResumeEntry`
+-   Invokes `OrchestrationStrategy` to obtain canonical `AgentEvent`
+-   Streams non-terminal events without durable mutation
+-   Appends exactly one terminal entry per phase (`AgentOutput`, `SuspendEntry`, or `ErrorEntry`)
+-   Issues `ResumeToken`s on suspend
+-   Enforces thread-scoped concurrency via CAS
+-   Enforces lazy timeout closure of orphaned phases
+-   Emits user-facing results via `RuntimeResponse` (sync) or `RuntimeEvent` (streaming)
+-   Validates and constructs resume flow via injected ResumeService    
+-   Resume authorization is enforced indirectly through `ResumeService`, which may use `ResumeAuthorizationPolicy` internally.
 
 ### Out of Scope
 
 Runtime MUST NOT:
 
-- Create threads (thread identity lifecycle is outside runtime)
-- Construct `ExecutionConfig` (built outside runtime)
-- Persist tool semantics or tool-specific records
-- Guarantee delivery of external notifications (`SuspendPolicy` reliability is app-specific)
-
----
+-   Create threads (thread identity lifecycle is outside runtime)
+-   Require callers to construct `PhaseContext`
+-   Persist tool semantics or tool-specific records
+-   Guarantee delivery of external notifications (SuspendPolicy reliability is app-specific)
+    
+----------
 
 ## 2. System Architecture Context
 
 Runtime sits between:
 
-- Transport (HTTP/SSE/WS/CLI) and the durable thread log
-- `OrchestrationStrategy` / `FlotillaAgent` producing `AgentEvent`
-- `ThreadEntryStore` enforcing CAS + persistence
-- Policies (`SuspendPolicy`, `TelemetryPolicy`, `ExecutionTimeoutPolicy`)
+-   Transport (HTTP/SSE/WS/CLI) and the durable thread log
+-   `OrchestrationStrategy` / `FlotillaAgent` producing `AgentEvent`
+-   `ThreadEntryStore` enforcing CAS + persistence
+-   Policies:
+    
+    -   `SuspendPolicy`    
+    -   `TelemetryPolicy`
+    -   `ExecutionTimeoutPolicy`
+    -   `ResumeService`
+        
 
-Thread status determination is owned by `ThreadContext`, not runtime.
+Thread lifecycle state is derived exclusively from `ThreadContext`.
 
----
+Runtime is stateless between requests.
+
+----------
 
 ## 3. Required Collaborators
 
@@ -44,194 +57,257 @@ Thread status determination is owned by `ThreadContext`, not runtime.
 
 Runtime MUST use `ThreadEntryStore` to:
 
-- Load thread entries
-- Append entries with predicates
-- Rely on store-assigned `entry_id` + timestamp
+-   Load thread entries
+-   Append entries using CAS predicates
+-   Rely on store-assigned `entry_id` and timestamps
+    
 
-Runtime MUST treat `ThreadEntryStore` as authoritative. Runtime MUST raise a runtime error if thread does not exist.
+Runtime MUST treat the store as authoritative.
 
-### 3.2 ExecutionConfig (Required Input)
+If the thread does not exist, runtime MUST raise/emit `THREAD_NOT_FOUND`.
 
-Runtime MUST receive `ExecutionConfig` as input. `ExecutionConfig` MUST be constructed outside runtime (typically via `ExecutionConfigService` from `FlotillaApplication`). Runtime MUST NOT construct `ExecutionConfig`.
+----------
+
+### 3.2 PhaseContext (Required)
+
+-   Runtime MUST construct a new immutable `PhaseContext` for each execution phase.
+-   Runtime MUST obtain `PhaseContext` by invoking `PhaseContextService.create_phase_context(request)`.
+-   `PhaseContext.phase_id` MUST be used as the `phase_id` for:
+    -   The initiating `UserInput` or `ResumeEntry`
+    -   All terminal entries appended for that phase.
+        
+-   Runtime and OrchestrationStrategy MUST treat `PhaseContext` as immutable
+-   `agent_config` inside `PhaseContext` is adapter-defined and MUST be treated as opaque by runtime.
+    
+----------
 
 ### 3.3 OrchestrationStrategy (Required)
 
-Runtime MUST invoke OrchestrationStrategy with the reconstructed ThreadContext and the provided immutable ExecutionConfig.
+Runtime MUST invoke `OrchestrationStrategy` with:
 
-OrchestrationStrategy defines how a single execution phase proceeds. It may coordinate one or more FlotillaAgent or nested OrchestrationStrategy instances, including multi-agent workflows and ephemeral inter-agent data passing. All such coordination occurs within the phase and does not modify durable thread state.
+-   Reconstructed `ThreadContext`
+-   Immutable `PhaseContext`
 
-OrchestrationStrategy MUST yield only canonical AgentEvent and MUST yield exactly one terminal AgentEvent per invocation. Execution failures MUST be represented as AgentEvent.error rather than raised exceptions.
+`OrchestrationStrategy`:
 
-Runtime treats OrchestrationStrategy as an execution engine and lifecycle-neutral producer of AgentEvent. Durable mutation and lifecycle enforcement remain exclusively owned by FlotillaRuntime.
+-   MUST yield only canonical `AgentEvent`
+-   MUST yield exactly one terminal `AgentEvent`
+-   MUST represent failures as `AgentEvent.error`
+-   MUST NOT perform durable mutations
+-   MUST treat `PhaseContext` as opaque metadata/config
+    
+Runtime MUST defensively convert unexpected exceptions into a terminal `ErrorEntry`.
 
-For full behavioral rules, see the OrchestrationStrategy Specification.
+----------
 
 ### 3.4 SuspendPolicy (Required)
 
-Runtime MUST invoke SuspendPolicy synchronously after durably appending a SuspendEntry.
+Runtime MUST invoke `SuspendPolicy` synchronously after successfully appending a `SuspendEntry`.
 
-SuspendPolicy is responsible for any external side-effects triggered by suspension (e.g., notifications, callbacks, or workflow signaling). It does not participate in lifecycle enforcement or durable mutation.
+Failures of SuspendPolicy MUST be non-fatal and MUST NOT affect durable state.
 
-Failure of SuspendPolicy MUST be non-fatal and MUST NOT affect execution state or resume semantics.
+----------
 
-For full behavioral rules, see the SuspendPolicy Specification.
+### 3.5 ExecutionTimeoutPolicy (Required)
 
-### 3.5 TelemetryPolicy (Optional)
+Runtime MUST invoke `ExecutionTimeoutPolicy` to determine whether an active phase has expired.
 
-Runtime MAY invoke TelemetryPolicy to emit execution telemetry events at defined lifecycle points.
+The policy returns a boolean only.
 
-TelemetryPolicy is observational only. It MUST NOT mutate durable state, influence execution flow, or affect determinism.
+Timeout enforcement is owned exclusively by Runtime.
 
-Failure of TelemetryPolicy MUST be non-fatal.
+----------
 
-For full behavioral rules, see the TelemetryPolicy Specification.
+### 3.6 ResumeService (Required)
 
-### 3.6 ExecutionTimeoutPolicy (Required)
+Runtime MUST delegate resume handling to `ResumeService`.
 
-Runtime MUST invoke ExecutionTimeoutPolicy to determine whether an active execution phase has exceeded its timeout duration.
+`ResumeService` MUST be responsible for:
 
-The policy evaluates expiration based on durable thread state and returns a boolean decision only. It does not enforce timeout directly or perform durable mutation.
+- Validating ResumeToken integrity
+- Resolving and validating the referenced `SuspendEntry`
+- Enforcing resume authorization
+- Constructing the `ResumeEntry` when resume is allowed
 
-Timeout enforcement remains owned by FlotillaRuntime.
+Runtime MUST invoke `ResumeService` before appending any `ResumeEntry`.
 
-For full behavioral rules, see the ExecutionTimeoutPolicy Specification.
+If resume validation or authorization fails, Runtime MUST emit an error `RuntimeResponse/RuntimeEvent` and STOP.
 
-### 3.7 ResumeAuthorizationPolicy (Required)
+`ResumeService` MUST NOT perform durable mutations directly.
 
-Runtime MUST invoke `ResumeAuthorizationPolicy` during resume validation.
-
-Runtime MUST:
-1.  Validate ResumeToken integrity and suspend state.
-2.  Load the associated `SuspendEntry`.
-3.  Invoke:
-    
-```python
-resume_authorization_policy.is_authorized(  
-  request=request,  
-  suspend_entry=suspend_entry  
-)
-```
-
-If the policy returns `False`, runtime MUST reject the resume attempt.
-
-ResumeToken possession alone MUST NOT be sufficient for resume when the policy denies authorization.
-
-ResumeAuthorizationPolicy MUST NOT perform durable mutations.
-
----
+----------
 
 ## 4. Durable Reload Rule (REQUIRED)
 
-After any successful `ThreadEntryStore.append()` call, runtime MUST:
+After any successful `ThreadEntryStore.append()` call, Runtime MUST:
 
-1. Call `ThreadEntryStore.load(thread_id)`
-2. Reconstruct a new `ThreadContext`
-3. Proceed using only that reconstructed context
+1.  Call `ThreadEntryStore.load(thread_id)`
+2.  Reconstruct a new `ThreadContext`
+3.  Proceed using only the reconstructed context
+   
+Runtime MUST NOT rely on in-memory assumed state after append.
 
-Runtime MUST NOT proceed using an in-memory assumed thread state after append.
-
----
+----------
 
 ## 5. Behavioral Contract
 
-### 5.1 Thread Existence
+----------
 
-On receiving a `RuntimeRequest`:
+## 5.1 Canonical Execution Order
 
-- Runtime MUST call `store.load(thread_id)`.
-- If the thread does not exist, runtime MUST raise/emit `THREAD_NOT_FOUND`.
-- Runtime MUST NOT attempt to create the thread.
+Upon receiving a `RuntimeRequest`, Runtime MUST execute the following steps:
 
-### 5.2 Phase Initiation
+----------
 
-Runtime MUST:
+### Phase Initialization
 
-- Load and construct `ThreadContext`
-- If an active phase exists, apply lazy timeout enforcement (§5.3)
-- Append initiating entry using:
-  - `expected_last_entry_id=<current_last_entry_id>` for non-empty threads
-  - `expected_last_entry_id=None` for empty threads
-
-If `append` returns `None`:
-- Emit `CONCURRENT_EXECUTION_PHASE_NOT_ALLOWED`
-- No durable mutation occurs
-
-If `append` succeeds:
-- MUST reload and reconstruct `ThreadContext`
-- MUST invoke `OrchestrationStrategy`
-
-### 5.2.1 Resume Handling (NEW)
-
-If `RuntimeRequest.resume_token` is present:
-
-Runtime MUST:
-
-1.  Validate ResumeToken integrity (signature / lookup / expiry).
-2.  Validate that:
-   
-    -   `thread_id` matches     
-    -   `runtime_key` matches
-    -   referenced `SuspendEntry` exists
-    -   referenced suspend has no terminal child
-        
-3.  Invoke `ResumeAuthorizationPolicy`.
-4.  If authorization fails, reject resume.
-5.  Append `ResumeEntry` referencing the `SuspendEntry`.
-6.  Reload thread (Durable Reload Rule).
-7.  Invoke `OrchestrationStrategy`.
+1.  Receive `RuntimeRequest`. 
+2.  Construct `PhaseContext` via `PhaseContextService`.
+3.  Load durable thread state (`ThreadEntryStore.load()`).
+4.  If last entry indicates an active phase:
+    -   Invoke `ExecutionTimeoutPolicy`.
+    -   If expired:
+        -   Attempt to append `ErrorEntry(EXECUTION_TIMEOUT)` via CAS
+        -   On success → durable reload.
+        -   On predicate failure → durable reload and re-evaluate.
+5. If `resume_token` is present
+    - Invoke `ResumeService`.
+    - `ResumeService` MUST validate ResumeToken integrity.
+    - `ResumeService` MUST validate the referenced `SuspendEntry`.
+    - `ResumeService` MUST enforce resume authorization.
+    - If resume validation or authorization fails → emit error `RuntimeResponse/RuntimeEvent` and STOP.
+6.  Construct initiating `ThreadEntry`:
+    -   `UserInput` if no resume_token.
+	-   `ResumeEntry` if resume_token.
+    -   MUST include `phase_id = PhaseContext.phase_id`.
+7.  Attempt CAS append of initiating entry.
+    -   On predicate failure → emit `CONCURRENT_EXECUTION_PHASE_NOT_ALLOWED` error and STOP.
+8.  Perform durable reload.
+9.  Invoke `OrchestrationStrategy(thread_context, phase_context)`.
     
-Resume MUST NOT proceed without successful authorization.
+----------
 
-### 5.3 Lazy Timeout Enforcement
+## 5.2 AgentEvent Handling
 
-If `ThreadContext` indicates an active phase and `now - initiating_entry.timestamp > timeout_duration`, then runtime MUST:
+Runtime MUST process `AgentEvent` sequentially.
 
-- Attempt to append `ErrorEntry(EXECUTION_TIMEOUT)` using `expected_last_entry_id=<current_last_entry_id>`
-- On success: MUST reload and proceed
-- On predicate failure: MUST reload and re-evaluate
+### Non-Terminal Events
 
-No background tasks are permitted. Timeout is derived solely from store timestamps.
+For:
 
-### 5.4 Phase Termination
+-   `message_start`
+-   `message_chunk`
+-   any other non-terminal events
 
-When `OrchestrationStrategy` yields a terminal `AgentEvent`:
+Runtime MUST:
 
-- Runtime MUST map it to exactly one terminal `ThreadEntry`.
-- Runtime MUST append terminal entry with `require_no_terminal_for_parent=<parent_entry_id>`.
+-   Emit `RuntimeEvent` (if streaming mode)
+-   MUST NOT perform durable mutation
 
-On predicate failure (`None`):
-- Runtime MUST reload thread
-- Runtime MUST treat as duplicate-terminal conflict (runtime policy may decide whether to surface as error or treat as idempotent duplicate)
+Streaming is ephemeral and not durable.
 
-On success:
-- MUST reload thread
-- MUST emit response
+----------
 
-When appending SuspendEntry, runtime MUST persist any resume_audience value included by the agent or orchestration strategy without interpretation.
+### Terminal Events
 
-Runtime MUST treat resume_audience as opaque.
+Terminal events are:
 
----
+-   `message_final`
+-   `suspend`
+-   `error`
+
+Runtime MUST:
+
+1.  Map terminal `AgentEvent` to exactly one terminal `ThreadEntry`.
+2.  Attempt CAS append using:
+```python
+require_no_terminal_for_parent = initiating_entry_id
+```    
+3.  On predicate failure:
+    -   Perform durable reload.
+    -   Emit error `RuntimeResponse/RuntimeEvent` indicating terminal conflict.
+    -   STOP.
+        
+4.  On success:
+    -   Perform durable reload.
+    -   If `SuspendEntry`, invoke `SuspendPolicy`.
+    -   Emit final `RuntimeResponse` or terminal `RuntimeEvent`.
+    -   STOP.
+  
+Runtime MUST NOT emit a terminal response before durable append succeeds.
+
+----------
+
+## 5.3 Orchestration Exception Handling
+
+If `OrchestrationStrategy` raises an unexpected exception:
+
+Runtime MUST:
+
+1.  Convert the exception into `ErrorEntry`  
+2.  Attempt CAS append as a terminal entry.
+3.  Perform durable reload.
+4.  Emit error response.
+5.  STOP.
+
+No uncaught orchestration exception may leave a phase without terminal entry unless the process crashes.
+
+----------
+
+## 5.4 Duplicate Terminal Handling
+
+If CAS append of a terminal entry fails due to existing terminal:
+
+Runtime MUST:
+
+-   Perform durable reload.
+-   Emit error `RuntimeResponse/RuntimeEvent` indicating duplicate terminal conflict.
+-   STOP.
+
+Runtime MUST NOT silently treat this as idempotent success.
+
+----------
+
+## 5.5 Resume Semantics
+
+Resume is treated as a new phase.
+
+Resume MUST:
+
+-   Be validated and authorized by `ResumeService`.
+-   Produce a new `phase_id`.
+-   Append a new `ResumeEntry`.
+-   Follow identical orchestration flow.
+
+----------
 
 ## 6. Thread-Scoped Concurrency
 
-Runtime guarantees concurrency only within a `thread_id`. Runtime does not prevent duplicates across multiple threads. Cross-thread idempotency is an application responsibility.
+Concurrency guarantees apply only within a single `thread_id`.
 
----
+Runtime does not prevent cross-thread duplication.
+
+Cross-thread idempotency is application responsibility.
+
+----------
 
 ## 7. Crash Recovery
 
-If the process crashes mid-phase and no terminal entry exists, runtime resolves the misalignment only via lazy timeout closure. Runtime provides phase-level recovery only. Tool-level recovery and step-level replay are out of scope.
+If a crash occurs mid-phase:
 
----
+-   No terminal entry exists.
+-   Runtime relies solely on lazy timeout enforcement on next invocation.
+-   No background reconciliation is permitted.
+
+Recovery operates strictly at phase level.
+
+----------
 
 ## 8. Related Specifications
 
-Only specifications that interact with `FlotillaRuntime`:
-
-- ThreadEntryStore
-- OrchestrationStrategy
-- Thread Model (`ThreadEntry` / `ThreadContext`)
-- AgentEvent
-- ContentPart
-- ResumeAuthorizationPolicy Specification
+-   ThreadEntryStore
+-   Thread Model (`ThreadEntry` / `ThreadContext`)
+-   OrchestrationStrategy
+-   AgentEvent
+-   ContentPart
+-   ResumeService

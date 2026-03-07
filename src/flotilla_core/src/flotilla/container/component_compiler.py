@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Set, TYPE_CHECKING
 
 from flotilla.config.config_utils import ConfigUtils
-from flotilla.core.errors import FlotillaConfigurationError, ReferenceResolutionError
+from flotilla.config.errors import FlotillaConfigurationError, ReferenceResolutionError
 
 if TYPE_CHECKING:
     from flotilla.container.flotilla_container import FlotillaContainer

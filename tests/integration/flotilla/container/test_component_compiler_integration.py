@@ -7,7 +7,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.core.flotilla_runtime import FlotillaRuntime
+from flotilla.runtime.flotilla_runtime import FlotillaRuntime
 from flotilla.tools.flotilla_tool import FlotillaTool
 
 

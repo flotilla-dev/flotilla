@@ -29,7 +29,3 @@ class ComponentResolutionError(FlotillaConfigurationError):
     """
     Raised when Flotilla is unable to find an object in the container
     """
-
-
-class ThreadNotRunnableError(RuntimeError):
-    """Raise when ThreadContext is not in a Runnable state"""

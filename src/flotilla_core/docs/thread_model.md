@@ -159,12 +159,19 @@ The phase ends when EXACTLY ONE of the following is appended:
 - `SuspendEntry`
 - `ErrorEntry`
 
-Terminal entries MUST include `parent_entry_id` referencing the initiating entry's `entry_id`.
+Each adjacent start/terminal pair MUST share identical phase_id.
+
+Phase linkage is derived from adjacency and phase_id.
+
+All `ThreadEntry`, except for the first entry in a Thread, must have a `previous_entry_id` in where the referenced `ThreadEntry` is also part of the same Thread (ie `thread_id` are identical)
 
 Rules:
+- First entry MUST be `UserInput`
+- First entry MUST have `previous_entry_id = None`
 - All `entry_id` values MUST be unique.
-- `parent_entry_id` establishes causal linkage.
-- No additional terminal entries may follow for the same `parent_entry_id`.
+- `previous_entry_id` establishes causal linkage.
+- Exactly one terminal entry MUST follow each start entry.
+
 
 ### `AgentEvent` → `ThreadEntry` Mapping
 
@@ -182,37 +189,28 @@ Only these `AgentEvent` types produce durable `ThreadEntry` records. `message_st
 
 ### Common Fields (All Entries)
 
-| Field | Type | Required |
-|---|---|---|
-| `entry_id` | string | Yes |
-| `thread_id` | string | Yes |
-| `created_at` | timestamp | Yes |
-| `type` | enum | Yes |
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `thread_id` | string | Yes | The unique id of the conversation thread|
+| `phase_id` | string | Yes | The ID of the execution phase to which this `ThreadEntry` belong |
+| `entry_id` | string| No | The unique id of an individual entry assigned by `ThreadEntryStore`, is assigned during append() operation |
+| `previous_entry_id` | string| No | The ID of the entry previous to this one in the `ThreadContext` |
+| `timestamp` | datetime | No | UTC timestamp assigned by `ThreadEntryStore`, is assigned uring append() operation |
+| `content` | List[`ContentPart`] | Yes | The content that defines the state change of the Thread |
 
-### Input Entries
+### Start Entries (UserInput, ResumeEntry)
+- Must incldue a `user_id` field that identifies the user that submmitted the request
 
-`UserInput` and `ResumeEntry`:
-- MUST NOT include `parent_entry_id`
-- MUST include `content: List[ContentPart]`
+### Terminal Entries (AgentOutput, SuspendEntry, ErrorEntry)
+- Must incldue a `agent_id` field that identifies the agent that generated the state change
 
-### Terminal Entries
-
-`AgentOutput`, `SuspendEntry`, `ErrorEntry`:
-
-Required: `parent_entry_id` (string), `content` (`List[ContentPart]`)
-
-Optional: `execution_metadata` (`Optional[Dict[str, Any]]`)
-
-Rules:
-- `execution_metadata` MUST be JSON-serializable.
-- `execution_metadata` is telemetry only.
-- Metadata exposure to end-user is policy-controlled.
 
 ### `ClosedEntry`
 
-- No `parent_entry_id`
+- Must contain `previous_entry_id`
 - Marks lifecycle termination of thread
 - Runtime-controlled only — agents cannot emit
+- Can only be initiated by a User
 
 ### JSON Requirements
 
@@ -242,18 +240,16 @@ No in-place modification allowed. No deletion allowed. Append-only invariant is 
 
 `ThreadContext` MUST validate:
 
-- Thread is non-empty.
-- All entries share same `thread_id`.
-- `entry_id` uniqueness.
-- `ResumeEntry` must follow `SuspendEntry`.
-- No entries after `ClosedEntry`.
-- `SuspendEntry` must be followed by `ResumeEntry` unless it is the last entry.
-- Input entries MUST NOT include `parent_entry_id`.
-- Terminal entries MUST include `parent_entry_id`.
-- Exactly one terminal entry per execution phase.
-- `parent_entry_id` must reference valid initiating entry.
-
-Each invariant must be directly testable.
+- Thread non-empty
+- All entries share same `thread_id`
+- `entry_id` uniqueness
+- Linked-list integrity (`previous_entry_id`)
+- Strict alternation (Start → Terminal)
+- Adjacent entries share identical `phase_id`
+- `SuspendEntry` must be followed by ResumeEntry or ClosedEntry
+- No entries after `ClosedEntry`
+- Exactly one terminal per phase (enforced structurally)
+- Each invariant must be directly testable.
 
 ---
 
@@ -269,11 +265,12 @@ Each invariant must be directly testable.
 
 Contract violations include:
 
-- Multiple terminal entries for same `parent_entry_id`
-- Missing terminal entry for a phase
+- Two consecutive terminal entries
+- Two consecutive start entries
+- ThreadContext MAY represent an in-progress phase ending in a start entry.
 - `ResumeEntry` without preceding `SuspendEntry`
 - Entry appended after `ClosedEntry`
-- `parent_entry_id` referencing invalid entry
+- `previous_entry_id` referencing invalid entry
 - Mixed `thread_id` values
 - Non-JSON-serializable content
 
@@ -281,20 +278,8 @@ Violations MUST fail-fast during validation. Silent recovery is forbidden.
 
 ---
 
-## 10. Observability & Telemetry
 
-`execution_metadata`:
-- May include token usage, timing, stack traces
-- Must be JSON-serializable
-- Is optional
-- Is durable
-- Exposure is runtime policy-controlled
-
-Thread model does not interpret metadata.
-
----
-
-## 11. Ordering Guarantees
+## 10. Ordering Guarantees
 
 - Entries MUST be strictly append-only.
 - Order MUST reflect causal execution order.
@@ -304,13 +289,13 @@ Thread model does not interpret metadata.
 
 ---
 
-## 12. Architectural Guarantees
+## 11. Architectural Guarantees
 
 - Append-only durable log
 - Deterministic replay
 - Strict execution/durability separation
 - Explicit execution phase modeling
-- Causal linkage via `parent_entry_id`
+- Structural linkage via `previous_entry_id` and `phase_id`
 - No hidden continuation state
 - Immutable `ThreadContext` snapshot
 - Agents cannot close threads
@@ -318,7 +303,7 @@ Thread model does not interpret metadata.
 
 ---
 
-## 13. Related Specifications
+## 12. Related Specifications
 
 Only specifications directly interacting with the Thread Model:
 
