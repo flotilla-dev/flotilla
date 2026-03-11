@@ -20,24 +20,19 @@ from rich.panel import Panel
 from flotilla.config.resolvers.env_secret_resolver import EnvSecretResolver
 from flotilla.config.sources.yaml_configuration_source import YamlConfigurationSource
 from flotilla.config.sources.local_env_source import LocalEnvSource
-from flotilla.core.agent_input import AgentInput
-from flotilla.runtime.phase_context import PhaseContext
-from flotilla_core.src.flotilla.flotilla_application import FlotillaApplication
 from flotilla.utils.logger import get_logger
+from flotilla.flotilla_bootstrap import FlotillaBootstrap
+from flotilla.flotilla_application import FlotillaApplication
+from flotilla.runtime.flotilla_runtime import FlotillaRuntime
+from flotilla.thread.thread_service import ThreadService
+from flotilla.runtime.runtime_request import RuntimeRequest
+from flotilla.runtime.runtime_response import RuntimeResponse
+from flotilla.runtime.content_part import ContentPart, TextPart
 
-# Framework + app builders
-from flotilla.llm.llm_builders import openai_llm_builder
-from flotilla.core.factories.checkpoint_builders import memory_checkpointer_buidler
-from flotilla.selectors.builders.agent_selector_builders import (
-    keyword_agent_selector_builder,
-)
-from flotilla.core.factories.single_agent_runtime_factory import (
-    create_single_factory_runtime,
-)
-
-from app_agents.weather_agent_builder import weather_agent_buidler
-from app_tools.weather_tools_builder import weather_tools_builder
-
+from flotilla_langchain.llm.providers import openai_llm_provider
+from flotilla.container.constants import REFLECTION_PROVIDER_KEY
+from flotilla.container.providers.reflection_provider import ReflectionProvider
+from app_agents.weather_agent_provider import weather_agent_provider
 
 console = Console()
 logger = get_logger(__name__)
@@ -50,16 +45,17 @@ async def _run_query_async(
     runtime,
     *,
     query: str,
-    thread_id: Optional[str] = None,
+    thread_id: Optional[str] = RuntimeResponse,
 ):
     """
     Execute a single query against the runtime using the new public API.
     """
-    agent_input = AgentInput(query=query, thread_id=thread_id)
-    exec_config = PhaseContext(thread_id=thread_id)
 
     # IMPORTANT: runtime.run() is async -> must await
-    return await runtime.run(agent_input=agent_input, execution_config=exec_config)
+    request: RuntimeRequest = RuntimeRequest(
+        thread_id=thread_id, user_id="u1", content=TextPart(id="query", text=query)
+    )
+    return await runtime.run(request)
 
 
 async def _interactive_loop_async(app: FlotillaApplication) -> None:
@@ -67,7 +63,7 @@ async def _interactive_loop_async(app: FlotillaApplication) -> None:
     Single asyncio loop for the whole interactive session.
     """
     runtime = app.runtime
-    thread_id = str(uuid.uuid4())
+    thread_id = app.thread_service.create_thread()
 
     console.print("[green]✓ Ready for queries[/green]")
     console.print(f"[dim]thread_id: {thread_id}[/dim]\n")
@@ -85,18 +81,18 @@ async def _interactive_loop_async(app: FlotillaApplication) -> None:
 
         try:
             with console.status("[bold green]Processing…[/bold green]"):
-                result = await _run_query_async(
+                response: RuntimeResponse = await _run_query_async(
                     runtime,
                     query=user_query,
                     thread_id=thread_id,
                 )
 
-            # RuntimeResult shape: status/output/agent_name/checkpoint/metadata
+            # RuntimeeResponse shape: List[ContentPart]
             # Keep this simple for now; print output if present.
-            if getattr(result, "output", None) is not None:
-                console.print(f"\n[bold green]Output:[/bold green] {result.output}\n")
-            else:
-                console.print(f"\n[bold green]Result:[/bold green] {result}\n")
+            if getattr(response.content, "content", None) is not None:
+
+                for part in response.content:
+                    console.print(f"\n[bold green] ContentPart: {part}")
 
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")
@@ -114,7 +110,7 @@ def cli(ctx, env: str):
     ctx.ensure_object(dict)
 
     # Load .env into environment
-    load_dotenv()
+    # load_dotenv()
 
     # example_app/config directory
     base_dir = Path(__file__).resolve().parent
@@ -128,18 +124,15 @@ def cli(ctx, env: str):
     ]
     secrets = [EnvSecretResolver()]
 
-    app = FlotillaApplication(sources=sources, secrets=secrets)
+    providers = {
+        "llm.openai": openai_llm_provider,
+        REFLECTION_PROVIDER_KEY: ReflectionProvider(),
+        "weather_agent_provider": weather_agent_provider,
+    }
 
-    # Register builders/factories (wiring logic)
-    # TODO: move to an application builder group
-    app.register_provider("agents.weather_agent", weather_agent_buidler)
-    app.register_provider("tools.weather_tools", weather_tools_builder)
-    app.register_provider("llm.openai", openai_llm_builder)
-    app.register_provider("checkpointer.memory", memory_checkpointer_buidler)
-    app.register_provider("agent_selector.keyword", keyword_agent_selector_builder)
-    app.register_provider("runtime.single_agent", create_single_factory_runtime)
-
-    app.start()
+    app: FlotillaApplication = FlotillaBootstrap.run(
+        FlotillaApplication, config_sources=sources, secret_resolvers=secrets, providers=providers
+    )
 
     # Save app in ctx for commands
     ctx.obj["app"] = app
@@ -153,9 +146,7 @@ def cli(ctx, env: str):
 @click.pass_context
 def query(ctx, query: str):
     """Execute a natural language query through the runtime."""
-    console.print(
-        Panel.fit(f"[bold cyan]Query:[/bold cyan] {query}", border_style="cyan")
-    )
+    console.print(Panel.fit(f"[bold cyan]Query:[/bold cyan] {query}", border_style="cyan"))
 
     app: FlotillaApplication = ctx.obj["app"]
     runtime = app.runtime
@@ -184,11 +175,7 @@ def query(ctx, query: str):
 @click.pass_context
 def test(ctx):
     """Runs simple framework sanity checks."""
-    console.print(
-        Panel.fit(
-            "[bold cyan]Testing System Components[/bold cyan]", border_style="cyan"
-        )
-    )
+    console.print(Panel.fit("[bold cyan]Testing System Components[/bold cyan]", border_style="cyan"))
 
     app: FlotillaApplication = ctx.obj["app"]
 
@@ -201,9 +188,7 @@ def test(ctx):
 
         # Optional: run a very simple query to prove end-to-end execution
         with console.status("[bold green]Executing smoke query...[/bold green]"):
-            result = asyncio.run(
-                _run_query_async(runtime, query="What is the weather in Chicago?")
-            )
+            result = asyncio.run(_run_query_async(runtime, query="What is the weather in Chicago?"))
 
         console.print("[green]✓[/green] Smoke query executed")
         if getattr(result, "output", None) is not None:

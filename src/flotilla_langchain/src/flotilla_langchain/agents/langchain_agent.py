@@ -42,7 +42,7 @@ class LangChainAgent(FlotillaAgent):
         tools: Optional[List[FlotillaTool]] = None,
         model_kwargs: Optional[Dict] = None,
         checkpointer: Optional[Checkpointer] = None,
-        subgraphs: bool = True,
+        subgraphs: Optional[bool] = True,
     ):
         self._llm = llm
         self._system_prompt = system_prompt
@@ -72,8 +72,13 @@ class LangChainAgent(FlotillaAgent):
 
     @staticmethod
     def _wrap_tool(tool: FlotillaTool) -> StructuredTool:
+        fn = tool.execution_callable
+
+        logger.info(f"_wrap_tool: function type {type(fn)} and underlying function {type(fn.__func__)}")
+        logger.info(f"_wrap_tool: name {tool.name} and description {tool.llm_description}")
+
         return StructuredTool.from_function(
-            func=tool.execution_callable,
+            func=fn.__func__,
             name=tool.name,
             description=tool.llm_description,
         )

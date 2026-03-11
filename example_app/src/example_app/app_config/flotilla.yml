@@ -1,39 +1,72 @@
 flotilla:
   runtime:
-    factory: runtime.single_agent
+    # reflection provider
+    $class: flotilla.runtime.flotilla_runtime.FlotillaRuntime
+    $name: runtime
+    orchestration:
+      # reference to $name value
+      $ref: orchestration_strategy
+    store:
+      $ref: thread_store
+    phase_context_service:
+      $class: flotilla.runtime.phase_context_service.PhaseContextService
+    execution_timeout_policy:
+      $class: flotilla.timeout.default_execution_timeout_policy.DefaultExecutionTimeoutPolicy
+      # constructor arg
+      timeout_ms: 300000 # 5 minutes
+    resume_service:
+      $class: flotilla.suspend.resume_service.ResumeService
+      resume_authorization_policy:
+        $class: flotilla.suspend.permissive_resume_authorization.PermissiveResumeAuthorization
+      ttl_seconds: 432000 # 5 days
+    suspend_policy:
+      $class: flotilla.suspend.no_op_suspend.NoOpSuspend
+    telemetry_policy:
+      $ref: telemetry_policy
+  orchestration_strategy:
+    $class: flotilla.runtime.support.single_agent_orchestration.SingleAgentOrchestration
+    $name: orchestration_strategy
     agent: 
-      $ref: agents.weather_agent
-  checkpointer:
-    factory: checkpointer.memory
-    ref_name: checkpointer
-
-llm:
-  openai:
-    factory: llm.openai
-    model: gpt-4o-mini
-    api_key: 
-      $secret: OPENAI_API_KEY
-    temperature: 1.5
-    max_tokens: 2048
-    timeout: 30
-
-
-agents:
-  weather_agent:
-    factory: agents.weather_agent
-    llm:
-      $config: llm.openai
-      overrides:
-        max_tokens: 5000
-    checkpointer:
-      $ref: checkpointer
-    weather_tools:
-      $ref: tools.weather_tools
+      $ref: flotilla.agents.weather_agent
+    telemetry: 
+      $ref: telemetry_policy
+  thread_entry_store:
+    $class: flotilla.thread.in_memory_store.InMemoryStore
+    $name: thread_store
+  telemetry:
+    $class: flotilla.telemetry.logger_telemetry.LoggerTelemetry
+    $name: telemetry_policy
+  thread_service:
+    $class: flotilla.thread.thread_service.ThreadService
+    $name: thread_service
+    store:
+      $ref: thread_store
+  llm:
+    openai:
+      $provider: llm.openai
+      model: gpt-4o-mini
+      api_key: 
+        $secret: OPENAI_API_KEY
+      temperature: 0.8
+      max_tokens: 2048
+      timeout: 30
     
-tools:
-  weather_tools:
-    factory: tools.weather_tools
-    api_key: 
-      $secret: WEATHER_API_KEY
-    base_url: https://api.weatherapi.com
-    use_api: true
+  agents:
+    weather_agent:
+      $provider: weather_agent_provider
+      llm:
+        $ref: flotilla.llm.openai
+      tools:
+        $list:
+          - $class: app_tools.city_search_tool.CitySearchTool
+            api_key: 
+              $secret: WEATHER_API_KEY
+            base_url: https://api.weatherapi.com
+          - $class: app_tools.forecast_tool.ForecastTool
+            api_key: 
+              $secret: WEATHER_API_KEY
+            base_url: https://api.weatherapi.com
+          - $class: app_tools.current_weather_tool.CurrentWeatherTool
+            api_key: 
+              $secret: WEATHER_API_KEY
+            base_url: https://api.weatherapi.com
