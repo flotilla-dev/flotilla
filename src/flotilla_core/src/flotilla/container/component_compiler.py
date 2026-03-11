@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Set, TYPE_CHECKING
 
 from flotilla.config.config_utils import ConfigUtils
 from flotilla.config.errors import FlotillaConfigurationError, ReferenceResolutionError
+from flotilla.container.constants import REFLECTION_PROVIDER_KEY, PROVIDER_DIRECTIVES
 
 if TYPE_CHECKING:
     from flotilla.container.flotilla_container import FlotillaContainer
@@ -20,7 +21,9 @@ class ComponentCompiler:
     _TAG_LIST = "$list"
     _TAG_MAP = "$map"
     _TAG_REF = "$ref"
-    _TAG_PROVIDER = "provider"
+    _TAG_PROVIDER = "$provider"
+    _TAG_CLASS = "$class"
+    _TAG_NAME = "$name"
 
     def __init__(self, *, container: FlotillaContainer):
         self._container = container
@@ -85,7 +88,7 @@ class ComponentCompiler:
 
             # --- Component definition ---
 
-            if "factory" in node:
+            if self._TAG_PROVIDER in node or self._TAG_CLASS in node:
                 self._register_component(node=node, path_parts=path_parts)
 
             # --- Normal recursion ---
@@ -102,33 +105,43 @@ class ComponentCompiler:
                     path_parts=path_parts + [str(idx)],
                 )
 
-    def _register_component(
-        self, *, node: Dict[str, Any], path_parts: List[str]
-    ) -> None:
+    def _register_component(self, *, node: Dict[str, Any], path_parts: List[str]) -> None:
         cfg_path = ".".join(path_parts) if path_parts else ""
 
-        ref_name = node.get("ref_name")
+        ref_name = node.get(self._TAG_NAME)
         name = ref_name if ref_name else cfg_path
 
         if name in self._component_defs:
-            raise FlotillaConfigurationError(
-                f"Component name '{name}' already exists (declared at {cfg_path})"
-            )
+            raise FlotillaConfigurationError(f"Component name '{name}' already exists (declared at {cfg_path})")
 
-        factory_name = node.get("factory")
-        if not isinstance(factory_name, str):
-            raise FlotillaConfigurationError(f"{cfg_path}.factory must be a string")
+        # Work on a copy so we don't mutate the original config tree
+        node = dict(node)
 
-        factory = self._container.get_provider(factory_name)
-        if factory is None:
-            raise FlotillaConfigurationError(
-                f"{cfg_path}: no factory registered under key '{factory_name}'"
-            )
+        # --------------------------------------------
+        # Normalize $class → $provider
+        # --------------------------------------------
+        if self._TAG_CLASS in node:
+            class_path = node[self._TAG_CLASS]
+            del node[self._TAG_CLASS]
 
-        if not callable(factory):
-            raise FlotillaConfigurationError(
-                f"{cfg_path}.factory '{factory_name}' is not callable"
-            )
+            node[self._TAG_PROVIDER] = REFLECTION_PROVIDER_KEY
+            node["class_path"] = class_path
+
+        # --------------------------------------------
+        # Validate provider
+        # --------------------------------------------
+        provider_name = node.get(self._TAG_PROVIDER)
+
+        if not isinstance(provider_name, str):
+            raise FlotillaConfigurationError(f"{cfg_path}.{self._TAG_PROVIDER} must be a string")
+
+        provider = self._container.get_provider(provider_name)
+
+        if provider is None:
+            raise FlotillaConfigurationError(f"{cfg_path}: no provider registered under key '{provider_name}'")
+
+        if not callable(provider):
+            raise FlotillaConfigurationError(f"{cfg_path}.{self._TAG_PROVIDER} '{provider_name}' is not callable")
 
         self._component_defs[name] = node
         self._component_paths[name] = cfg_path
@@ -136,37 +149,50 @@ class ComponentCompiler:
     def _validate_structure(self, node: Any, path_parts: List[str]) -> None:
         path = ".".join(path_parts) if path_parts else "<root>"
 
+        # Reject scalar directive form
+        if isinstance(node, str):
+            stripped = node.strip()
+            if stripped.startswith("$"):
+                raise FlotillaConfigurationError(f"{path}: scalar directive form is not allowed")
+            return
+
         if isinstance(node, dict):
+
             keys = set(node.keys())
-            has_factory = "factory" in keys
-            directive_keys = keys & {self._TAG_REF, self._TAG_LIST, self._TAG_MAP}
 
-            # --- Component Definition ---
-            if has_factory:
-                if directive_keys:
-                    raise FlotillaConfigurationError(
-                        f"{path}: component definitions may not contain directive keys"
-                    )
-                return  # arguments validated recursively by discovery
+            directive_keys = keys & {
+                self._TAG_REF,
+                self._TAG_LIST,
+                self._TAG_MAP,
+            }
 
-            # --- Directive Mapping ---
+            provider_keys = keys & {
+                self._TAG_PROVIDER,
+                self._TAG_CLASS,
+            }
+
+            # Directive nodes must contain exactly one key
             if directive_keys:
-                if len(directive_keys) != 1 or len(keys) != 1:
+                if len(keys) != 1:
                     raise FlotillaConfigurationError(
                         f"{path}: directive mappings must contain exactly one directive key"
                     )
                 return
 
-            # --- Namespace Container ---
+            # Provider node: valid component definition
+            if provider_keys:
+                if len(provider_keys) > 1:
+                    raise FlotillaConfigurationError(
+                        f"{path}: component definition may contain only one provider directive"
+                    )
+                return
+
+            # Otherwise recurse normally
             for key, value in node.items():
                 self._validate_structure(value, path_parts + [str(key)])
 
         elif isinstance(node, list):
-            raise FlotillaConfigurationError(
-                f"{path}: raw lists are not allowed; use {self._TAG_LIST}"
-            )
-
-        # Scalars are allowed
+            raise FlotillaConfigurationError(f"{path}: raw lists are not allowed; use {self._TAG_LIST}")
 
     # ------------------------------------------------------------------
     # Phase 2 — Dependency Analysis
@@ -181,13 +207,9 @@ class ComponentCompiler:
         for name, node in self._component_defs.items():
             for dep in self._find_ref_deps(node, owner=name):
                 if dep == name:
-                    raise FlotillaConfigurationError(
-                        f"{self._component_paths[name]}: $ref cannot reference itself"
-                    )
+                    raise FlotillaConfigurationError(f"{self._component_paths[name]}: $ref cannot reference itself")
                 if dep not in self._component_defs:
-                    raise ReferenceResolutionError(
-                        f"{self._component_paths[name]}: $ref '{dep}' not found"
-                    )
+                    raise ReferenceResolutionError(f"{self._component_paths[name]}: $ref '{dep}' not found")
                 self._deps[name].add(dep)
 
         self._topo_order = self._toposort_or_raise()
@@ -250,9 +272,7 @@ class ComponentCompiler:
             if n in visiting:
                 idx = visiting.index(n)
                 cycle = visiting[idx:] + [n]
-                raise FlotillaConfigurationError(
-                    f"$ref cycle detected: {' -> '.join(cycle)}"
-                )
+                raise FlotillaConfigurationError(f"$ref cycle detected: {' -> '.join(cycle)}")
 
             visiting.append(n)
             for dep in self._deps.get(n, set()):
@@ -283,23 +303,19 @@ class ComponentCompiler:
 
         node = self._component_defs[name]
         cfg_path = self._component_paths[name]
-        provider = self._container.get_provider(node["factory"])
+        provider = self._container.get_provider(node[self._TAG_PROVIDER])
         if provider is None:
-            raise FlotillaConfigurationError(
-                f"{cfg_path}: unknown provider '{node['factory']}'"
-            )
+            raise FlotillaConfigurationError(f"{cfg_path}: unknown provider '{node['factory']}'")
 
         kwargs = {}
         for key, val in node.items():
-            if key in {"factory", "ref_name"}:
+            if key in {self._TAG_PROVIDER, self._TAG_NAME}:
                 continue
-            kwargs[key] = self._materialize_value(
-                val, owner_path=cfg_path, arg_name=key
-            )
+            kwargs[key] = self._materialize_value(val, owner_path=cfg_path, arg_name=key)
 
-        componet = provider(**kwargs)
+        component = provider(**kwargs)
 
-        self._container.register_component(component_name=name, component=componet)
+        self._container.register_component(component_name=name, component=component)
         self._instantiated.add(name)
 
     def _materialize_value(self, value, *, owner_path, arg_name):
@@ -307,9 +323,7 @@ class ComponentCompiler:
         if isinstance(value, str):
             stripped = value.strip()
             if stripped.startswith("$"):
-                raise FlotillaConfigurationError(
-                    f"{owner_path}.{arg_name}: scalar directive form is not allowed"
-                )
+                raise FlotillaConfigurationError(f"{owner_path}.{arg_name}: scalar directive form is not allowed")
             return value
 
         # ----- Primitive scalars -----
@@ -319,8 +333,7 @@ class ComponentCompiler:
         # ----- Raw list is illegal -----
         if isinstance(value, list):
             raise FlotillaConfigurationError(
-                f"{owner_path}.{arg_name}: raw list values are not allowed; "
-                "use {$list: [...]} instead"
+                f"{owner_path}.{arg_name}: raw list values are not allowed; " "use {$list: [...]} instead"
             )
 
         # ----- Dict handling -----
@@ -329,9 +342,7 @@ class ComponentCompiler:
             # $ref
             if self._TAG_REF in value:
                 if len(value) != 1:
-                    raise FlotillaConfigurationError(
-                        f"{owner_path}.{arg_name}: $ref mapping must contain only '$ref'"
-                    )
+                    raise FlotillaConfigurationError(f"{owner_path}.{arg_name}: $ref mapping must contain only '$ref'")
                 target = value[self._TAG_REF]
                 self._instantiate_component(target)
                 return self._container.get(target)
@@ -354,9 +365,7 @@ class ComponentCompiler:
             # $map
             if self._TAG_MAP in value:
                 if len(value) != 1:
-                    raise FlotillaConfigurationError(
-                        f"{owner_path}.{arg_name}: $map mapping must contain only '$map'"
-                    )
+                    raise FlotillaConfigurationError(f"{owner_path}.{arg_name}: $map mapping must contain only '$map'")
                 return {
                     k: self._materialize_value(
                         v,
@@ -366,8 +375,8 @@ class ComponentCompiler:
                     for k, v in value[self._TAG_MAP].items()
                 }
 
-                # Embedded component definition (mapping containing 'factory')
-            if "factory" in value:
+            # Embedded component definition (mapping containing 'factory')
+            if self._TAG_PROVIDER in value or self._TAG_CLASS in value:
                 embedded_name = f"{owner_path}.{arg_name}"
 
                 # Register component if not already discovered
@@ -386,11 +395,8 @@ class ComponentCompiler:
 
             # ----- Any other dict is illegal -----
             raise FlotillaConfigurationError(
-                f"{owner_path}.{arg_name}: raw object values are not allowed; "
-                "use $ref, $list, or $map"
+                f"{owner_path}.{arg_name}: raw object values are not allowed; " "use $ref, $list, or $map"
             )
 
         # ----- Anything else -----
-        raise FlotillaConfigurationError(
-            f"{owner_path}.{arg_name}: unsupported value type"
-        )
+        raise FlotillaConfigurationError(f"{owner_path}.{arg_name}: unsupported value type")

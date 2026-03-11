@@ -11,9 +11,8 @@ asyncio_mode = "auto"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-
-flotilla-core = { path = "../src/flotilla_core" }
-flotilla-langchain = { path = "../src/flotilla_langchain" }
+flotilla-core = { path = "../src/flotilla-core", develop = true }
+flotilla-langchain = { path = "../src/flotilla-langchain", develop = true }
 
 # App-specific dependencies
 rich = "13.7.1"

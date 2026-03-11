@@ -1,12 +1,4 @@
-from typing import Dict, List
-
-from flotilla.container.component_provider import ComponentProvider
-from flotilla.container.provider_group import ProviderGroup
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.config.secret_resolver import SecretResolver
-from flotilla.config.configuration_source import ConfigurationSource
-from flotilla.config.config_loader import ConfigLoader
 from flotilla.runtime.flotilla_runtime import FlotillaRuntime
 from flotilla.thread.thread_service import ThreadService
 
@@ -39,64 +31,16 @@ class FlotillaApplication:
     (CLI, FastAPI, workers, etc.).
     """
 
-    def __init__(self, sources: List[ConfigurationSource], secrets: List[SecretResolver]):
-        """
-        Create a new FlotillaApplication.
-
-        Args:
-            sources:
-                Ordered configuration sources used to load application
-                configuration. Later sources override earlier ones.
-            secrets:
-                Ordered secret resolvers used during configuration loading.
-                Later resolvers override earlier ones when resolving the
-                same secret key.
-
-        The application is created in a non-started state. No configuration
-        is loaded and no container is built until start() is called.
-        """
-        self._providers: Dict[str, ComponentProvider] = {}
-        self._loader: ConfigLoader = ConfigLoader(sources=sources, secrets=secrets)
+    def __init__(self, runtime: FlotillaRuntime, thread_service: ThreadService):
+        """ """
+        self._runtime = runtime
+        self._thead_service = thread_service
         self._container = None
-        self._runtime = None
-        self._thead_service = None
         self._started = False
-
-    # ----------------------------
-    # Extension API (app-owned)
-    # ----------------------------
-
-    def register_provider(self, builder_name: str, builder: ComponentProvider):
-        """
-        Register a named component builder with the application.
-
-        Registered builders are applied to the container during startup
-        before contributors are executed.
-        """
-        self._providers[builder_name] = builder
-
-    def register_proivder_group(self, group: ProviderGroup):
-        """
-        Register a group of component builders.
-
-        All builders provided by the group are registered individually
-        under their declared names.
-        """
-        for name, builder in group.builders().items():
-            self.register_provider(name, builder)
 
     # ----------------------------
     # Build lifecycle
     # ----------------------------
-
-    def _build_container(self, settings: FlotillaSettings) -> FlotillaContainer:
-        container = FlotillaContainer(settings)
-
-        # Apply factories
-        for name, builder in self._providers.items():
-            container.register_provider(name, builder)
-
-        return container.build()
 
     def start(self):
         """
@@ -116,9 +60,6 @@ class FlotillaApplication:
 
         Calling start() more than once is not supported.
         """
-        settings = self._loader.load()
-        self._container = self._build_container(settings=settings)
-        self._runtime = self._container.find_one_by_type(FlotillaRuntime)
         self._started = True
 
     def shutdown(self):
@@ -127,26 +68,13 @@ class FlotillaApplication:
 
         # Optional: graceful teardown hooks later
         self._container = None
+        self._runtime = None
+        self._thead_service = None
         self._started = False
 
     # ----------------------------
-    # Accessors
+    # Public Accessors
     # ----------------------------
-
-    @property
-    def container(self) -> FlotillaContainer:
-        """
-        Access the built FlotillaContainer.
-
-        Returns:
-            The active FlotillaContainer instance.
-
-        Raises:
-            RuntimeError:
-                If the application has not been started or has been shut down.
-        """
-        self._assert_started()
-        return self._container
 
     @property
     def started(self) -> bool:
@@ -165,6 +93,11 @@ class FlotillaApplication:
     # -------------------------------
     # Private Helpers
     # -------------------------------
+
+    def _attach_container(self, container: FlotillaContainer) -> None:
+        if self._container is not None:
+            raise RuntimeError("Container already attached to application")
+        self._container = container
 
     def _assert_started(self):
         if not self.started:

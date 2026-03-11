@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-
+import inspect
 from typing import List, Optional, Any, Type, TypeVar, Callable
 
 from flotilla.config.flotilla_settings import FlotillaSettings
@@ -10,7 +10,7 @@ from flotilla.container.binding import Binding
 from flotilla.container.singleton_binding import SingletonBinding
 from flotilla.container.factory_binding import FactoryBinding
 from flotilla.utils.logger import get_logger
-from flotilla.config.errors import FlotillaConfigurationError, ReferenceResolutionError
+from flotilla.config.errors import FlotillaConfigurationError
 
 
 logger = get_logger(__name__)
@@ -73,22 +73,16 @@ class FlotillaContainer:
         """ """
         self._assert_not_built()
         if component_name in self._bindings:
-            raise FlotillaConfigurationError(
-                f"Component '{component_name}' already registered"
-            )
+            raise FlotillaConfigurationError(f"Component '{component_name}' already registered")
 
         logger.info(f"Register component {component_name}")
         self._bindings[component_name] = SingletonBinding(component)
 
-    def register_factory(
-        self, component_name: str, factory: Callable[..., Any], **kwargs
-    ):
+    def register_factory(self, component_name: str, factory: Callable[..., Any], **kwargs):
         """ """
         self._assert_not_built()
         if component_name in self._bindings:
-            raise FlotillaConfigurationError(
-                f"Component '{component_name}' already registered"
-            )
+            raise FlotillaConfigurationError(f"Component '{component_name}' already registered")
         logger.info(f"Register component factory {component_name}")
         self._bindings[component_name] = FactoryBinding(factory, **kwargs)
 
@@ -121,9 +115,7 @@ class FlotillaContainer:
         try:
             binding = self._bindings[name]
         except KeyError:
-            raise FlotillaConfigurationError(
-                f"Component '{name}' not found in container"
-            )
+            raise FlotillaConfigurationError(f"Component '{name}' not found in container")
 
         return binding.resolve()
 
@@ -183,14 +175,10 @@ class FlotillaContainer:
         matches = self.find_instances_by_type(base_type)
 
         if not matches:
-            raise FlotillaConfigurationError(
-                f"No instances of type {base_type.__name__} found in container"
-            )
+            raise FlotillaConfigurationError(f"No instances of type {base_type.__name__} found in container")
 
         if len(matches) > 1:
-            raise FlotillaConfigurationError(
-                f"Multiple instances of type {base_type.__name__} found: {matches}"
-            )
+            raise FlotillaConfigurationError(f"Multiple instances of type {base_type.__name__} found: {matches}")
 
         return matches[0]
 
@@ -217,18 +205,88 @@ class FlotillaContainer:
             raise ReferenceResolutionError(f"$ref '{key}' not found in container")
         '''
 
-    def _assert_not_built(self):
-        """Checks to see if the container has not been built.  If it has then it raises a RuntimeError"""
-        if self._built:
-            raise RuntimeError(
-                "FlotillaContainer.build() has already finished and further changes are not allowed"
-            )
+    def create(self, cls: Type[T]) -> T:
+        """
+        Construct a Python class using dependency injection from the container.
 
-    def _assert_built(self):
-        if not self._built:
-            raise RuntimeError(
-                "FlotillaContainer.build() must be called before accessing components"
-            )
+        This method allows application code to request construction of an
+        arbitrary class whose constructor dependencies are resolved from the
+        container by type.
+
+        All constructor parameters MUST have type annotations so the container
+        can determine which dependency to inject.
+
+        Dependencies must already exist in the container (Phase-1 behavior).
+        If a dependency cannot be found, a FlotillaConfigurationError is raised.
+
+        Parameters
+        ----------
+        cls : Type[T]
+            The class to construct.
+
+        Returns
+        -------
+        T
+            The constructed instance with injected dependencies.
+
+        Raises
+        ------
+        RuntimeError
+            If the container has not been built.
+
+        FlotillaConfigurationError
+            If constructor parameters are missing type annotations or if
+            dependencies cannot be resolved from the container.
+        """
+
+        self._assert_built()
+
+        if not inspect.isclass(cls):
+            raise FlotillaConfigurationError(f"create() expected a class, got {type(cls)}")
+
+        try:
+            signature = inspect.signature(cls.__init__)
+        except (TypeError, ValueError) as ex:
+            raise FlotillaConfigurationError(f"Unable to inspect constructor for {cls.__name__}") from ex
+
+        kwargs: dict[str, Any] = {}
+
+        for name, param in signature.parameters.items():
+
+            # Skip 'self'
+            if name == "self":
+                continue
+
+            # Require type annotation
+            annotation = param.annotation
+            if annotation is inspect._empty:
+                raise FlotillaConfigurationError(
+                    f"{cls.__name__}.{name} is missing a type annotation. "
+                    "Constructor parameters must be typed for dependency injection."
+                )
+
+            try:
+                dependency = self.find_one_by_type(annotation)
+            except FlotillaConfigurationError as ex:
+
+                # If a default value exists, use it instead of failing
+                if param.default is not inspect._empty:
+                    kwargs[name] = param.default
+                    continue
+
+                raise FlotillaConfigurationError(
+                    f"Unable to resolve dependency '{name}: {annotation.__name__}' "
+                    f"while constructing {cls.__name__}"
+                ) from ex
+
+            kwargs[name] = dependency
+
+        try:
+            instance = cls(**kwargs)
+        except Exception as ex:
+            raise FlotillaConfigurationError(f"Failed to construct {cls.__name__}") from ex
+
+        return instance
 
     def build(self) -> FlotillaContainer:
         """
@@ -273,3 +331,16 @@ class FlotillaContainer:
 
         self._built = True
         return self
+
+    # --------------------------
+    # Private API helpers
+    # --------------------------
+
+    def _assert_not_built(self):
+        """Checks to see if the container has not been built.  If it has then it raises a RuntimeError"""
+        if self._built:
+            raise RuntimeError("FlotillaContainer.build() has already finished and further changes are not allowed")
+
+    def _assert_built(self):
+        if not self._built:
+            raise RuntimeError("FlotillaContainer.build() must be called before accessing components")

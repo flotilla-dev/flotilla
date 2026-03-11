@@ -172,3 +172,178 @@ def test_build_sets_built_and_is_one_shot(container, monkeypatch):
 
     with pytest.raises(RuntimeError):
         container.build()
+
+
+def test_create_requires_container_built(container):
+    class App:
+        def __init__(self): ...
+
+    with pytest.raises(RuntimeError):
+        container.create(App)
+
+
+def test_create_injects_single_dependency(container):
+    class Service: ...
+
+    class App:
+        def __init__(self, service: Service):
+            self.service = service
+
+    svc = Service()
+    container.register_component(component_name="service", component=svc)
+
+    container._built = True
+    app = container.create(App)
+
+    assert isinstance(app, App)
+    assert app.service is svc
+
+
+def test_create_injects_multiple_dependencies(container):
+    class A: ...
+
+    class B: ...
+
+    class App:
+        def __init__(self, a: A, b: B):
+            self.a = a
+            self.b = b
+
+    a = A()
+    b = B()
+
+    container.register_component(component_name="a", component=a)
+    container.register_component(component_name="b", component=b)
+
+    container._built = True
+    app = container.create(App)
+
+    assert app.a is a
+    assert app.b is b
+
+
+def test_create_raises_if_dependency_missing(container):
+    class Service: ...
+
+    class App:
+        def __init__(self, service: Service): ...
+
+    container._built = True
+
+    with pytest.raises(FlotillaConfigurationError):
+        container.create(App)
+
+
+def test_create_raises_if_multiple_dependency_matches(container):
+    class Service: ...
+
+    class App:
+        def __init__(self, service: Service): ...
+
+    container.register_component(component_name="s1", component=Service())
+    container.register_component(component_name="s2", component=Service())
+
+    container._built = True
+
+    with pytest.raises(FlotillaConfigurationError):
+        container.create(App)
+
+
+def test_create_requires_type_annotations(container):
+    class Service: ...
+
+    class App:
+        def __init__(self, service):
+            self.service = service
+
+    container.register_component(component_name="service", component=Service())
+    container._built = True
+
+    with pytest.raises(FlotillaConfigurationError):
+        container.create(App)
+
+
+def test_create_uses_default_value_if_dependency_missing(container):
+    class App:
+        def __init__(self, timeout: int = 30):
+            self.timeout = timeout
+
+    container._built = True
+
+    app = container.create(App)
+
+    assert app.timeout == 30
+
+
+def test_create_prefers_container_dependency_over_default(container):
+    class App:
+        def __init__(self, value: int = 30):
+            self.value = value
+
+    container.register_component(component_name="value", component=99)
+
+    container._built = True
+    app = container.create(App)
+
+    assert app.value == 99
+
+
+def test_create_wraps_constructor_errors(container):
+    class Service: ...
+
+    class App:
+        def __init__(self, service: Service):
+            raise RuntimeError("boom")
+
+    container.register_component(component_name="service", component=Service())
+    container._built = True
+
+    with pytest.raises(FlotillaConfigurationError):
+        container.create(App)
+
+
+def test_create_class_with_no_dependencies(container):
+    class App:
+        def __init__(self):
+            self.ok = True
+
+    container._built = True
+
+    app = container.create(App)
+
+    assert isinstance(app, App)
+    assert app.ok is True
+
+
+def test_create_ignores_self_parameter(container):
+    class App:
+        def __init__(self):
+            pass
+
+    container._built = True
+
+    app = container.create(App)
+    assert isinstance(app, App)
+
+
+def test_create_resolves_factory_binding(container):
+    class Service: ...
+
+    class App:
+        def __init__(self, service: Service):
+            self.service = service
+
+    container.register_factory("service", Service)
+
+    container._built = True
+
+    app = container.create(App)
+
+    assert isinstance(app.service, Service)
+
+
+def test_create_requires_class(container):
+    container._built = True
+
+    with pytest.raises(FlotillaConfigurationError):
+        container.create(object())
