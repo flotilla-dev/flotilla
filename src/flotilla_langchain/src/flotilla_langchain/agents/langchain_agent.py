@@ -3,13 +3,16 @@ from __future__ import annotations
 from typing import AsyncIterator, Dict, List, Optional, Any
 import asyncio
 import json
+import inspect
+from functools import update_wrapper
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, Checkpointer
 from langchain.agents import create_agent
 from langchain_core.tools import StructuredTool
+
 
 from flotilla.agents.flotilla_agent import FlotillaAgent
 from flotilla.agents.agent_event import AgentEvent
@@ -19,6 +22,7 @@ from flotilla.thread.thread_context import ThreadContext
 from flotilla.thread.thread_entries import ThreadEntry, ResumeEntry
 from flotilla.tools.flotilla_tool import FlotillaTool
 from flotilla.utils.logger import get_logger
+from flotilla.thread.thread_entries import ThreadEntry, UserInput, ResumeEntry
 
 logger = get_logger(__name__)
 
@@ -72,14 +76,24 @@ class LangChainAgent(FlotillaAgent):
 
     @staticmethod
     def _wrap_tool(tool: FlotillaTool) -> StructuredTool:
-        fn = tool.execution_callable
+        fn = tool.execution_callable  # bound method
+        instance = fn.__self__
+        func = fn.__func__  # underlying function
 
-        logger.info(f"_wrap_tool: function type {type(fn)} and underlying function {type(fn.__func__)}")
-        logger.info(f"_wrap_tool: name {tool.name} and description {tool.llm_description}")
+        def tool_func(*args, **kwargs):
+            return func(instance, *args, **kwargs)
+
+        # preserve metadata
+        update_wrapper(tool_func, func)
+
+        # preserve the original signature (minus self)
+        sig = inspect.signature(func)
+        params = list(sig.parameters.values())[1:]  # drop "self"
+        tool_func.__signature__ = sig.replace(parameters=params)
 
         return StructuredTool.from_function(
-            func=fn.__func__,
-            name=tool.name,
+            func=tool_func,
+            name=func.__name__,
             description=tool.llm_description,
         )
 
@@ -89,15 +103,15 @@ class LangChainAgent(FlotillaAgent):
 
     async def _execute(
         self,
-        thread: ThreadContext,
-        config: PhaseContext,
+        thread_context: ThreadContext,
+        phase_context: PhaseContext,
         input_parts: Optional[List[ContentPart]] = None,
     ) -> AsyncIterator[AgentEvent]:
 
-        if not thread.entries:
+        if not thread_context.entries:
             raise RuntimeError("ThreadContext must contain at least one entry.")
 
-        triggering_entry = thread.entries[-1]
+        triggering_entry = thread_context.entries[-1]
         entry_id = triggering_entry.entry_id
 
         if not entry_id:
@@ -110,16 +124,18 @@ class LangChainAgent(FlotillaAgent):
         last_ai_message: Optional[AIMessage] = None
 
         command = self._resume_command(triggering_entry)
-        graph_config = self._graph_config(config)
+        graph_config = self._graph_config(phase_context)
 
         try:
-            async for mode, chunk in self._graph.astream(
-                self._graph_input(thread=thread, config=config),
+            async for event in self._graph.astream(
+                self._graph_input(thread=thread_context, config=phase_context),
                 command=command,
                 stream_mode=["messages", "updates"],
                 subgraphs=self._subgraphs,
                 config=graph_config,
             ):
+                mode = event[1]
+                chunk = event[2]
 
                 # -------------------------------------------------
                 # STREAMING TOKENS
@@ -162,7 +178,9 @@ class LangChainAgent(FlotillaAgent):
 
             final_state = await self._graph.aget_state(config=graph_config)
 
-            messages = final_state.get("messages", [])
+            logger.info(f"StateSnapshot type {type(final_state)}")
+
+            messages = final_state.values.get("messages", [])
             if isinstance(messages, list):
                 for m in reversed(messages):
                     if isinstance(m, AIMessage):
@@ -266,13 +284,22 @@ class LangChainAgent(FlotillaAgent):
         thread: ThreadContext,
         config: PhaseContext,
     ) -> Dict[str, Any]:
-        """
-        Override to customize graph input structure.
-        """
+
+        messages = []
+
+        for entry in thread.entries:
+            text = " ".join(p.text for p in entry.content if isinstance(p, TextPart))
+
+            if isinstance(entry, UserInput) or isinstance(entry, ResumeEntry):
+                messages.append(HumanMessage(content=text))
+            else:
+                messages.append(AIMessage(content=text))
+
         return {
+            "messages": messages,
             "configurable": {
                 "thread_id": config.thread_id,
-            }
+            },
         }
 
     def _graph_config(self, config: PhaseContext) -> Dict[str, Any]:

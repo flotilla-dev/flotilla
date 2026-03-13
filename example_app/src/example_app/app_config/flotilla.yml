@@ -47,7 +47,7 @@ flotilla:
       model: gpt-4o-mini
       api_key: 
         $secret: OPENAI_API_KEY
-      temperature: 0.8
+      temperature: 0.2
       max_tokens: 2048
       timeout: 30
     

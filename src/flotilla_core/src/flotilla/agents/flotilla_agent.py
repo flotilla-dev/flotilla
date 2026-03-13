@@ -43,22 +43,20 @@ class FlotillaAgent(ABC):
 
     async def run(
         self,
-        thread: ThreadContext,
+        thread_context: ThreadContext,
         phase_context: PhaseContext,
         input_parts: Optional[List[ContentPart]] = None,
     ) -> AsyncIterator[AgentEvent]:
-        if thread.status != ThreadStatus.RUNNING:
-            raise ThreadNotRunnableError(thread.status)
+        if thread_context.status != ThreadStatus.RUNNING:
+            raise ThreadNotRunnableError(thread_context.status)
 
-        if phase_context.thread_id != thread.thread_id:
+        if phase_context.thread_id != thread_context.thread_id:
             raise ThreadIdMismatchError(
                 expected=phase_context.thread_id,
-                actual=thread.thread_id,
+                actual=thread_context.thread_id,
             )
 
-        async for event in self._execute(
-            thread, phase_context, input_parts=input_parts
-        ):
+        async for event in self._execute(thread_context, phase_context, input_parts=input_parts):
             yield event
 
     @abstractmethod
