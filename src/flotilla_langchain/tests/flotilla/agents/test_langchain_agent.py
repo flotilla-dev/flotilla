@@ -3,6 +3,9 @@ import pytest
 from typing import List, Any
 
 from langchain_core.messages import AIMessage, AIMessageChunk
+from types import SimpleNamespace
+import json
+
 
 from flotilla_langchain.agents.langchain_agent import LangChainAgent
 from flotilla.thread.thread_context import ThreadContext
@@ -17,21 +20,16 @@ from flotilla.runtime.content_part import TextPart
 
 
 class FakeGraph:
-    """
-    Simulates LangGraph streaming contract.
-    """
-
-    def __init__(self, *, chunks: List[str] = None, final_text: str = ""):
-        self._chunks = chunks or []
-        self._final_text = final_text
+    def __init__(self, chunks=None, final_text=""):
+        self.chunks = chunks or []
+        self.final_text = final_text
 
     async def astream(self, *args, **kwargs):
-        for text in self._chunks:
-            await asyncio.sleep(0)
-            yield ("messages", (AIMessageChunk(content=text), {}))
+        for c in self.chunks:
+            yield ((), "messages", (AIMessageChunk(content=c), {}))
 
     async def aget_state(self, *args, **kwargs):
-        return {"messages": [AIMessage(content=self._final_text)]}
+        return SimpleNamespace(values={"messages": [AIMessage(content=self.final_text)]})
 
 
 class ErrorGraph(FakeGraph):
@@ -72,27 +70,50 @@ class AuthoritativeGraph(FakeGraph):
     """
 
     async def astream(self, *args, **kwargs):
-        yield ("messages", (AIMessageChunk(content="partial"), {}))
+        yield ((), "messages", (AIMessageChunk(content="partial"), {}))
 
     async def aget_state(self, *args, **kwargs):
-        return {"messages": [AIMessage(content="complete")]}
+        return SimpleNamespace(values={"messages": [AIMessage(content="complete")]})
 
 
 class JsonGraph(FakeGraph):
     async def astream(self, *args, **kwargs):
-        yield ("messages", (AIMessageChunk(content='{"foo": "bar"}'), {}))
+        yield ((), "messages", (AIMessageChunk(content='{"foo":'), {}))
+        yield ((), "messages", (AIMessageChunk(content='"bar"}'), {}))
 
     async def aget_state(self, *args, **kwargs):
-        return {"messages": [AIMessage(content='{"foo": "bar"}')]}
+        return SimpleNamespace(values={"messages": [AIMessage(content='{"foo":"bar"}')]})
 
 
 class MetadataGraph(FakeGraph):
+
     async def astream(self, *args, **kwargs):
-        yield ("messages", (AIMessageChunk(content="hi"), {"tokens": 3}))
-        yield ("messages", (AIMessageChunk(content=" there"), {"tokens": 2}))
+        yield (
+            (),
+            "messages",
+            (
+                AIMessageChunk(content="hello"),
+                {"token_usage": {"completion_tokens": 3}},
+            ),
+        )
 
     async def aget_state(self, *args, **kwargs):
-        return {"messages": [AIMessage(content="hi there")]}
+        return SimpleNamespace(
+            values={
+                "messages": [
+                    AIMessage(
+                        content="hello",
+                        response_metadata={
+                            "token_usage": {
+                                "completion_tokens": 3,
+                                "prompt_tokens": 5,
+                                "total_tokens": 8,
+                            }
+                        },
+                    )
+                ]
+            }
+        )
 
 
 class InterruptGraph(FakeGraph):
@@ -100,7 +121,7 @@ class InterruptGraph(FakeGraph):
         yield ("updates", {"__interrupt__": {"reason": "approval_required"}})
 
     async def aget_state(self, *args, **kwargs):
-        return {"messages": []}
+        return SimpleNamespace(values={"messages": None})
 
 
 class NoAIMessageGraph(FakeGraph):
@@ -274,7 +295,7 @@ async def test_default_agent_treats_json_as_text(thread_context, phase_context):
         output.append(e)
 
     final = next(e for e in output if e.type == "message_final")
-    assert final.content[0].text == '{"foo": "bar"}'
+    assert json.loads(final.content[0].text) == {"foo": "bar"}
 
 
 @pytest.mark.asyncio

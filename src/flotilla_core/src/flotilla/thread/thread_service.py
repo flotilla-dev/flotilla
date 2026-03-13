@@ -21,7 +21,7 @@ class ThreadService:
         """
         Constructs a new ThreadService with the required ThreadEntryStore
         """
-        self._store: ThreadEntryStore
+        self._store: ThreadEntryStore = store
 
     async def create_thread(self) -> str:
         """

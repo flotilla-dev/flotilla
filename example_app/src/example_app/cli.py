@@ -27,7 +27,7 @@ from flotilla.runtime.flotilla_runtime import FlotillaRuntime
 from flotilla.thread.thread_service import ThreadService
 from flotilla.runtime.runtime_request import RuntimeRequest
 from flotilla.runtime.runtime_response import RuntimeResponse
-from flotilla.runtime.content_part import ContentPart, TextPart
+from flotilla.runtime.content_part import ContentPart, TextPart, ContentPartType
 
 from flotilla_langchain.llm.providers import openai_llm_provider
 from flotilla.container.constants import REFLECTION_PROVIDER_KEY
@@ -53,7 +53,7 @@ async def _run_query_async(
 
     # IMPORTANT: runtime.run() is async -> must await
     request: RuntimeRequest = RuntimeRequest(
-        thread_id=thread_id, user_id="u1", content=TextPart(id="query", text=query)
+        thread_id=thread_id, user_id="u1", content=[TextPart(id="query", text=query)]
     )
     return await runtime.run(request)
 
@@ -63,7 +63,7 @@ async def _interactive_loop_async(app: FlotillaApplication) -> None:
     Single asyncio loop for the whole interactive session.
     """
     runtime = app.runtime
-    thread_id = app.thread_service.create_thread()
+    thread_id = await app.thread_service.create_thread()
 
     console.print("[green]✓ Ready for queries[/green]")
     console.print(f"[dim]thread_id: {thread_id}[/dim]\n")
@@ -89,10 +89,13 @@ async def _interactive_loop_async(app: FlotillaApplication) -> None:
 
             # RuntimeeResponse shape: List[ContentPart]
             # Keep this simple for now; print output if present.
-            if getattr(response.content, "content", None) is not None:
+            if response.content is not None:
 
                 for part in response.content:
-                    console.print(f"\n[bold green] ContentPart: {part}")
+                    if part.type == ContentPartType.TEXT:
+                        console.print(f"\n[bold green] ContentPart: {part.text}")
+                    else:
+                        console.print(f"\n[bold green] ContentPart: {part}")
 
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")
