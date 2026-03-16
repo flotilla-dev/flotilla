@@ -179,7 +179,7 @@ def test_create_requires_container_built(container):
         def __init__(self): ...
 
     with pytest.raises(RuntimeError):
-        container.create(App)
+        container.create_component(App)
 
 
 def test_create_injects_single_dependency(container):
@@ -193,7 +193,7 @@ def test_create_injects_single_dependency(container):
     container.register_component(component_name="service", component=svc)
 
     container._built = True
-    app = container.create(App)
+    app = container.create_component(App)
 
     assert isinstance(app, App)
     assert app.service is svc
@@ -216,7 +216,7 @@ def test_create_injects_multiple_dependencies(container):
     container.register_component(component_name="b", component=b)
 
     container._built = True
-    app = container.create(App)
+    app = container.create_component(App)
 
     assert app.a is a
     assert app.b is b
@@ -231,7 +231,7 @@ def test_create_raises_if_dependency_missing(container):
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create(App)
+        container.create_component(App)
 
 
 def test_create_raises_if_multiple_dependency_matches(container):
@@ -246,7 +246,7 @@ def test_create_raises_if_multiple_dependency_matches(container):
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create(App)
+        container.create_component(App)
 
 
 def test_create_requires_type_annotations(container):
@@ -260,7 +260,7 @@ def test_create_requires_type_annotations(container):
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create(App)
+        container.create_component(App)
 
 
 def test_create_uses_default_value_if_dependency_missing(container):
@@ -270,7 +270,7 @@ def test_create_uses_default_value_if_dependency_missing(container):
 
     container._built = True
 
-    app = container.create(App)
+    app = container.create_component(App)
 
     assert app.timeout == 30
 
@@ -283,7 +283,7 @@ def test_create_prefers_container_dependency_over_default(container):
     container.register_component(component_name="value", component=99)
 
     container._built = True
-    app = container.create(App)
+    app = container.create_component(App)
 
     assert app.value == 99
 
@@ -299,7 +299,7 @@ def test_create_wraps_constructor_errors(container):
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create(App)
+        container.create_component(App)
 
 
 def test_create_class_with_no_dependencies(container):
@@ -309,7 +309,7 @@ def test_create_class_with_no_dependencies(container):
 
     container._built = True
 
-    app = container.create(App)
+    app = container.create_component(App)
 
     assert isinstance(app, App)
     assert app.ok is True
@@ -322,7 +322,7 @@ def test_create_ignores_self_parameter(container):
 
     container._built = True
 
-    app = container.create(App)
+    app = container.create_component(App)
     assert isinstance(app, App)
 
 
@@ -337,7 +337,7 @@ def test_create_resolves_factory_binding(container):
 
     container._built = True
 
-    app = container.create(App)
+    app = container.create_component(App)
 
     assert isinstance(app.service, Service)
 
@@ -346,4 +346,221 @@ def test_create_requires_class(container):
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create(object())
+        container.create_component(object())
+
+
+from typing import Optional, Union, Annotated
+
+
+def test_find_instances_optional_type(container):
+    class TelemetryPolicy:
+        pass
+
+    policy = TelemetryPolicy()
+
+    container.register_component(component_name="telemetry", component=policy)
+    container._built = True
+
+    matches = container.find_instances_by_type(Optional[TelemetryPolicy])
+
+    assert matches == [policy]
+
+
+def test_find_instances_union_type(container):
+    class TelemetryPolicy:
+        pass
+
+    policy = TelemetryPolicy()
+
+    container.register_component(component_name="telemetry", component=policy)
+    container._built = True
+
+    matches = container.find_instances_by_type(Union[TelemetryPolicy, None])
+
+    assert matches == [policy]
+
+
+def test_find_instances_annotated_type(container):
+    class TelemetryPolicy:
+        pass
+
+    policy = TelemetryPolicy()
+
+    container.register_component(component_name="telemetry", component=policy)
+    container._built = True
+
+    matches = container.find_instances_by_type(Annotated[TelemetryPolicy, "meta"])
+
+    assert matches == [policy]
+
+
+def test_find_instances_union_multiple_types(container):
+    class A:
+        pass
+
+    class B:
+        pass
+
+    a = A()
+    b = B()
+
+    container.register_component(component_name="a", component=a)
+    container.register_component(component_name="b", component=b)
+
+    container._built = True
+
+    matches = container.find_instances_by_type(Union[A, B])
+
+    assert set(matches) == {a, b}
+
+
+def test_find_one_optional_type(container):
+    class TelemetryPolicy:
+        pass
+
+    policy = TelemetryPolicy()
+
+    container.register_component(component_name="telemetry", component=policy)
+    container._built = True
+
+    result = container.find_one_by_type(Optional[TelemetryPolicy])
+
+    assert result is policy
+
+
+def test_create_component_optional_dependency(container):
+    class Service:
+        pass
+
+    class App:
+        def __init__(self, service: Optional[Service]):
+            self.service = service
+
+    svc = Service()
+
+    container.register_component(component_name="service", component=svc)
+    container._built = True
+
+    app = container.create_component(App)
+
+    assert app.service is svc
+
+
+def test_create_component_optional_dependency_missing(container):
+    class Service:
+        pass
+
+    class App:
+        def __init__(self, service: Optional[Service]):
+            self.service = service
+
+    container._built = True
+
+    app = container.create_component(App)
+
+    assert app.service is None
+
+
+def test_create_component_union_dependency(container):
+    class A:
+        pass
+
+    class B:
+        pass
+
+    class App:
+        def __init__(self, service: Union[A, B]):
+            self.service = service
+
+    a = A()
+
+    container.register_component(component_name="a", component=a)
+    container._built = True
+
+    app = container.create_component(App)
+
+    assert app.service is a
+
+
+def test_optional_with_multiple_matches(container):
+    class Service:
+        pass
+
+    class App:
+        def __init__(self, service: Optional[Service]):
+            self.service = service
+
+    container.register_component(component_name="s1", component=Service())
+    container.register_component(component_name="s2", component=Service())
+
+    container._built = True
+
+    with pytest.raises(FlotillaConfigurationError):
+        container.create_component(App)
+
+
+def test_find_instances_pipe_union_optional(container):
+    class TelemetryPolicy:
+        pass
+
+    policy = TelemetryPolicy()
+
+    container.register_component(component_name="telemetry", component=policy)
+    container._built = True
+
+    matches = container.find_instances_by_type(TelemetryPolicy | None)
+
+    assert matches == [policy]
+
+
+def test_create_component_pipe_optional_dependency(container):
+    class Service:
+        pass
+
+    class App:
+        def __init__(self, service: Service | None = None):
+            self.service = service
+
+    svc = Service()
+
+    container.register_component(component_name="service", component=svc)
+    container._built = True
+
+    app = container.create_component(App)
+
+    assert app.service is svc
+
+
+def test_create_component_pipe_optional_missing(container):
+    class Service:
+        pass
+
+    class App:
+        def __init__(self, service: Service | None = None):
+            self.service = service
+
+    container._built = True
+
+    app = container.create_component(App)
+
+    assert app.service is None
+
+
+def test_union_pipe_multiple_types(container):
+    class A:
+        pass
+
+    class B:
+        pass
+
+    class App:
+        def __init__(self, dep: A | B):
+            self.dep = dep
+
+    a = A()
+    container.register_component(component_name="a", component=a)
+
+    container._built = True
+    app = container.create_component(App)
+
+    assert app.dep is a

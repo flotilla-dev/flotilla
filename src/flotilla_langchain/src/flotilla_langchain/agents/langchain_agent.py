@@ -196,26 +196,25 @@ class LangChainAgent(FlotillaAgent):
                 )
                 return
 
-            final_text = "".join(chunk_buffer)
+            stream_text = "".join(chunk_buffer)
 
             parts = self._map_final_output_to_content_parts(
-                final_text=final_text,
+                stream_text=stream_text,
                 final_message=last_ai_message,
                 final_state=final_state,
                 stream_metadata=stream_metadata,
             )
 
-            execution_metadata = self._extract_execution_metadata(
+            final_execution_metadata = self._extract_final_execution_metadata(
                 final_message=last_ai_message,
                 final_state=final_state,
-                stream_metadata=stream_metadata,
             )
 
             yield AgentEvent.message_final(
                 entry_id=entry_id,
                 agent_id=self.agent_name,
                 content=parts,
-                metadata=execution_metadata,
+                metadata=final_execution_metadata,
             )
 
         except asyncio.CancelledError:
@@ -240,7 +239,7 @@ class LangChainAgent(FlotillaAgent):
     def _map_final_output_to_content_parts(
         self,
         *,
-        final_text: str,
+        stream_text: str,
         final_message: Optional[AIMessage],
         final_state: Optional[Dict[str, Any]],
         stream_metadata: Dict[str, Any],
@@ -258,22 +257,26 @@ class LangChainAgent(FlotillaAgent):
         if final_message and isinstance(final_message.content, str):
             return [TextPart(text=final_message.content)]
 
-        return [TextPart(text=final_text)]
+        return [TextPart(text=stream_text)]
 
-    def _extract_execution_metadata(
+    def _extract_final_execution_metadata(
         self,
         *,
         final_message: Optional[AIMessage],
         final_state: Optional[Dict[str, Any]],
-        stream_metadata: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         """
         Extract execution telemetry (token usage, timing, etc).
 
-        Default: return stream_metadata if non-empty.
+        LangGraph canonical behavior:
+        - Prefer final AIMessage.response_metadata
+        - Fallback to stream metadata if needed
         """
 
-        return stream_metadata or None
+        if final_message and getattr(final_message, "response_metadata", None):
+            return final_message.response_metadata
+
+        return None
 
     # ------------------------------------------------------------------
     # Graph Helpers

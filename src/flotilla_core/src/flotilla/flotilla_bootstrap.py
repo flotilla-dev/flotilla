@@ -12,7 +12,7 @@ from flotilla.config.errors import FlotillaConfigurationError
 class FlotillaBootstrap:
 
     @staticmethod
-    def run(
+    def create(
         cls: Type[FlotillaApplication],
         config_sources: List[ConfigurationSource],
         secret_resolvers: Optional[List[SecretResolver]] = None,
@@ -58,8 +58,9 @@ class FlotillaBootstrap:
         # Construct application
         # ----------------------------
 
-        app: FlotillaApplication = container.create(cls)
+        app: FlotillaApplication = container.create_component(cls)
         app._attach_container(container=container)
+        app.build()
         app.start()
 
         return app

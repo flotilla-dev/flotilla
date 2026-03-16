@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import inspect
-from typing import List, Optional, Any, Type, TypeVar, Callable
+from typing import List, Optional, Any, Type, TypeVar, Callable, Union, get_origin, get_args, Annotated, get_type_hints
+from types import UnionType
 
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.container.component_provider import ComponentProvider
@@ -142,16 +143,11 @@ class FlotillaContainer:
     T = TypeVar("T")
 
     def find_instances_by_type(self, base_type: Type[T]) -> List[T]:
-        """
-        Docstring for find_instances_by_type
 
-        :param self: Description
-        :param base_type: Description
-        :type base_type: Type[T]
-        :return: Description
-        :rtype: List[T]
-        """
+        logger.info(f"Find all instances of type {base_type}")
         self._assert_built()
+
+        runtime_types = self._normalize_runtime_types(base_type)
 
         matches: List[T] = []
 
@@ -159,10 +155,10 @@ class FlotillaContainer:
             try:
                 instance = binding.resolve()
             except Exception:
-                # Defensive: skip bindings that cannot resolve
                 continue
 
-            if isinstance(instance, base_type):
+            logger.info(f"Check if component {type(instance)} is instance of {base_type}")
+            if isinstance(instance, runtime_types):
                 matches.append(instance)
 
         return matches
@@ -172,6 +168,7 @@ class FlotillaContainer:
         Convenience method to find a single instnace of a particular type on the DI container.  If anything on other
         than a single instacce is found on the DI container a FlotillaConfigurationError is raised.
         """
+        logger.info(f"Lookup one registered component by type {base_type}")
         matches = self.find_instances_by_type(base_type)
 
         if not matches:
@@ -182,30 +179,7 @@ class FlotillaContainer:
 
         return matches[0]
 
-    '''
-    def resolve_ref(self, ref: dict) -> Any:
-        """
-        Docstring for resolve_ref
-
-        :param self: Description
-        :param ref: Description
-        :type ref: dict
-        :return: Description
-        :rtype: Any
-        """
-        if not isinstance(ref, dict) or "$ref" not in ref:
-            return ref
-
-        key = ref["$ref"]
-        if not isinstance(key, str):
-            raise ReferenceResolutionError("$ref must be a string")
-
-        componnt = self.get(key)
-        if componnt is None:
-            raise ReferenceResolutionError(f"$ref '{key}' not found in container")
-        '''
-
-    def create(self, cls: Type[T]) -> T:
+    def create_component(self, cls: Type[T]) -> T:
         """
         Construct a Python class using dependency injection from the container.
 
@@ -249,44 +223,60 @@ class FlotillaContainer:
         except (TypeError, ValueError) as ex:
             raise FlotillaConfigurationError(f"Unable to inspect constructor for {cls.__name__}") from ex
 
+        # Resolve annotations (handles string annotations + forward refs)
+        type_hints = get_type_hints(cls.__init__)
+
         kwargs: dict[str, Any] = {}
 
         for name, param in signature.parameters.items():
 
-            # Skip 'self'
             if name == "self":
                 continue
 
-            # Require type annotation
-            annotation = param.annotation
-            if annotation is inspect._empty:
+            annotation = type_hints.get(name)
+
+            if annotation is None:
                 raise FlotillaConfigurationError(
                     f"{cls.__name__}.{name} is missing a type annotation. "
                     "Constructor parameters must be typed for dependency injection."
                 )
 
-            try:
-                dependency = self.find_one_by_type(annotation)
-            except FlotillaConfigurationError as ex:
+            origin = get_origin(annotation)
+            args = get_args(annotation)
 
-                # If a default value exists, use it instead of failing
+            is_optional = origin in (Union, UnionType) and type(None) in args
+
+            runtime_type = self._normalize_runtime_types(annotation)
+
+            matches = self.find_instances_by_type(runtime_type)
+
+            if len(matches) == 1:
+                kwargs[name] = matches[0]
+                continue
+
+            if len(matches) == 0:
+
+                if is_optional:
+                    kwargs[name] = None
+                    continue
+
                 if param.default is not inspect._empty:
                     kwargs[name] = param.default
                     continue
 
                 raise FlotillaConfigurationError(
-                    f"Unable to resolve dependency '{name}: {annotation.__name__}' "
-                    f"while constructing {cls.__name__}"
-                ) from ex
+                    f"No instances of type {runtime_type} found while constructing {cls.__name__}"
+                )
 
-            kwargs[name] = dependency
+            raise FlotillaConfigurationError(
+                f"Multiple instances of type {runtime_type} found while constructing {cls.__name__}"
+            )
 
         try:
-            instance = cls(**kwargs)
+            return cls(**kwargs)
+
         except Exception as ex:
             raise FlotillaConfigurationError(f"Failed to construct {cls.__name__}") from ex
-
-        return instance
 
     def build(self) -> FlotillaContainer:
         """
@@ -344,3 +334,31 @@ class FlotillaContainer:
     def _assert_built(self):
         if not self._built:
             raise RuntimeError("FlotillaContainer.build() must be called before accessing components")
+
+    def _normalize_runtime_types(self, annotation: Any) -> tuple[type, ...]:
+        """
+        Convert typing annotations into runtime types suitable for isinstance().
+        """
+
+        logger.info(f"Type of annotation: {annotation} : {type(annotation)}")
+
+        origin = get_origin(annotation)
+
+        # Optional[T], Union[T, None], T | None
+        if origin in (Union, UnionType):
+            args = [a for a in get_args(annotation) if a is not type(None)]
+
+            if len(args) == 1:
+                return self._normalize_runtime_types(args[0])
+
+            return tuple(self._normalize_runtime_types(a) for a in args)
+
+        # Annotated[T, ...]
+        if origin is Annotated:
+            return self._normalize_runtime_types(get_args(annotation)[0])
+
+        # List[T], Dict[K,V], etc.
+        if origin is not None:
+            return origin
+
+        return annotation
