@@ -33,6 +33,7 @@ from flotilla_langchain.llm.providers import openai_llm_provider
 from flotilla.container.constants import REFLECTION_PROVIDER_KEY
 from flotilla.container.providers.reflection_provider import ReflectionProvider
 from app_agents.weather_agent_provider import weather_agent_provider
+from example_app import ExampleApp
 
 console = Console()
 logger = get_logger(__name__)
@@ -133,8 +134,8 @@ def cli(ctx, env: str):
         "weather_agent_provider": weather_agent_provider,
     }
 
-    app: FlotillaApplication = FlotillaBootstrap.run(
-        FlotillaApplication, config_sources=sources, secret_resolvers=secrets, providers=providers
+    app: FlotillaApplication = FlotillaBootstrap.create(
+        ExampleApp, config_sources=sources, secret_resolvers=secrets, providers=providers
     )
 
     # Save app in ctx for commands

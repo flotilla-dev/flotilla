@@ -1,75 +1,197 @@
-from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.runtime.flotilla_runtime import FlotillaRuntime
-from flotilla.thread.thread_service import ThreadService
+from __future__ import annotations
+
+import sys
+from typing import Any, Dict, Type, get_type_hints, Optional
+
+from flotilla.config.errors import FlotillaConfigurationError
+from flotilla.telemetry.telemetry_policy import TelemetryPolicy
+from flotilla.telemetry.logger_telemetry import LoggerTelemetry
 
 
 class FlotillaApplication:
     """
     Top-level lifecycle owner for a Flotilla application.
 
+    Applications subclass FlotillaApplication to declare required services
+    using type annotations. These services are resolved from the container
+    during the build() phase and exposed as read-only attributes.
+
+    Example:
+
+        class MyApplication(FlotillaApplication):
+            kafka_consumer: KafkaConsumer
+            email_service: EmailService
+
+    Services are resolved once during build() and stored internally on the
+    application instance using a private attribute naming convention:
+
+        kafka_consumer → _kafka_consumer
+
+    Access is provided via __getattr__ without modifying the class structure.
+
     FlotillaApplication is responsible for:
-      - orchestrating configuration loading via ConfigLoader
-      - constructing and building the FlotillaContainer
-      - registering application-owned builders and contributors
-      - managing application startup and shutdown state
+
+      - managing application lifecycle (start, run, shutdown)
+      - resolving declared services from the container
+      - exposing services to application code
+      - providing telemetry during application lifecycle
 
     This class intentionally does NOT:
-      - perform dependency injection directly
-      - expose configuration loading internals
-      - own framework wiring logic
 
-    Configuration is supplied declaratively via ConfigurationSource and
-    SecretResolver instances. The resolved configuration is materialized
-    as a FlotillaSettings object during startup and passed into the container.
+      - expose the container
+      - perform dependency injection during runtime
+      - manage agent execution (handled by FlotillaRuntime)
 
-    A FlotillaApplication instance is single-start and single-container:
-      - start() builds exactly one container
-      - container access is only valid after start()
-      - shutdown() invalidates the container
+    Lifecycle:
 
-    This class serves as the primary integration point for real runtimes
-    (CLI, FastAPI, workers, etc.).
+        Bootstrap.run()
+            ↓
+        container created
+            ↓
+        application created
+            ↓
+        _attach_container()
+            ↓
+        build()
+            ↓
+        start()
+            ↓
+        run()  (optional blocking execution)
     """
 
-    def __init__(self, runtime: FlotillaRuntime, thread_service: ThreadService):
-        """ """
-        self._runtime = runtime
-        self._thead_service = thread_service
+    def __init__(self, telemetry: Optional[TelemetryPolicy] = None):
+
+        self._telemetry = telemetry or LoggerTelemetry()
+
         self._container = None
+        self._built = False
         self._started = False
 
-    # ----------------------------
-    # Build lifecycle
-    # ----------------------------
+        # cache of declared annotations
+        self._annotations: Dict[str, Type[Any]] = {}
 
-    def start(self):
+    # ------------------------------------------------------------------
+    # Container Wiring
+    # ------------------------------------------------------------------
+
+    def _attach_container(self, container) -> None:
+        if self._container is not None:
+            raise FlotillaConfigurationError("Container already attached")
+        self._container = container
+
+    # ------------------------------------------------------------------
+    # Build Phase
+    # ------------------------------------------------------------------
+
+    def build(self) -> None:
         """
-        Start the application and build the Flotilla container.
+        Resolve declared services from the container.
 
-        This method performs the full startup lifecycle:
-        1. Load and merge configuration from the provided ConfigurationSources
-        2. Resolve secret references using the provided SecretResolvers
-        3. Construct a FlotillaSettings snapshot
-        4. Build and validate the FlotillaContainer
-        5. Mark the application as started
+        This method inspects the application class annotations, retrieves
+        matching components from the container by type, and stores them
+        on the application instance.
 
-        After this method completes successfully:
-        - the application is considered started
-        - the container property becomes accessible
-        - all registered builders and contributors have been applied
-
-        Calling start() more than once is not supported.
+        build() must be called before start().
         """
-        self._started = True
 
-    def shutdown(self):
-        if not self._started:
+        if self._container is None:
+            raise RuntimeError("Container must be attached before build()")
+
+        if self._built:
+            raise RuntimeError("Application already built")
+
+        annotations = self._collect_annotations()
+
+        for name, service_type in annotations.items():
+
+            if name == "telemetry":
+                continue
+
+            private_name = f"_{name}"
+
+            if hasattr(self, private_name):
+                raise FlotillaConfigurationError(f"Service storage attribute '{private_name}' already exists")
+
+            service = self._container.find_one_by_type(service_type)
+
+            setattr(self, private_name, service)
+
+            self._annotations[name] = service
+
+            self._install_property(name)
+
+        self._built = True
+
+    # ------------------------------------------------------------------
+    # Annotation Collection
+    # ------------------------------------------------------------------
+
+    def _collect_annotations(self) -> Dict[str, Type[Any]]:
+        """
+        Collect merged annotations across the class hierarchy.
+
+        Results are cached per application class.
+        """
+        merged: Dict[str, Type[Any]] = {}
+
+        for base in reversed(type(self).__mro__):
+
+            if base is object:
+                continue
+
+            try:
+                hints = get_type_hints(base)
+            except Exception:
+                hints = getattr(base, "__annotations__", {})
+
+            merged.update(hints)
+
+        return {k: v for k, v in merged.items() if not k.startswith("_")}
+
+    def _install_property(self, name: str) -> None:
+        cls = type(self)
+
+        # already installed by a previous instance/build
+        if name in cls.__dict__:
             return
 
-        # Optional: graceful teardown hooks later
+        private_name = f"_{name}"
+
+        def getter(instance, attr=private_name):
+            return getattr(instance, attr)
+
+        setattr(cls, name, property(getter))
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        """
+        Start the application.
+
+        Subclasses override this method to initialize application resources.
+        """
+
+        if not self._built:
+            raise RuntimeError("Application must be built before start()")
+
+        self._started = True
+
+    def run(self) -> None:
+        """
+        Optional blocking execution loop.
+
+        Applications may override this method to run long-lived services
+        such as HTTP servers or message consumers.
+        """
+        pass
+
+    def shutdown(self) -> None:
+        """
+        Shutdown the application and release resources.
+        """
         self._container = None
-        self._runtime = None
-        self._thead_service = None
         self._started = False
 
     # ----------------------------
@@ -80,25 +202,9 @@ class FlotillaApplication:
     def started(self) -> bool:
         return self._started
 
-    @property
-    def runtime(self) -> FlotillaRuntime:
-        self._assert_started()
-        return self._runtime
-
-    @property
-    def thread_service(self) -> ThreadService:
-        self._assert_started()
-        return self._thead_service
-
-    # -------------------------------
-    # Private Helpers
-    # -------------------------------
-
-    def _attach_container(self, container: FlotillaContainer) -> None:
-        if self._container is not None:
-            raise RuntimeError("Container already attached to application")
-        self._container = container
-
+    # -------------------------
+    # Lifecycle helpers
+    # -------------------------
     def _assert_started(self):
         if not self.started:
             raise RuntimeError("Application not started")
