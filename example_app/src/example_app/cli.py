@@ -97,6 +97,13 @@ async def _interactive_loop_async(app: FlotillaApplication) -> None:
                         console.print(f"\n[bold green] ContentPart: {part.text}")
                     else:
                         console.print(f"\n[bold green] ContentPart: {part}")
+            else:
+                console.print(f"\n[bold red] No content returned from the runtime")
+
+            entries = await app.thread_service.load(thread_id)
+
+            for entry in entries:
+                console.print(f"\nThreadEntry {entry}")
 
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")
