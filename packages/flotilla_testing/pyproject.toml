@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "flotilla-testing"
+version = "0.1.0"
+description = "Testing library for Flotilla"
+authors = ["geoff <geoffschneider@gmail.com>"]
+readme = "README.md"
+packages = [
+    { include = "flotilla_testing", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+# Depend on core
+flotilla-core = { path = "../flotilla_core", develop = true }
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.3.4"
+pytest-asyncio = "0.24.0"
+pytest-cov = "6.0.0"
+pytest-mock = "3.14.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "flotilla-sql"
+version = "0.1.0"
+description = "Production implementations of Flotilla core interfaces that utilize SQL backend for storage"
+authors = ["geoff <geoffschneider@gmail.com>"]
+readme = "README.md"
+packages = [
+    { include = "flotilla_sql", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+
+# Production dependency
+flotilla-core = { path = "../flotilla_core", develop = true }
+
+SQLAlchemy = "2.0.48"
+asyncpg = "0.31.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.3.4"
+pytest-asyncio = "0.24.0"
+pytest-cov = "6.0.0"
+pytest-mock = "3.14.0"
+
+# Test-only dependency
+flotilla-testing = { path = "../flotilla_testing", develop = true }
+
+testcontainers = { extras = ["postgres"], version = "^4.0.0" }
+psycopg2-binary = "^2.9"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
