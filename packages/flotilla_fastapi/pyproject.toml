@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "flotilla-fastapi"
+version = "0.1.0"
+description = "FastAPI integration for Flotilla"
+authors = ["Geoff Schneider <geoffschneider@gmail.com>"]
+readme = "README.md"
+packages = [
+    { include = "flotilla_fastapi", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+
+# Core dependency (local during development)
+flotilla-core = { path = "../flotilla_core", develop = true }
+
+# Modern FastAPI stack (aligned versions)
+fastapi = "0.135.0"
+starlette = "0.46.0"
+uvicorn = "0.32.1"
+
+# Keep consistent with your existing environment unless you upgrade globally
+pydantic = "2.12.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.4.2"
+pytest-asyncio = "0.25.3"
+httpx = "0.28.1"
+
+[build-system]
+requires = ["poetry-core==1.9.0"]
+build-backend = "poetry.core.masonry.api"
