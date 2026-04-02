@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "flotilla-langchain"
+version = "0.1.0"
+description = "LangChain adapter for Flotilla"
+authors = ["geoff <geoffschneider@gmail.com>"]
+readme = "README.md"
+packages = [
+    { include = "flotilla_langchain", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+
+# Depend on core
+flotilla-core = { path = "../flotilla_core" }
+
+# LangChain ecosystem
+langchain = "1.0.1"
+langchain-openai = "1.0.1"
+langchain-community = "0.4.0"
+
+# If you are using LangGraph explicitly:
+# langgraph = "x.y.z"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.3.4"
+pytest-asyncio = "0.24.0"
+pytest-cov = "6.0.0"
+pytest-mock = "3.14.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

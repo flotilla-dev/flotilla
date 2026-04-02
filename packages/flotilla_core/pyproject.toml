@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "flotilla-core"
+version = "0.1.0"
+description = "Core runtime and agent contract for Flotilla"
+authors = ["geoff <geoffschneider@gmail.com>"]
+readme = "README.md"
+packages = [
+    { include = "flotilla", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+
+pydantic = "2.12.2"
+pydantic-settings = "2.11.0"
+structlog = "24.1.0"
+python-dotenv = "1.0.1"
+pyyaml = "6.0.1"
+jsonschema = ">=4.26.0,<5.0.0"
+mcp = ">=1.25.0,<2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.3.4"
+pytest-asyncio = "0.24.0"
+pytest-cov = "6.0.0"
+pytest-mock = "3.14.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

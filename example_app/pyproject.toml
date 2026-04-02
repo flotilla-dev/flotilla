@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "flotilla-example-app"
+version = "0.1.0"
+description = "Example app for Flotilla"
+authors = ["geoff <geoffschneider@gmail.com>"]
+packages = [{ include = "example_app", from = "src" }]
+
+[tool.pytest.ini_options]
+addopts = "-v --strict-markers"
+asyncio_mode = "auto"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+flotilla-core = { path = "../src/flotilla-core", develop = true }
+flotilla-langchain = { path = "../src/flotilla-langchain", develop = true }
+
+# App-specific dependencies
+rich = "13.7.1"
+click = "8.1.7"
+httpx = "0.27.1"
+requests = "2.32.5"
+numpy = "2.1.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

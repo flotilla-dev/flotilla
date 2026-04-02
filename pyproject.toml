@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "flotilla-workspace"
+version = "0.0.0"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+
+flotilla-core = { path = "packages/flotilla_core", develop = true }
+flotilla-langchain = { path = "packages/flotilla_langchain", develop = true }
+flotilla-sql = { path = "packages/flotilla_sql", develop = true }
+flotilla-testing = { path = "packages/flotilla_testing", develop = true }
+flotilla_fastapi = { path = "packages/flotilla_fastapi", develop = true }
+
+[tool.black]
+line-length = 120
+
+[dependency-groups]
+dev = [
+    "pytest==8.4.2",
+    "pytest-asyncio==0.25.3",
+    "testcontainers[postgres]==4.14.2",
+    "psycopg2-binary==2.9.9",
+    "pytest-cov (>=7.1.0,<8.0.0)",
+    "httpx==0.28.1"
+]
