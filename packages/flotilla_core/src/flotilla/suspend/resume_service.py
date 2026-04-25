@@ -65,9 +65,6 @@ class ResumeService:
         if payload.thread_id != request.thread_id:
             raise ResumeTokenInvalidError("Thread mismatch")
 
-        if payload.phase_id != phase_context.phase_id:
-            raise ResumeTokenInvalidError("Phase ID mismatch")
-
         # Validate expiration
         now = datetime.now(timezone.utc)
         if payload.expires_at < now:
@@ -89,7 +86,7 @@ class ResumeService:
             phase_id=phase_context.phase_id,
             previous_entry_id=thread_context.last_entry.entry_id,
             content=request.content,
-            user_id=request.user_id,
+            actor_id=request.user_id,
         )
 
     # ---------------------------------------------------------

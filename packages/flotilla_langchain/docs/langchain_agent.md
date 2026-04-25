@@ -91,6 +91,24 @@ LangChainAgent may emit only:
 
 **LangChainAgent MUST obey the AgentEvent Specification.**
 
+### Suspend Content Contract
+
+When LangGraph emits an interrupt that maps to `AgentEvent(type="suspend")`,
+LangChainAgent MUST normalize that interrupt into a `List[ContentPart]`.
+
+The default suspend content MUST include:
+
+- one `StructuredPart` containing the canonical machine-readable interrupt payload
+- one `TextPart` containing a human-readable summary
+
+The default role identifiers SHOULD be:
+
+- `id="interrupt_payload"` for the structured payload
+- `id="interrupt_summary"` for the human-readable summary
+
+`ContentPart.type` continues to represent the content modality (`text`, `structured`, `file`).
+Semantic role MUST be expressed using the `id` field.
+
 ---
 
 ## 6️⃣ Tool Integration
@@ -170,6 +188,49 @@ All model outputs MUST be normalized into `List[ContentPart]`.
 Must follow ContentPart file rules (URL + mime_type).
 
 **Unknown output types must raise ValueError.**
+
+### Interrupt / Suspend Normalization
+
+Interrupt payloads MUST be normalized separately from final model output.
+
+Default structured interrupt payloads SHOULD follow this shape:
+
+```json
+{
+  "kind": "langgraph_interrupt",
+  "interrupts": [...]
+}
+```
+
+Default human-readable summaries SHOULD provide a concise action-oriented message,
+for example:
+
+```text
+Human approval is required before execution can continue.
+```
+
+Subclasses MAY enrich either payload with application-specific context.
+
+---
+
+## 9️⃣.1 Interrupt Rendering Customization
+
+LangChainAgent SHOULD expose a protected customization hook for mapping interrupts
+to `List[ContentPart]`.
+
+The base implementation MUST:
+
+- preserve full interrupt fidelity in a `StructuredPart`
+- provide a human-readable `TextPart`
+- remain transport-agnostic
+
+Subclasses MAY override this hook to:
+
+- enrich the structured payload with domain-specific context
+- customize the human-readable summary
+- alter ids and mime types
+
+Subclasses MUST still return valid `List[ContentPart]`.
 
 ---
 

@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "flotilla-example-app"
+name = "flotilla-example-app-weather"
 version = "0.1.0"
-description = "Example app for Flotilla"
+description = "Example weather app for Flotilla"
 authors = ["geoff <geoffschneider@gmail.com>"]
 packages = [{ include = "example_app", from = "src" }]
 
@@ -10,9 +10,9 @@ addopts = "-v --strict-markers"
 asyncio_mode = "auto"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
-flotilla-core = { path = "../src/flotilla-core", develop = true }
-flotilla-langchain = { path = "../src/flotilla-langchain", develop = true }
+python = ">=3.11,<4.0"
+flotilla-core = { path = "../../packages/flotilla-core", develop = true }
+flotilla-langchain = { path = "../../packages/flotilla-langchain", develop = true }
 
 # App-specific dependencies
 rich = "13.7.1"

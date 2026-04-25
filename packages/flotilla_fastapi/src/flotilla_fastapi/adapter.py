@@ -17,8 +17,17 @@ class FastAPIAdapter:
     into FastAPI routes at startup.
     """
 
-    def __init__(self, container, app: FastAPI | None = None):
-        self._container = container
+    def __init__(
+        self,
+        *,
+        handlers: List[HTTPHandler],
+        exception_handlers: List[HTTPExceptionHandler],
+        interceptors: List[HTTPRequestInterceptor],
+        app: FastAPI | None = None,
+    ):
+        self._handlers = handlers
+        self._exception_handlers = exception_handlers
+        self._interceptors = interceptors
         self._app = app or FastAPI()
 
     @property
@@ -35,9 +44,8 @@ class FastAPIAdapter:
     # --------------------------------------------------
 
     def _bind_routes(self) -> None:
-        handlers = self._discover_handlers()
 
-        for handler in handlers:
+        for handler in self._handlers:
             route_defs = self._get_route_methods(handler)
 
             for route_def in route_defs:
@@ -51,9 +59,6 @@ class FastAPIAdapter:
                     methods=[route_def.http_method],
                     **route_def.kwargs,
                 )
-
-    def _discover_handlers(self) -> List[HTTPHandler]:
-        return self._container.find_instances_by_type(HTTPHandler)
 
     def _get_route_methods(self, handler: HTTPHandler) -> List[RouteDefinition]:
         route_defs: list[RouteDefinition] = []
@@ -142,14 +147,10 @@ class FastAPIAdapter:
     # Exception Handling
     # -----------------------------------
 
-    def _discover_exception_handlers(self) -> List[HTTPExceptionHandler]:
-        return self._container.find_instances_by_type(HTTPExceptionHandler)
-
     def _bind_exception_handlers(self) -> None:
-        handlers = self._discover_exception_handlers()
         seen: set[type[Exception]] = set()
 
-        for handler in handlers:
+        for handler in self._exception_handlers:
             exc_type = handler.exception_type
 
             if exc_type in seen:
@@ -173,13 +174,8 @@ class FastAPIAdapter:
     # ----------------------------------------
 
     def _bind_interceptors(self) -> None:
-        interceptors = self._discover_interceptors()
-
-        for interceptor in interceptors:
+        for interceptor in self._interceptors:
             self._register_interceptor(interceptor)
-
-    def _discover_interceptors(self) -> List[HTTPRequestInterceptor]:
-        return self._container.find_instances_by_type(HTTPRequestInterceptor)
 
     def _register_interceptor(self, interceptor: HTTPRequestInterceptor) -> None:
         self._app.middleware("http")(interceptor.dispatch)

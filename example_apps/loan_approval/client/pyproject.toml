@@ -1,0 +1,19 @@
+[project]
+name = "flotilla-example-app-loan-approval-client"
+version = "0.1.0"
+description = "CLI client for the Flotilla loan approval example app"
+authors = [{ name = "geoff", email = "geoffschneider@gmail.com" }]
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "httpx>=0.28.1,<0.29.0",
+]
+
+[project.scripts]
+loan-client = "loan_client.cli:main"
+
+[tool.poetry]
+packages = [{ include = "loan_client", from = "src" }]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

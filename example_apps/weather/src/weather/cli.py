@@ -32,8 +32,8 @@ from flotilla.runtime.content_part import ContentPart, TextPart, ContentPartType
 from flotilla_langchain.llm.providers import openai_llm_provider
 from flotilla.container.constants import REFLECTION_PROVIDER_KEY
 from flotilla.container.providers.reflection_provider import ReflectionProvider
-from app_agents.weather_agent_provider import weather_agent_provider
-from example_app import ExampleApp
+from example_apps.weather.src.weather.app_agents.weather_agent_provider import weather_agent_provider
+from example_apps.weather.src.weather.example_app import ExampleApp
 
 console = Console()
 logger = get_logger(__name__)

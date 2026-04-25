@@ -135,7 +135,7 @@ class SpyResumeService:
             phase_id=phase_context.phase_id,
             previous_entry_id=thread_context.last_entry.entry_id if thread_context.last_entry else None,
             content=request.content,
-            user_id=request.user_id,
+            actor_id=request.user_id,
         )
 
     def create_token(self, suspend_entry):
