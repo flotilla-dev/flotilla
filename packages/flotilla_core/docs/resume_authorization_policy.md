@@ -1,11 +1,9 @@
 
 # ResumeAuthorizationPolicy Specification (v1.0)
 
-----------
+## 1. Executive Summary
 
-## 1️⃣ Executive Summary
-
-`ResumeAuthorizationPolicy` defines how Flotilla determines whether a `RuntimeRequest` is authorized to resume a suspended execution phase.
+`ResumeAuthorizationPolicy` defines how Flotilla determines whether a decoded `ResumeTokenPayload` is authorized to resume a suspended execution phase.
 
 ResumeAuthorizationPolicy:
 
@@ -24,16 +22,14 @@ It does not:
 -   Define identity systems
 -   Produce user-facing error messages
     
-It evaluates whether the provided request is authorized to resume the specific `SuspendEntry`.
+It evaluates whether the decoded resume token payload is authorized to resume the specific `SuspendEntry`.
 
-----------
-
-## 2️⃣ Architectural Context
+## 2. Architectural Context
 
 ResumeAuthorizationPolicy collaborates with:
 
 -   `FlotillaRuntime`
--   `RuntimeRequest`
+-   `ResumeTokenPayload`
 -   `SuspendEntry`
     
 It is invoked only during resume validation.
@@ -47,13 +43,28 @@ It operates after:
 It does not access storage directly.
 It does not mutate state.
 
+## 3. Core Concepts
+
+`ResumeAuthorizationPolicy` is a stateless policy object that decides whether a decoded resume token payload is permitted to resume a specific durable `SuspendEntry`.
+
+Core inputs:
+
+- `ResumeTokenPayload` decoded from the supplied resume token.
+- Durable `SuspendEntry` identified by resume-token validation.
+
+The policy returns only a boolean authorization decision.
+
 ----------
 
-## 3️⃣ Responsibilities
+## 4. Responsibilities
 
 ResumeAuthorizationPolicy is responsible for:
 
--   Determining whether a given `RuntimeRequest` is permitted to resume a specific `SuspendEntry`.
+-   Determining whether a given `ResumeTokenPayload` is permitted to resume a specific `SuspendEntry`.
+
+----------
+
+## 5. Non-Responsibilities
 
 ResumeAuthorizationPolicy is NOT responsible for:
 
@@ -68,12 +79,65 @@ Durable lifecycle enforcement remains owned by `FlotillaRuntime`.
 
 ----------
 
-## 4️⃣ Invariants
+## 6. Behavioral Contract
+
+### Interface Contract
+
+```python
+class  ResumeAuthorizationPolicy(Protocol):  
+  
+  async def  is_authorized(
+  self,  
+  *,  
+  payload: ResumeTokenPayload,
+  suspend_entry: SuspendEntry,  
+ ) -> bool:  
+ ```
+
+### Parameter Semantics
+
+| Field | Type | Notes |
+|--|--|--|
+| `payload` | `ResumeTokenPayload` | Decoded resume token payload |
+| `suspend_entry` | `SuspendEntry` | The durable suspend entry associated with the resume_token |
+
+The policy MUST return:
+
+-   `True` → resume allowed
+    
+-   `False` → resume denied
+
+### Evaluation Semantics
+
+During resume handling, FlotillaRuntime MUST:
+
+1.  Validate ResumeToken integrity and suspend state.
+2.  Identify the correct `SuspendEntry`.
+3.  Invoke:
+```python
+is_authorized(payload=payload, suspend_entry=suspend_entry)
+```
+5.  If the result is `False`, reject the resume attempt.
+6.  If the result is `True`, proceed with resume.
+    
+ResumeToken ownership alone MUST NOT be sufficient for resume if the policy denies authorization.
+
+### Non-Fatal Requirement
+
+ResumeAuthorizationPolicy MUST NOT cause runtime execution to fail due to internal errors.
+
+If a policy raises an unexpected exception, the runtime MAY defensively treat the resume as unauthorized.
+
+Policy failure MUST NOT corrupt runtime state.
+
+----------
+
+## 7. Constraints & Guarantees
 
 ResumeAuthorizationPolicy MUST:
 
 1.  Be pure and side-effect free.
-2.  Not mutate `RuntimeRequest`.
+2.  Not mutate `ResumeTokenPayload`.
 3.  Not mutate `SuspendEntry`.
 4.  Not perform durable mutations.
 5.  Return identical results for identical inputs.
@@ -88,87 +152,31 @@ ResumeAuthorizationPolicy MUST NOT:
 
 ----------
 
-## 5️⃣ Interface Contract
-
-```python
-class  ResumeAuthorizationPolicy(Protocol):  
-  
-  def  is_authorized(  
-  self,  
-  *,  
-  request: RuntimeRequest,  
-  suspend_entry: SuspendEntry,  
- ) -> bool:  
- ```
-
-### Parameter Semantics
-
-| Field | Type | Notes |
-|--|--|--|
-| `request` | `RuntimeRequest` | The full resume request attempting to resume execution |
-| `suspend_entry` | `SuspendEntry` | The durable suspend entry associated with the resume_token |
-
-The policy MUST return:
-
--   `True` → resume allowed
-    
--   `False` → resume denied
-    
-
-----------
-
-## 6️⃣ Evaluation Semantics
-
-During resume handling, FlotillaRuntime MUST:
-
-1.  Validate ResumeToken integrity and suspend state.
-2.  Identify the correct `SuspendEntry`.
-3.  Invoke:
-```python
-is_authorized(request=request, suspend_entry=suspend_entry)
-```
-5.  If the result is `False`, reject the resume attempt.
-6.  If the result is `True`, proceed with resume.
-    
-ResumeToken ownership alone MUST NOT be sufficient for resume if the policy denies authorization.
-
-----------
-
-## 7️⃣ Thread Safety
+### Thread Safety
 
 Implementations MUST:
 
 -   Be stateless or safely immutable.
 -   Be thread-safe.
 -   Be re-entrant.
-    
-----------
-
-## 8️⃣ Non-Fatal Requirement
-
-ResumeAuthorizationPolicy MUST NOT cause runtime execution to fail due to internal errors.
-
-If a policy raises an unexpected exception, the runtime MAY defensively treat the resume as unauthorized.
-
-Policy failure MUST NOT corrupt runtime state.
 
 ----------
 
-## 9️⃣ Default Implementation
+## 8. Configuration Contract
 
 Flotilla MAY provide a permissive default:
 
 ```python
 class  AllowAllResumeAuthorizationPolicy:  
   
-  def  is_authorized(self, *, request, suspend_entry):  
+  def  is_authorized(self, *, payload, suspend_entry):
   return  True
 ```
 This allows applications that enforce authorization upstream to opt out of additional checks.
 
 ----------
 
-## 🔟 Architectural Guarantees
+### Architectural Guarantees
 
 This specification guarantees:
 
@@ -177,3 +185,10 @@ This specification guarantees:
 -   Authorization semantics remain application-defined
 -   Token possession alone is insufficient for resume
 -   Security enforcement is minimal and composable
+
+## 9. Related Specifications
+
+- `FlotillaRuntime`
+- `Runtime I/O`
+- `Thread Model`
+- `ResumeToken`

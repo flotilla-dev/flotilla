@@ -30,7 +30,7 @@ Runtime MUST NOT:
     
 ----------
 
-## 2. System Architecture Context
+## 2. Architectural Context
 
 Runtime sits between:
 
@@ -51,7 +51,11 @@ Runtime is stateless between requests.
 
 ----------
 
-## 3. Required Collaborators
+## 3. Core Concepts
+
+`FlotillaRuntime` is the execution lifecycle coordinator. It consumes `RuntimeRequest`, drives orchestration, persists durable thread entries, and emits `RuntimeResponse` or `RuntimeEvent` output.
+
+### Required Collaborators
 
 ### 3.1 ThreadEntryStore (Required)
 
@@ -100,11 +104,11 @@ Runtime MUST defensively convert unexpected exceptions into a terminal `ErrorEnt
 
 ----------
 
-### 3.4 SuspendPolicy (Required)
+### 3.4 SuspendPolicy (Configured)
 
-Runtime MUST invoke `SuspendPolicy` synchronously after successfully appending a `SuspendEntry`.
+Runtime accepts a `SuspendPolicy` collaborator and installs `NoOpSuspend` by default.
 
-Failures of SuspendPolicy MUST be non-fatal and MUST NOT affect durable state.
+The current implementation does not invoke `SuspendPolicy.handle_suspend()` during suspend handling.
 
 ----------
 
@@ -137,7 +141,33 @@ If resume validation or authorization fails, Runtime MUST emit an error `Runtime
 
 ----------
 
-## 4. Durable Reload Rule (REQUIRED)
+## 4. Responsibilities
+
+`FlotillaRuntime` is responsible for:
+
+- Validating runtime requests against durable thread state.
+- Appending phase-initiating and terminal entries.
+- Reloading durable state after each mutation.
+- Driving `OrchestrationStrategy` execution.
+- Mapping `AgentEvent` streams into runtime I/O.
+- Enforcing suspend, resume, timeout, and terminal-state rules.
+
+## 5. Non-Responsibilities
+
+`FlotillaRuntime` is NOT responsible for:
+
+- Implementing agent reasoning.
+- Implementing tool behavior.
+- Defining transport protocols.
+- Persisting entries outside `ThreadEntryStore`.
+- Defining application authentication or identity systems.
+- Requiring telemetry for execution correctness.
+
+----------
+
+## 6. Behavioral Contract
+
+### Durable Reload Rule (REQUIRED)
 
 After any successful `ThreadEntryStore.append()` call, Runtime MUST:
 
@@ -149,11 +179,7 @@ Runtime MUST NOT rely on in-memory assumed state after append.
 
 ----------
 
-## 5. Behavioral Contract
-
-----------
-
-## 5.1 Canonical Execution Order
+### Canonical Execution Order
 
 Upon receiving a `RuntimeRequest`, Runtime MUST execute the following steps:
 
@@ -187,7 +213,7 @@ Upon receiving a `RuntimeRequest`, Runtime MUST execute the following steps:
     
 ----------
 
-## 5.2 AgentEvent Handling
+### AgentEvent Handling
 
 Runtime MUST process `AgentEvent` sequentially.
 
@@ -230,7 +256,7 @@ require_no_terminal_for_parent = initiating_entry_id
         
 4.  On success:
     -   Perform durable reload.
-    -   If `SuspendEntry`, invoke `SuspendPolicy`.
+    -   If `SuspendEntry`, create a resume token.
     -   Emit final `RuntimeResponse` or terminal `RuntimeEvent`.
     -   STOP.
   
@@ -238,7 +264,7 @@ Runtime MUST NOT emit a terminal response before durable append succeeds.
 
 ----------
 
-## 5.3 Orchestration Exception Handling
+### Orchestration Exception Handling
 
 If `OrchestrationStrategy` raises an unexpected exception:
 
@@ -254,7 +280,7 @@ No uncaught orchestration exception may leave a phase without terminal entry unl
 
 ----------
 
-## 5.4 Duplicate Terminal Handling
+### Duplicate Terminal Handling
 
 If CAS append of a terminal entry fails due to existing terminal:
 
@@ -268,7 +294,7 @@ Runtime MUST NOT silently treat this as idempotent success.
 
 ----------
 
-## 5.5 Resume Semantics
+### Resume Semantics
 
 Resume is treated as a new phase.
 
@@ -281,7 +307,9 @@ Resume MUST:
 
 ----------
 
-## 6. Thread-Scoped Concurrency
+## 7. Constraints & Guarantees
+
+### Thread-Scoped Concurrency
 
 Concurrency guarantees apply only within a single `thread_id`.
 
@@ -291,7 +319,7 @@ Cross-thread idempotency is application responsibility.
 
 ----------
 
-## 7. Crash Recovery
+### Crash Recovery
 
 If a crash occurs mid-phase:
 

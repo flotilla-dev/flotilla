@@ -26,7 +26,13 @@ No transport-specific behavior is encoded in the model.
 
 ----------
 
-## 2. Design Principles
+## 2. Architectural Context
+
+`ContentPart` sits at the shared content boundary for runtime I/O, thread entries, agent events, tools, and transport adapters.
+
+It is used anywhere Flotilla needs to carry user-visible, machine-readable, or externally referenced content without binding that content to a specific transport or storage implementation.
+
+### Design Principles
 
 ### 2.1 Canonical IO Contract
 
@@ -68,7 +74,7 @@ Each content instance MUST fall into exactly one category:
 
 ----------
 
-## 3. ContentPart Types
+## 3. Core Concepts
 
 ----------
 
@@ -77,7 +83,7 @@ Each content instance MUST fall into exactly one category:
 class  TextPart(ContentPartBase):  
   type: Literal["text"]  
   text: str  
-  mime_type: str
+  mime_type: str = "text/plain"
 ```
 #### Semantics
 
@@ -105,7 +111,7 @@ Examples:
 ```python
 class  StructuredPart(ContentPartBase):  
   type: Literal["structured"]  
-  mime_type: str  
+  mime_type: str = "application/json"
   data: Any
 ```
 #### Semantics
@@ -115,7 +121,7 @@ class  StructuredPart(ContentPartBase):
 
 #### MIME Type Rules
 
--   SHOULD match pattern: `^application/.*`
+-   MUST match pattern: `^application/.*`
 -   Custom types allowed
 
 Examples:
@@ -126,7 +132,7 @@ Examples:
 
 #### Data Constraints
 
--   MUST be JSON-serializable
+-   SHOULD be JSON-serializable; serialization will fail if the value cannot be encoded as JSON
 -   SHOULD align with declared `mime_type`
     
 ----------
@@ -148,7 +154,7 @@ class  FilePart(ContentPartBase):
     
 ----------
 
-## 4. Base Model
+### Base Model
 
 ```python
 class  ContentPartBase(BaseModel, ABC):  
@@ -163,7 +169,7 @@ class  ContentPartBase(BaseModel, ABC):
 ```
 ----------
 
-## 5. Discriminated Union
+### Discriminated Union
 
 ```python
 ContentPart  =  Annotated[  
@@ -171,9 +177,31 @@ ContentPart  =  Annotated[
   Field(discriminator="type"),  
 ]
 ```
+## 4. Responsibilities
+
+`ContentPart` is responsible for:
+
+- Providing the canonical content representation across Flotilla boundaries.
+- Preserving strong typing for supported content variants.
+- Supporting deterministic serialization and deserialization.
+- Enforcing validation for known content types.
+- Remaining immutable after creation.
+
+## 5. Non-Responsibilities
+
+`ContentPart` is NOT responsible for:
+
+- Defining transport protocols.
+- Persisting content to durable storage.
+- Fetching external files referenced by `FilePart`.
+- Interpreting application-specific structured payloads.
+- Providing alternate error or metadata channels.
+
 ----------
 
-## 6. Serialization & Deserialization
+## 6. Behavioral Contract
+
+### Serialization & Deserialization
 
 ----------
 
@@ -214,7 +242,7 @@ def  deserialize(cls, payload: str) -> Self
 
 ### 6.3 Static Factory
 
-`ContentPart` MUST expose:
+`ContentPartFactory` MUST expose:
 ```python
 @staticmethod
 def deserialize_part(payload: str) -> ContentPart
@@ -256,7 +284,7 @@ All deserialization MUST go through the canonical factory.
 
 ----------
 
-## 7. Validation Rules
+### Validation Rules
 
 Validation MUST be enforced during deserialization.
 
@@ -276,7 +304,7 @@ Validation MUST be enforced during deserialization.
 | Field | Required | Rule |
 |--|--| -- |
 | text | Yes | MUST be string |
-| mime_type | Yes | MUST match `^text/.*` |
+| mime_type | No | Defaults to `text/plain`; MUST match `^text/.*` if provided |
 
 Invalid examples:
 ```json
@@ -288,7 +316,7 @@ Invalid examples:
 ### 7.3 StructuredPart Validation
 | Field | Required | Rule |
 |--|--| -- | 
-| mime_type | Yes | SHOULD match `^application/.*` |
+| mime_type | No | Defaults to `application/json`; MUST match `^application/.*` if provided |
 | data | Yes | MUST be JSON-serializable |
 
 Invalid examples:
@@ -328,7 +356,7 @@ Factory failures MUST:
         
 ----------
 
-## 8. Invariants
+## 7. Constraints & Guarantees
 
 The system MUST guarantee:
 
@@ -340,7 +368,7 @@ The system MUST guarantee:
     
 ----------
 
-## 9. Extensibility Rules
+## 8. Extension Points
 
 New content types MAY be added ONLY if:
 
@@ -348,3 +376,10 @@ New content types MAY be added ONLY if:
 -   They implement `serialize()` and `deserialize()`
 -   They are registered in the discriminated union
 -   They maintain deterministic behavior
+
+## 9. Related Specifications
+
+- `Runtime I/O`
+- `Thread Model`
+- `AgentEvent`
+- `FlotillaTool`

@@ -2,98 +2,52 @@
 
 ## 1. Executive Summary
 
-### Purpose
+`AgentEvent` defines the only canonical contract between `FlotillaAgent` and `FlotillaRuntime`.
 
-AgentEvent defines the only canonical contract between:
+It models transient execution lifecycle signals, not persisted conversation state. Runtime may convert terminal `AgentEvent` objects into durable `ThreadEntry` objects, but events do not persist themselves.
 
-- `FlotillaAgent` (execution layer)
-- `FlotillaRuntime` (orchestration + durability layer)
+`AgentEvent` exists to:
 
-It models execution lifecycle, not conversation state.
+- Represent agent execution progress and terminal outcomes.
+- Carry agent-produced `ContentPart` output.
+- Provide a closed, library-agnostic event protocol.
+- Separate agent execution from runtime durability.
 
-`AgentEvent` represents transient execution signals that may result in durable mutations once processed by the runtime.
+## 2. Architectural Context
 
-It explicitly does **not**:
+`AgentEvent` sits at the execution-to-runtime boundary.
 
-- Represent persisted thread state
-- Encode continuation state
-- Represent tool-level events
-- Carry internal agent memory
-- Model conversation history
+Direct producer:
 
-### Architectural Role
+- `FlotillaAgent.run()`
 
-| Property | Value |
-|---|---|
-| Layer | Execution-to-runtime boundary |
-| Durable | Partially (depends on event type) |
-| Persisted | Indirectly (converted to `ThreadEntry` by Runtime) |
-| Library-agnostic | Yes |
-| Externally pluggable | No |
-| Stateless | Yes |
-| Deterministic | Yes (given identical Agent output) |
+Consumer:
 
-Determinism is defined by:
-
-- Event ordering
-- Event type
-- Event content
-
----
-
-## 2. System Architecture Context
-
-### Position in Flotilla
-
-`AgentEvent` sits between:
-
-- `FlotillaAgent.run()` (producer)
-- `FlotillaRuntime` (consumer)
-
-It interacts directly with:
-
-- `FlotillaAgent`
 - `FlotillaRuntime`
-- `ContentPart`
 
-It does **not** directly interact with:
+`OrchestrationStrategy` is an internal runtime collaborator that may contribute `AgentEvent` streams to `FlotillaRuntime`, but it is not a direct calling-code API.
 
-- Durable storage
-- Thread persistence logic
-- Tool layer
+Related data types:
 
-### Interaction Diagram (Conceptual)
+- `ThreadContext` provides the durable execution history used by the producer.
+- `ContentPart` carries user-visible or machine-readable event content.
+- `ThreadEntry` is the durable representation produced by runtime from terminal events.
 
-```
+Conceptual flow:
+
+```text
 ThreadContext
-    ↓
-FlotillaAgent.run()
-    ↓
-AgentEvent (stream)
-    ↓
-FlotillaRuntime
-    ↓
-ThreadEntry (durable boundary)
+    -> FlotillaAgent.run()
+    -> AgentEvent stream
+    -> FlotillaRuntime
+    -> ThreadEntry durable boundary
 ```
 
-### Boundary Ownership
+`AgentEvent` does not directly interact with durable storage, thread persistence logic, transport adapters, or the tool layer.
 
-`AgentEvent` **owns**:
-- Execution lifecycle modeling
-- Structured output signaling
-- Durable mutation intent
+## 3. Core Concepts
 
-`AgentEvent` **must NOT**:
-- Persist itself
-- Mutate thread state
-- Encode continuation state
-- Represent internal tool execution
-
----
-
-## 3. Canonical Types / Interfaces
-
-### Closed Set of Event Types
+### Closed Event Types
 
 | Type | Durable? | Description |
 |---|---|---|
@@ -103,242 +57,267 @@ ThreadEntry (durable boundary)
 | `suspend` | Yes | Durable execution pause |
 | `error` | Yes | Durable execution failure |
 
-Only these five types are supported. There is no `complete`, `continuation_state`, tool event type, or debug lifecycle event.
-
----
-
-## 4. Behavioral Contract
-
-### Execution Phase Lifecycle Rules
-
-For each `parent_entry_id`:
-
-- `message_start` MUST be emitted exactly once.
-- `message_start` MUST precede all other events for that phase.
-- `message_chunk` events are OPTIONAL.
-- EXACTLY ONE terminal event MUST be emitted: `message_final`, `suspend`, or `error`.
-- After a terminal event, no additional events may be emitted.
-- If `error` is emitted, `message_final` MUST NOT follow.
-- If `suspend` is emitted, `message_final` MUST NOT follow.
-
-### Valid Lifecycle Example
-
-```
-message_start
-message_chunk*
-message_final
-```
-
-### Empty Output Rule
-
-A phase MUST NOT end without a terminal event. If no user-visible output exists, the agent must emit:
-
-```
-message_start
-message_final (with empty content)
-```
-
----
-
-## 5. Structural Schema
+Only these five event types are supported. There is no `complete`, `continuation_state`, tool event type, or debug lifecycle event.
 
 ### Common Fields
 
 | Field | Type | Required | JSON-Serializable |
 |---|---|---|---|
-| `type` | string (enum) | Yes | Yes |
-| `parent_entry_id` | string | Yes | Yes |
-| `content` | `List[ContentPart]` | Conditional | Yes |
+| `type` | string enum | Yes | Yes |
+| `previous_entry_id` | string | Yes | Yes |
+| `agent_id` | string | Yes | Yes |
+| `content` | `List[ContentPart]` | No; defaults to empty list | Yes |
 | `execution_metadata` | object | Optional | Yes |
+| `is_terminal` | boolean | Yes | Yes |
 
-### `message_start`
+### Event Schemas
+
+`message_start`:
 
 ```json
 {
   "type": "message_start",
-  "parent_entry_id": "string"
+  "previous_entry_id": "string",
+  "agent_id": "string",
+  "content": [],
+  "is_terminal": false
 }
 ```
 
-- No content
-- No durability
+`message_start` has empty content and produces no durable mutation.
 
-### `message_chunk`
+`message_chunk`:
 
 ```json
 {
   "type": "message_chunk",
-  "parent_entry_id": "string",
+  "previous_entry_id": "string",
+  "agent_id": "string",
   "content": [
     { "type": "text", "text": "partial text" }
-  ]
+  ],
+  "is_terminal": false
 }
 ```
 
-Rules:
-- MUST contain exactly one `TextPart`
-- Not persisted
-- Optional
+`message_chunk` MUST contain exactly one `TextPart`. It is optional and is not persisted.
 
-### `message_final`
+`message_final`:
 
 ```json
 {
   "type": "message_final",
-  "parent_entry_id": "string",
-  "content": [ContentPart, ...],
-  "execution_metadata": { ... }
+  "previous_entry_id": "string",
+  "agent_id": "string",
+  "content": [ContentPart, "..."],
+  "execution_metadata": {},
+  "is_terminal": true
 }
 ```
 
-Rules:
-- Content MUST be JSON-serializable
-- Structured content allowed
-- Persisted as `AgentOutput`
-- No partial structured streaming allowed
+`message_final` is persisted by runtime as `AgentOutput`.
 
-Streaming invariant: if `message_chunk` events were emitted, concatenated chunk text MUST equal the text inside `message_final`, and `message_final` MUST NOT introduce additional user-visible text.
-
-### `suspend`
+`suspend`:
 
 ```json
 {
   "type": "suspend",
-  "parent_entry_id": "string",
-  "content": [ContentPart, ...],
-  "execution_metadata": { ... }
+  "previous_entry_id": "string",
+  "agent_id": "string",
+  "content": [ContentPart, "..."],
+  "execution_metadata": {},
+  "is_terminal": true
 }
 ```
 
-Rules:
-- Persisted as `SuspendEntry`
-- Execution stops after emission
+`suspend` is persisted by runtime as `SuspendEntry`. Execution stops after emission.
 
-### `error`
+`error`:
 
 ```json
 {
   "type": "error",
-  "parent_entry_id": "string",
-  "content": [ContentPart, ...],
-  "execution_metadata": { ... }
+  "previous_entry_id": "string",
+  "agent_id": "string",
+  "content": [ContentPart, "..."],
+  "execution_metadata": {},
+  "is_terminal": true
 }
 ```
 
-Rules:
-- Persisted as `ErrorEntry`
-- No `message_final` may follow
+`error` is persisted by runtime as `ErrorEntry`. No `message_final` may follow.
 
-### JSON Requirements
+## 4. Responsibilities
+
+`AgentEvent` is responsible for:
+
+- Representing agent execution progress and terminal outcomes.
+- Providing the only communication channel from agents and orchestration strategies to runtime.
+- Carrying `ContentPart` output without causing durable mutation directly.
+- Identifying terminal events that runtime can map into durable thread entries.
+- Maintaining a closed event type set.
+
+## 5. Non-Responsibilities
+
+`AgentEvent` is NOT responsible for:
+
+- Appending `ThreadEntry` objects.
+- Persisting itself.
+- Enforcing runtime lifecycle transitions.
+- Issuing or validating `ResumeToken` values.
+- Performing orchestration, timeout handling, or suspend routing.
+- Representing internal tool execution.
+- Encoding continuation state or internal agent memory.
+- Defining transport-level runtime I/O.
+
+## 6. Behavioral Contract
+
+### Execution Phase Lifecycle
+
+For each `previous_entry_id`:
+
+- `message_start` MUST be emitted exactly once.
+- `message_start` MUST precede all other events for that phase.
+- `message_chunk` events are OPTIONAL.
+- Exactly one terminal event MUST be emitted: `message_final`, `suspend`, or `error`.
+- After a terminal event, no additional events may be emitted.
+- If `error` is emitted, `message_final` MUST NOT follow.
+- If `suspend` is emitted, `message_final` MUST NOT follow.
+
+Valid lifecycle:
+
+```text
+message_start
+message_chunk*
+message_final
+```
+
+### Empty Output
+
+A phase MUST NOT end without a terminal event. If no user-visible output exists, the agent MUST emit:
+
+```text
+message_start
+message_final (with at least one `ContentPart`)
+```
+
+### Content Rules
 
 - All content MUST be JSON-serializable.
-- No hidden continuation state allowed.
-- No implicit fields allowed.
-- Closed enum enforcement required.
+- `message_chunk` MUST contain exactly one `TextPart`.
+- Every materialized event has a `content` field; if omitted on construction it defaults to an empty list.
+- `message_start` content MUST be an empty list.
+- `message_final` MUST carry at least one `ContentPart`.
+- `suspend` and `error` MAY carry empty content unless stricter runtime or application policy applies.
+- Structured content is allowed on terminal events.
+- Partial structured streaming is not allowed.
+- If `message_chunk` events were emitted, concatenated chunk text MUST equal the text inside `message_final`.
+- If `message_chunk` events were emitted, `message_final` MUST NOT introduce additional user-visible text.
 
----
+### Error Handling
 
-## 6. Durable Mutation Boundaries
+Contract violations include:
 
-Only the following events produce durable mutations:
+- Missing `message_start`.
+- Multiple terminal events.
+- Missing terminal event.
+- Emitting after terminal.
+- Invalid content schema.
+- Illegal event ordering.
+- Unknown event type.
+- Hidden continuation state.
+- Implicit or undeclared fields.
+
+Runtime MUST treat contract violations as fatal. Silent fallback is forbidden.
+
+## 7. State Model
+
+`AgentEvent` objects are stateless execution signals.
+
+Only the following event types may result in durable mutations:
 
 - `message_final`
 - `suspend`
 - `error`
 
-These are the ONLY durable mutations triggered by `AgentEvent`. `message_start` and `message_chunk` are strictly ephemeral.
+These events do not mutate durable state directly. `FlotillaRuntime` owns conversion from terminal `AgentEvent` to durable `ThreadEntry`.
 
----
+`message_start` and `message_chunk` are strictly ephemeral.
 
-## 7. Invariants
+## 8. Interaction Model
 
-The following must always hold:
+`AgentEvent` is produced as an ordered stream by an agent or orchestration strategy and consumed by runtime.
+
+Interaction rules:
+
+- Events MUST be yielded in causal order.
+- No reordering is allowed.
+- No events may be yielded after a terminal event.
+- Streaming MUST be pass-through except for engine constraints.
+- Runtime consumes non-terminal events for streaming and observability.
+- Runtime consumes terminal events for durable mutation and runtime output.
+
+## 9. Extension Points
+
+`AgentEvent` is a closed protocol.
+
+- No subclassing is permitted.
+- No additional event types are allowed.
+- No implicit fields are allowed.
+- Adapters and agents MUST conform strictly to this schema.
+
+`execution_metadata` is the only sanctioned extension surface. It MAY carry JSON-serializable diagnostic metadata such as token usage, timing metrics, model information, or debug traces.
+
+## 10. Constraints & Guarantees
+
+`AgentEvent` guarantees:
+
+- Stateless event objects.
+- Deterministic lifecycle modeling based on event ordering, type, and content.
+- Strict durable boundary separation.
+- Library-agnostic protocol.
+- Closed event type set.
+- Resume safety through `previous_entry_id` linkage.
+- No continuation state.
+- Streaming-safe event flow.
+
+The following invariants MUST always hold:
 
 - Exactly one `message_start` per phase.
 - Exactly one terminal event per phase.
 - No terminal event duplication.
-- No events after terminal event.
-- `parent_entry_id` must reference initiating entry.
-- Event order must be causal.
-- `message_chunk` contains exactly one `TextPart`.
-- Streaming invariant must hold.
-- No continuation state present.
-- No implicit event types allowed.
+- No events after a terminal event.
+- `previous_entry_id` MUST reference the initiating entry.
+- Event order MUST be causal.
+- `message_chunk` MUST contain exactly one `TextPart`.
+- Streaming content parity MUST hold between chunks and final content.
+- No continuation state may be present.
+- No implicit event types are allowed.
 
 Each invariant must be directly testable.
 
----
+## 11. Observability
 
-## 8. Extension & Override Points
-
-`AgentEvent` is a **closed protocol**:
-
-- No subclassing permitted.
-- No additional event types allowed.
-- Adapters and agents MUST conform strictly to this schema.
-
----
-
-## 9. Error Handling Rules
-
-Contract violations include:
-
-- Missing `message_start`
-- Multiple terminal events
-- Missing terminal event
-- Emitting after terminal
-- Invalid content schema
-- Illegal event ordering
-
-Runtime MUST treat violations as fatal. Silent fallback is forbidden.
-
----
-
-## 10. Observability & Telemetry
+`message_start` provides an observability boundary for the beginning of agent output.
 
 `execution_metadata` MAY include:
 
-- Token usage
-- Timing metrics
-- Model information
-- Debug traces
+- Token usage.
+- Timing metrics.
+- Model information.
+- Debug traces.
 
-Rules:
+Metadata rules:
+
 - Metadata MUST be JSON-serializable.
 - Metadata MUST NOT affect deterministic replay.
 - Metadata persistence is runtime policy-controlled.
 
----
-
-## 11. Ordering Guarantees
-
-- Events MUST be yielded in causal order.
-- No reordering allowed.
-- No artificial delay.
-- No buffering beyond engine constraints.
-- No hidden mutation of event stream.
-- Streaming MUST be pass-through.
-
----
-
-## 12. Architectural Guarantees
-
-- Stateless event objects
-- Deterministic lifecycle modeling
-- Strict durable boundary separation
-- Library-agnostic protocol
-- Closed event type set
-- Resume safety via parent linkage
-- No continuation state
-- Streaming-safe by design
-
----
-
-## 13. Related Specifications
-
-Only specifications directly interacting with `AgentEvent`:
+## 12. Related Specifications
 
 - FlotillaAgent Specification
+- OrchestrationStrategy Specification
 - FlotillaRuntime Specification
+- Runtime I/O Specification
 - ContentPart Specification
 - Thread Model Specification

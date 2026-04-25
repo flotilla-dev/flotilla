@@ -131,7 +131,7 @@ This scenario stresses the entire architecture.
 
 #### Thread Log Guarantees
 - Append-only
-- `parent_entry_id` must always match causal chain
+- `previous_entry_id` must always match causal chain
 - No duplicate `SuspendEntry`
 - No `ResumeEntry` without prior `SuspendEntry`
 
@@ -322,7 +322,7 @@ Thread log must show:
 - Clear sequence of tool calls
 - No skipped versions
 - No duplicate tool entries
-- Deterministic `parent_entry_id` linkage
+- Deterministic `previous_entry_id` linkage
 
 You must be able to reconstruct exactly:
 - Whether refund occurred

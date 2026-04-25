@@ -39,13 +39,30 @@ It provides structured, non-authoritative observation of framework behavior acro
 
 ---
 
-## 3. Responsibilities
+## 3. Core Concepts
+
+`TelemetryPolicy` is a pluggable, best-effort observer. `TelemetryEvent` is the canonical event object passed to the policy.
+
+Core terms:
+
+- Telemetry event: structured diagnostic signal emitted by a framework component.
+- Context: optional correlation identifiers attached to telemetry.
+- Attributes: JSON-safe diagnostic values carried with an event.
+- No-op policy: default implementation that intentionally drops telemetry.
+
+---
+
+## 4. Responsibilities
 
 `TelemetryPolicy` is responsible for:
 
 - Receiving structured `TelemetryEvent` objects
 - Emitting or forwarding those events to an observability backend
 - Ensuring telemetry emission is safe and non-disruptive
+
+---
+
+## 5. Non-Responsibilities
 
 `TelemetryPolicy` is NOT responsible for:
 
@@ -58,7 +75,34 @@ It provides structured, non-authoritative observation of framework behavior acro
 
 ---
 
-## 4. Invariants
+## 6. Behavioral Contract
+
+### Interface Contract
+
+`TelemetryPolicy` exposes a single method:
+
+```python
+class TelemetryPolicy(Protocol):
+
+    def emit(self, event: TelemetryEvent) -> None:
+        ...
+```
+
+The framework invokes `emit()` whenever a telemetry event is generated. Implementations MUST NOT raise exceptions.
+
+### Failure Handling
+
+If `TelemetryPolicy.emit` raises an exception:
+
+- The framework MUST catch and swallow it.
+- Execution MUST continue unaffected.
+- No execution state may be altered.
+
+Telemetry is strictly non-fatal.
+
+---
+
+## 7. Constraints & Guarantees
 
 `TelemetryPolicy` MUST:
 
@@ -78,22 +122,9 @@ Framework components MUST:
 
 ---
 
-## 5. Interface Contract
+## 8. Observability
 
-`TelemetryPolicy` exposes a single method:
-
-```python
-class TelemetryPolicy(Protocol):
-
-    def emit(self, event: TelemetryEvent) -> None:
-        ...
-```
-
-The framework invokes `emit()` whenever a telemetry event is generated. Implementations MUST NOT raise exceptions.
-
----
-
-## 6. TelemetryEvent Model
+### TelemetryEvent Model
 
 ### Structural Schema
 
@@ -103,38 +134,30 @@ The framework invokes `emit()` whenever a telemetry event is generated. Implemen
   "component": "string",
   "timestamp": "ISO-8601 string",
   "severity": "enum",
-  "context": {
-    "runtime_key": "string | null",
-    "thread_id": "string | null",
-    "user_id": "string | null",
-    "request_id": "string | null",
-    "correlation_id": "string | null",
-    "trace_id": "string | null",
-    "agent_id": "string | null"
-  },
+  "context": { "...": "..." },
   "attributes": { "...": "..." }
 }
 ```
 
 ---
 
-## 7. Field Definitions
+### Field Definitions
 
 **`event_type`** (REQUIRED) — Canonical identifier describing what occurred. Examples: `CONFIG_LOAD_START`, `CONFIG_LOAD_COMPLETE`, `COMPILATION_START`, `COMPILATION_COMPLETE`, `CONTAINER_BUILD_START`, `CONTAINER_BUILD_COMPLETE`, `RUNTIME_REQUEST_RECEIVED`, `RUNTIME_PHASE_INITIATED`, `AGENT_RUN_START`, `AGENT_RUN_COMPLETE`, `TOOL_EXECUTION_START`, `TOOL_EXECUTION_COMPLETE`, `RUNTIME_TERMINAL`, `EXECUTION_TIMEOUT_TRIGGERED`. The framework SHOULD define and maintain a canonical event taxonomy.
 
 **`component`** (REQUIRED) — Name of the emitting component. Examples: `ConfigLoader`, `ComponentCompiler`, `FlotillaContainer`, `FlotillaRuntime`, `FlotillaAgent`, `FlotillaTool`, `SuspendPolicy`, `ExecutionTimeoutPolicy`.
 
-**`timestamp`** (REQUIRED) — ISO-8601 timestamp indicating when the event was emitted.
+**`timestamp`** (OPTIONAL) — ISO-8601 timestamp indicating when the event was emitted. Defaults to the current UTC time.
 
-**`severity`** (REQUIRED) — Enum: `DEBUG`, `INFO`, `WARN`, `ERROR`. Reflects observability classification, not execution outcome.
+**`severity`** (OPTIONAL) — Enum: `DEBUG`, `INFO`, `WARN`, `ERROR`. Defaults to `INFO`. Reflects observability classification, not execution outcome.
 
-**`context`** (OPTIONAL fields) — Structured identifiers for correlation and trace alignment. All fields are optional and may be null. MUST NOT contain `ContentPart`, secrets, or raw tool payloads.
+**`context`** (OPTIONAL) — Arbitrary structured identifiers for correlation and trace alignment. Values must be JSON-safe. MUST NOT contain `ContentPart`, secrets, or raw tool payloads.
 
 **`attributes`** (REQUIRED) — Flat JSON-safe key-value map. Used for durations, counters, flags, configuration identifiers, and state indicators. MUST NOT contain sensitive information.
 
 ---
 
-## 8. Lifecycle Interaction
+## 9. Interaction Model
 
 `TelemetryPolicy` may receive events at various lifecycle boundaries:
 
@@ -173,7 +196,7 @@ The framework invokes `emit()` whenever a telemetry event is generated. Implemen
 
 ---
 
-## 9. Thread Safety and Concurrency
+### Thread Safety and Concurrency
 
 `TelemetryPolicy` implementations MUST:
 
@@ -185,7 +208,7 @@ The framework does not guarantee ordering across threads.
 
 ---
 
-## 10. Default Implementation
+## 10. Configuration Contract
 
 The framework MUST provide a default no-op implementation:
 
@@ -207,19 +230,7 @@ Adapters may transform `TelemetryEvent` into logs, metrics, spans, or external t
 
 ---
 
-## 12. Failure Handling
-
-If `TelemetryPolicy.emit` raises an exception:
-
-- The framework MUST catch and swallow it.
-- Execution MUST continue unaffected.
-- No execution state may be altered.
-
-Telemetry is strictly non-fatal.
-
----
-
-## 13. Architectural Guarantees
+### Architectural Guarantees
 
 This specification guarantees:
 
@@ -229,3 +240,12 @@ This specification guarantees:
 - Zero coupling to tracing standards
 - Deterministic execution regardless of telemetry presence
 - Clean separation between execution and observation
+
+## 12. Related Specifications
+
+- `FlotillaRuntime`
+- `FlotillaAgent`
+- `FlotillaTool`
+- `SuspendPolicy`
+- `ExecutionTimeoutPolicy`
+- `Runtime I/O`

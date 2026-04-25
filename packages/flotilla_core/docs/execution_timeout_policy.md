@@ -42,11 +42,27 @@ It evaluates whether a timeout condition exists.
 
 ---
 
-## 3. Responsibilities
+## 3. Core Concepts
+
+`ExecutionTimeoutPolicy` is a stateless policy object that evaluates timeout state from an immutable `ThreadContext` and a caller-supplied `now` timestamp.
+
+Core terms:
+
+- Active execution phase: a phase represented in durable thread state that has not reached a terminal entry.
+- Durable timestamp: the store-assigned timestamp on the phase-initiating entry.
+- Timeout decision: a boolean result indicating whether runtime should treat the phase as expired.
+
+---
+
+## 4. Responsibilities
 
 `ExecutionTimeoutPolicy` is responsible for:
 
 - Determining whether an active execution phase has exceeded its timeout duration.
+
+---
+
+## 5. Non-Responsibilities
 
 `ExecutionTimeoutPolicy` is NOT responsible for:
 
@@ -59,7 +75,39 @@ It evaluates whether a timeout condition exists.
 
 ---
 
-## 4. Invariants
+## 6. Behavioral Contract
+
+### Interface Contract
+
+```python
+class ExecutionTimeoutPolicy(Protocol):
+
+    def is_expired(
+        self,
+        thread_context: ThreadContext,
+        now: datetime
+    ) -> bool:
+        ...
+```
+
+### Evaluation Semantics
+
+`ExecutionTimeoutPolicy` MUST:
+
+1. Determine whether `thread_context` contains an active execution phase.
+2. If no active phase exists, return `False`.
+3. If an active phase exists:
+   - Identify the initiating entry's store-assigned timestamp.
+   - Compute elapsed time using `now`.
+   - Compare elapsed duration against the policy's timeout threshold.
+   - Return `True` if elapsed time exceeds threshold.
+   - Return `False` otherwise.
+
+Durable store timestamps are authoritative. `RuntimeRequest.timestamp` MUST NOT be used.
+
+---
+
+## 7. Constraints & Guarantees
 
 `ExecutionTimeoutPolicy` MUST:
 
@@ -78,39 +126,7 @@ It evaluates whether a timeout condition exists.
 
 ---
 
-## 5. Interface Contract
-
-```python
-class ExecutionTimeoutPolicy(Protocol):
-
-    def is_expired(
-        self,
-        thread_context: ThreadContext,
-        now: datetime
-    ) -> bool:
-        ...
-```
-
----
-
-## 6. Evaluation Semantics
-
-`ExecutionTimeoutPolicy` MUST:
-
-1. Determine whether `thread_context` contains an active execution phase.
-2. If no active phase exists, return `False`.
-3. If an active phase exists:
-   - Identify the initiating entry's store-assigned timestamp.
-   - Compute elapsed time using `now`.
-   - Compare elapsed duration against the policy's timeout threshold.
-   - Return `True` if elapsed time exceeds threshold.
-   - Return `False` otherwise.
-
-Durable store timestamps are authoritative. `RuntimeRequest.timestamp` MUST NOT be used.
-
----
-
-## 7. Thread Safety
+### Thread Safety
 
 `ExecutionTimeoutPolicy` implementations MUST:
 
@@ -120,13 +136,13 @@ Durable store timestamps are authoritative. `RuntimeRequest.timestamp` MUST NOT 
 
 ---
 
-## 8. Non-Fatal Requirement
+### Non-Fatal Requirement
 
 `ExecutionTimeoutPolicy` MUST NOT cause runtime execution to fail. Any internal failure of the policy MUST NOT be failure-fatal to `FlotillaRuntime`.
 
 ---
 
-## 9. Example Implementation
+### Example Implementation
 
 ```python
 class FixedDurationTimeoutPolicy:
@@ -146,7 +162,7 @@ class FixedDurationTimeoutPolicy:
 
 ---
 
-## 10. Architectural Guarantees
+### Architectural Guarantees
 
 This specification guarantees:
 
@@ -157,6 +173,6 @@ This specification guarantees:
 - No transport coupling
 - Minimal implementation surface
 
-## 11. Related Specifications
+## 8. Related Specifications
 - Thread Model (`ThreadEntry` / `ThreadContext`)
 - FlotilaRuntime

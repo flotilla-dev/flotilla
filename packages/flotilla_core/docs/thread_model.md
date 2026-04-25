@@ -47,7 +47,7 @@ Determinism is defined by:
 
 ---
 
-## 2. System Architecture Context
+## 2. Architectural Context
 
 ### Position in Flotilla
 
@@ -96,7 +96,7 @@ Thread Model **must NOT**:
 
 ---
 
-## 3. Canonical Types / Interfaces
+## 3. Core Concepts
 
 ### Closed Set of ThreadEntry Types
 
@@ -115,36 +115,28 @@ Only the above entry types are permitted in the durable thread log. No additiona
 
 All agent-visible input and output MUST be expressed as `content: List[ContentPart]`. Applies to: `UserInput`, `ResumeEntry`, `AgentOutput`, `SuspendEntry`, and `ErrorEntry`. No alternative payload channels are permitted.
 
-### SuspendEntry: `resume_audience`
+## 4. Responsibilities
 
-#### Field Definition
+The thread model is responsible for:
 
-`SuspendEntry` MAY include the following optional field:
-```json
-{  
- "resume_audience": "string | null"  
-}
-```
+- Defining canonical durable `ThreadEntry` types.
+- Defining the immutable `ThreadContext` view derived from entries.
+- Mapping terminal `AgentEvent` objects into durable terminal entries.
+- Preserving content and resume metadata needed by runtime lifecycle rules.
 
-#### Field Semantics
+## 5. Non-Responsibilities
 
--   Opaque string.
--   JSON-serializable.
--   May contain:
-    
-    -   Base64-encoded blob
-    -   Opaque identifier
-    -   Signed audience descriptor
-    -   Application-defined metadata
-        
+The thread model is NOT responsible for:
 
-Flotilla core MUST treat this field as opaque.
-
-Flotilla MUST NOT interpret, parse, or enforce semantics of `resume_audience` directly.
+- Appending entries to storage.
+- Enforcing CAS or persistence semantics.
+- Running agents or orchestration strategies.
+- Issuing or validating `ResumeToken` values.
+- Defining transport-level runtime I/O.
 
 ---
 
-## 4. Behavioral Contract
+## 6. Behavioral Contract
 
 ### Execution Phase Model
 
@@ -166,11 +158,9 @@ Phase linkage is derived from adjacency and phase_id.
 All `ThreadEntry`, except for the first entry in a Thread, must have a `previous_entry_id` in where the referenced `ThreadEntry` is also part of the same Thread (ie `thread_id` are identical)
 
 Rules:
-- First entry MUST be `UserInput`
-- First entry MUST have `previous_entry_id = None`
-- All `entry_id` values MUST be unique.
+- First entry MUST have `previous_entry_id = None`.
 - `previous_entry_id` establishes causal linkage.
-- Exactly one terminal entry MUST follow each start entry.
+- Exactly one terminal entry MUST follow each start entry once the execution phase completes.
 
 
 ### `AgentEvent` → `ThreadEntry` Mapping
@@ -185,7 +175,7 @@ Only these `AgentEvent` types produce durable `ThreadEntry` records. `message_st
 
 ---
 
-## 5. Structural Schema
+### Structural Schema
 
 ### Common Fields (All Entries)
 
@@ -195,14 +185,19 @@ Only these `AgentEvent` types produce durable `ThreadEntry` records. `message_st
 | `phase_id` | string | Yes | The ID of the execution phase to which this `ThreadEntry` belong |
 | `entry_id` | string| No | The unique id of an individual entry assigned by `ThreadEntryStore`, is assigned during append() operation |
 | `previous_entry_id` | string| No | The ID of the entry previous to this one in the `ThreadContext` |
+| `entry_order` | integer | No | Store-assigned durable order, assigned during append() operation |
 | `timestamp` | datetime | No | UTC timestamp assigned by `ThreadEntryStore`, is assigned uring append() operation |
+| `actor_type` | enum | Yes | `user`, `agent`, or `system` |
+| `actor_id` | string | Yes | Identifier of the actor that caused the state transition |
 | `content` | List[`ContentPart`] | Yes | The content that defines the state change of the Thread |
 
 ### Start Entries (UserInput, ResumeEntry)
-- Must incldue a `user_id` field that identifies the user that submmitted the request
+- Must include `actor_type = user`.
+- Must include `actor_id` identifying the user that submitted the request.
 
 ### Terminal Entries (AgentOutput, SuspendEntry, ErrorEntry)
-- Must incldue a `agent_id` field that identifies the agent that generated the state change
+- Must include `actor_type = agent` or `actor_type = system`.
+- Must include `actor_id` identifying the agent or system actor that generated the state change.
 
 
 ### `ClosedEntry`
@@ -219,9 +214,25 @@ Only these `AgentEvent` types produce durable `ThreadEntry` records. `message_st
 - No implicit defaults allowed.
 - `ContentPart` must conform to the ContentPart specification.
 
+### Error Handling
+
+Contract violations include:
+
+- Two consecutive terminal entries.
+- Two consecutive start entries.
+- `ResumeEntry` without preceding `SuspendEntry`.
+- Entry appended after `ClosedEntry`.
+- `previous_entry_id` referencing invalid entry.
+- Mixed `thread_id` values.
+- Non-JSON-serializable content.
+
+`ThreadContext` MAY represent an in-progress phase ending in a start entry only while an agent or orchestration strategy is processing the request and the terminal entry has not yet been generated.
+
+Violations MUST fail fast during validation. Silent recovery is forbidden.
+
 ---
 
-## 6. Durable Mutation Boundaries
+## 7. State Model
 
 The ONLY durable mutations permitted:
 
@@ -236,24 +247,22 @@ No in-place modification allowed. No deletion allowed. Append-only invariant is 
 
 ---
 
-## 7. Invariants
+## 8. Constraints & Guarantees
 
 `ThreadContext` MUST validate:
 
-- Thread non-empty
 - All entries share same `thread_id`
-- `entry_id` uniqueness
 - Linked-list integrity (`previous_entry_id`)
 - Strict alternation (Start → Terminal)
-- Adjacent entries share identical `phase_id`
-- `SuspendEntry` must be followed by ResumeEntry or ClosedEntry
+- Terminal entries are followed only by `UserInput` or `ClosedEntry`
+- `SuspendEntry` must be followed by `ResumeEntry`
 - No entries after `ClosedEntry`
-- Exactly one terminal per phase (enforced structurally)
+- Exactly one terminal per completed phase (enforced structurally)
 - Each invariant must be directly testable.
 
 ---
 
-## 8. Extension & Override Points
+## 9. Extension Points
 
 `ThreadEntry` type set is closed. No subclassing permitted. New durable entry types require specification revision.
 
@@ -261,25 +270,7 @@ No in-place modification allowed. No deletion allowed. Append-only invariant is 
 
 ---
 
-## 9. Error Handling Rules
-
-Contract violations include:
-
-- Two consecutive terminal entries
-- Two consecutive start entries
-- ThreadContext MAY represent an in-progress phase ending in a start entry.
-- `ResumeEntry` without preceding `SuspendEntry`
-- Entry appended after `ClosedEntry`
-- `previous_entry_id` referencing invalid entry
-- Mixed `thread_id` values
-- Non-JSON-serializable content
-
-Violations MUST fail-fast during validation. Silent recovery is forbidden.
-
----
-
-
-## 10. Ordering Guarantees
+### Ordering Guarantees
 
 - Entries MUST be strictly append-only.
 - Order MUST reflect causal execution order.
@@ -287,9 +278,7 @@ Violations MUST fail-fast during validation. Silent recovery is forbidden.
 - Replay of ordered entries MUST reconstruct identical `ThreadContext`.
 - No implicit state reconstruction outside the log.
 
----
-
-## 11. Architectural Guarantees
+### Architectural Guarantees
 
 - Append-only durable log
 - Deterministic replay
@@ -303,7 +292,7 @@ Violations MUST fail-fast during validation. Silent recovery is forbidden.
 
 ---
 
-## 12. Related Specifications
+## 10. Related Specifications
 
 Only specifications directly interacting with the Thread Model:
 

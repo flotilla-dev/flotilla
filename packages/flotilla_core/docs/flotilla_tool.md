@@ -49,7 +49,7 @@ Deterministic behavior is defined by:
 
 ---
 
-## 2. System Architecture Context
+## 2. Architectural Context
 
 ### Position in Flotilla
 
@@ -72,7 +72,7 @@ Relationship to core systems:
 UserInput
   → Runtime
     → Agent
-      → FlotillaTool.execution_callable()
+      → FlotillaTool.execution_callable
         → (returns data)
       → AgentEvent (message_final / error / suspend)
     → Runtime
@@ -94,7 +94,7 @@ FlotillaTool **must NOT**:
 
 ---
 
-## 3. Canonical Types / Interfaces
+## 3. Core Concepts
 
 ### Base Interface
 
@@ -111,6 +111,7 @@ class FlotillaTool(ABC):
     def llm_description(self) -> str:
         ...
 
+    @property
     @abstractmethod
     def execution_callable(self) -> Callable:
         ...
@@ -129,16 +130,37 @@ Only these callable forms are supported. No additional lifecycle methods are def
 
 ---
 
-## 4. Behavioral Contract
+## 4. Responsibilities
+
+`FlotillaTool` is responsible for:
+
+- Providing a typed, callable capability to agents.
+- Returning only supported `ContentPart`-compatible output.
+- Remaining stateless across invocations.
+- Exposing stable tool identity and schema metadata.
+
+## 5. Non-Responsibilities
+
+`FlotillaTool` is NOT responsible for:
+
+- Appending durable thread entries.
+- Emitting runtime events directly.
+- Managing agent lifecycle, orchestration, or suspend/resume flow.
+- Owning runtime timeout or retry policy.
+- Mutating `ThreadContext`.
+
+---
+
+## 6. Behavioral Contract
 
 ### Core Lifecycle Rules
 
 A FlotillaTool **MUST** expose:
 - `name`
 - `llm_description`
-- `execution_callable()`
+- `execution_callable`
 
-- `execution_callable()` MUST return a callable.
+- `execution_callable` MUST return a callable.
 - The callable MUST accept all required input via parameters.
 - The callable MAY be invoked concurrently.
 - The tool MUST NOT mutate thread state.
@@ -152,7 +174,7 @@ A FlotillaTool **MUST** expose:
 
 ---
 
-## 5. Structural Schema
+### Structural Schema
 
 ### Required Properties
 
@@ -174,9 +196,24 @@ A FlotillaTool **MUST** expose:
 - Tools MUST NOT rely on mutable per-thread in-memory state.
 - Injected dependencies MAY maintain their own internal state.
 
+### Error Handling
+
+- Tool exceptions MUST propagate to Agent.
+- Tool MUST NOT swallow execution errors silently.
+- Tool MUST NOT emit durable error records.
+- Agent decides whether to emit `error`, `message_final`, or `suspend`.
+
+Fail-fast behavior is expected for:
+
+- Invalid inputs
+- Dependency failures
+- External API errors
+
+Adapters MUST NOT convert tool failures into durable behavior.
+
 ---
 
-## 6. Durable Mutation Boundaries
+## 7. State Model
 
 FlotillaTool produces **no durable mutations**.
 
@@ -193,7 +230,7 @@ Tools are excluded from durable boundaries.
 
 ---
 
-## 7. Invariants
+## 8. Constraints & Guarantees
 
 The following must always hold:
 
@@ -208,7 +245,7 @@ The following must always hold:
 
 ---
 
-## 8. Extension & Override Points
+## 9. Extension Points
 
 Subclassing is allowed.
 
@@ -227,23 +264,7 @@ Adapters may wrap tools but must not alter business logic.
 
 ---
 
-## 9. Error Handling Rules
-
-- Tool exceptions MUST propagate to Agent.
-- Tool MUST NOT swallow execution errors silently.
-- Tool MUST NOT emit durable error records.
-- Agent decides whether to emit: `error`, `message_final`, or `suspend`.
-
-Fail-fast behavior is expected for:
-- Invalid inputs
-- Dependency failures
-- External API errors
-
-Adapters MUST NOT convert tool failures into durable behavior.
-
----
-
-## 10. Observability & Telemetry
+## 10. Observability
 
 Tools **MAY**:
 - Log internally
@@ -259,7 +280,7 @@ Observability MUST NOT alter deterministic behavior.
 
 ---
 
-## 11. Ordering Guarantees
+### Ordering Guarantees
 
 Tools:
 - MUST execute deterministically given identical inputs (except external I/O)
@@ -271,9 +292,7 @@ If streaming:
 - Streaming remains internal to Agent.
 - No tool-specific streaming protocol exists.
 
----
-
-## 12. Architectural Guarantees
+### Architectural Guarantees
 
 - No hidden durable state
 - Strict execution boundary
@@ -285,6 +304,6 @@ If streaming:
 
 ---
 
-## 13. Related Specifications
+## 11. Related Specifications
 
 - FlotillaAgent Specification
