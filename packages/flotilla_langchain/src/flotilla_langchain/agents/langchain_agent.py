@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import AsyncIterator, Dict, List, Optional, Any
+from typing import AsyncIterator, Dict, List, Optional, Any, Sequence
 import asyncio
 import json
 import inspect
 from functools import update_wrapper
 
+from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
@@ -45,6 +46,7 @@ class LangChainAgent(FlotillaAgent):
         tools: Optional[List[FlotillaTool]] = None,
         model_kwargs: Optional[Dict] = None,
         checkpointer: Optional[Checkpointer] = None,
+        middleware: Optional[Sequence[AgentMiddleware]] = None,
         subgraphs: Optional[bool] = True,
     ):
         self._llm = llm
@@ -52,6 +54,7 @@ class LangChainAgent(FlotillaAgent):
         self._tools = tools or []
         self._model_kwargs = model_kwargs or {}
         self._checkpointer = checkpointer
+        self._middleware = list(middleware or [])
         self._subgraphs = subgraphs
 
         self._graph: CompiledStateGraph = self._build_graph()
@@ -69,6 +72,7 @@ class LangChainAgent(FlotillaAgent):
             model=self._llm,
             tools=structured_tools,
             system_prompt=self._system_prompt,
+            middleware=self._middleware,
             checkpointer=self._checkpointer,
             **self._model_kwargs,
         )
@@ -92,7 +96,7 @@ class LangChainAgent(FlotillaAgent):
 
         return StructuredTool.from_function(
             func=tool_func,
-            name=func.__name__,
+            name=tool.name,
             description=tool.llm_description,
         )
 
@@ -123,12 +127,12 @@ class LangChainAgent(FlotillaAgent):
         last_ai_message: Optional[AIMessage] = None
 
         command = self._resume_command(triggering_entry)
+        graph_input = command or self._graph_input(thread=thread_context, config=phase_context)
         graph_config = self._graph_config(phase_context)
 
         try:
             async for event in self._graph.astream(
-                self._graph_input(thread=thread_context, config=phase_context),
-                command=command,
+                graph_input,
                 stream_mode=["messages", "updates"],
                 subgraphs=self._subgraphs,
                 config=graph_config,
@@ -162,12 +166,14 @@ class LangChainAgent(FlotillaAgent):
                 elif mode == "updates":
                     interrupt_payload = chunk.get("__interrupt__")
                     if interrupt_payload is not None:
-                        reason = json.dumps(interrupt_payload, default=str)
-
                         yield AgentEvent.suspend(
                             entry_id=entry_id,
                             agent_id=self.agent_name,
-                            content=[TextPart(text=reason)],
+                            content=self._map_interrupt_to_content_parts(
+                                interrupt_payload=interrupt_payload,
+                                thread_context=thread_context,
+                                phase_context=phase_context,
+                            ),
                         )
                         return
 
@@ -277,6 +283,48 @@ class LangChainAgent(FlotillaAgent):
 
         return None
 
+    def _map_interrupt_to_content_parts(
+        self,
+        *,
+        interrupt_payload: Any,
+        thread_context: ThreadContext,
+        phase_context: PhaseContext,
+    ) -> List[ContentPart]:
+        """
+        Convert a LangGraph interrupt payload into suspend content parts.
+
+        Subclasses may override this to enrich the structured payload or provide
+        domain-specific human-readable summaries.
+        """
+
+        return [
+            StructuredPart(
+                id="interrupt_payload",
+                mime_type="application/vnd.flotilla.interrupt+json",
+                data={
+                    "kind": "langgraph_interrupt",
+                    "interrupts": interrupt_payload,
+                },
+            ),
+            TextPart(
+                id="interrupt_summary",
+                text=self._summarize_interrupt_payload(
+                    interrupt_payload=interrupt_payload,
+                    thread_context=thread_context,
+                    phase_context=phase_context,
+                ),
+            ),
+        ]
+
+    def _summarize_interrupt_payload(
+        self,
+        *,
+        interrupt_payload: Any,
+        thread_context: ThreadContext,
+        phase_context: PhaseContext,
+    ) -> str:
+        return "Human approval is required before execution can continue."
+
     # ------------------------------------------------------------------
     # Graph Helpers
     # ------------------------------------------------------------------
@@ -290,9 +338,14 @@ class LangChainAgent(FlotillaAgent):
         messages = []
 
         for entry in thread.entries:
-            text = " ".join(p.text for p in entry.content if isinstance(p, TextPart))
+            if isinstance(entry, ResumeEntry):
+                # LangGraph HITL resume values must flow through Command(resume=...),
+                # not as an additional HumanMessage in the reconstructed transcript.
+                continue
 
-            if isinstance(entry, UserInput) or isinstance(entry, ResumeEntry):
+            text = self._render_content_parts(entry.content)
+
+            if isinstance(entry, UserInput):
                 messages.append(HumanMessage(content=text))
             else:
                 messages.append(AIMessage(content=text))
@@ -303,6 +356,19 @@ class LangChainAgent(FlotillaAgent):
                 "thread_id": config.thread_id,
             },
         }
+
+    def _render_content_parts(self, content: List[ContentPart]) -> str:
+        rendered_parts: list[str] = []
+
+        for part in content:
+            if isinstance(part, TextPart):
+                rendered_parts.append(part.text)
+            elif isinstance(part, StructuredPart):
+                rendered_parts.append(json.dumps(part.data, sort_keys=True))
+            else:
+                rendered_parts.append(json.dumps(part.model_dump(mode="json"), sort_keys=True))
+
+        return "\n".join(part for part in rendered_parts if part)
 
     def _graph_config(self, config: PhaseContext) -> Dict[str, Any]:
         return {

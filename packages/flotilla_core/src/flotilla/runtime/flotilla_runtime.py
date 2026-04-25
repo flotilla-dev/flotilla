@@ -42,6 +42,10 @@ from flotilla.runtime.orchestration_strategy import OrchestrationStrategy
 from flotilla.telemetry.telemetry_policy import TelemetryPolicy
 from flotilla.telemetry.telemetry_event import TelemetryEvent
 from flotilla.telemetry.telemetry_types import TelemeryType, TelemetryComponent
+from flotilla.timeout.default_execution_timeout_policy import DefaultExecutionTimeoutPolicy
+from flotilla.suspend.permissive_resume_authorization import PermissiveResumeAuthorization
+from flotilla.suspend.no_op_suspend import NoOpSuspend
+from flotilla.telemetry.logger_telemetry import LoggerTelemetry
 
 # AgentEvent
 
@@ -70,19 +74,21 @@ class FlotillaRuntime:
         self,
         orchestration: OrchestrationStrategy,
         store: ThreadEntryStore,
-        phase_context_service: PhaseContextService,
-        execution_timeout_policy: ExecutionTimeoutPolicy,
-        resume_service: ResumeService,
-        suspend_policy: SuspendPolicy,
-        telemetry_policy: TelemetryPolicy,
+        phase_context_service: Optional[PhaseContextService] = None,
+        execution_timeout_policy: Optional[ExecutionTimeoutPolicy] = None,
+        resume_service: Optional[ResumeService] = None,
+        suspend_policy: Optional[SuspendPolicy] = None,
+        telemetry_policy: Optional[TelemetryPolicy] = None,
     ):
         self._orchestration = orchestration
         self._store = store
-        self._phase_context_service = phase_context_service
-        self._timeout_policy = execution_timeout_policy
-        self._resume_service = resume_service
-        self._suspend_policy = suspend_policy
-        self._telemetry_policy = telemetry_policy
+        self._phase_context_service = phase_context_service or PhaseContextService()
+        self._timeout_policy = execution_timeout_policy or DefaultExecutionTimeoutPolicy(timeout_ms=300000)
+        self._resume_service = resume_service or ResumeService(
+            resume_authorization_policy=PermissiveResumeAuthorization(), ttl_seconds=432000
+        )
+        self._suspend_policy = suspend_policy or NoOpSuspend()
+        self._telemetry_policy = telemetry_policy or LoggerTelemetry()
 
     # ------------------------------------------
     # Public API

@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 import inspect
-from typing import AsyncIterator
+from typing import AsyncIterator, List, Optional
 
 from fastapi.testclient import TestClient
 
@@ -84,11 +84,18 @@ class MultipleRouteHandler(HTTPHandler):
 
 @pytest.fixture
 def build_app():
-    def _build(instances):
-        container = FakeContainer(instances)
-        adapter = FastAPIAdapter(container)
+    def _build(
+        handlers: Optional[List[HTTPHandler]] = None,
+        exception_handlers: Optional[List[HTTPExceptionHandler]] = None,
+        interceptors: Optional[List[HTTPRequestInterceptor]] = None,
+    ):
+        adapter = FastAPIAdapter(
+            handlers=handlers or [],
+            exception_handlers=exception_handlers or [],
+            interceptors=interceptors or [],
+        )
         adapter.start()
-        return adapter.app  # assumes adapter exposes FastAPI app
+        return adapter.app
 
     return _build
 
@@ -99,7 +106,7 @@ def build_app():
 
 
 def test_route_registration(build_app):
-    app = build_app([SimpleHandler()])
+    app = build_app(handlers=[SimpleHandler()])
 
     client = TestClient(app)
 
@@ -110,7 +117,7 @@ def test_route_registration(build_app):
 
 
 def test_handler_invocation(build_app):
-    app = build_app([SimpleHandler()])
+    app = build_app(handlers=[SimpleHandler()])
 
     client = TestClient(app)
 
@@ -123,7 +130,7 @@ def test_handler_invocation(build_app):
 def test_dependency_injection(build_app):
     handler = DIHandler(value="injected")
 
-    app = build_app([handler])
+    app = build_app(handlers=[handler])
     client = TestClient(app)
 
     response = client.get("/di")
@@ -133,7 +140,7 @@ def test_dependency_injection(build_app):
 
 
 def test_multiple_handlers(build_app):
-    app = build_app([SimpleHandler(), MultipleRouteHandler()])
+    app = build_app(handlers=[SimpleHandler(), MultipleRouteHandler()])
 
     client = TestClient(app)
 
@@ -147,7 +154,7 @@ def test_multiple_handlers(build_app):
 
 
 def test_async_iterator_streaming(build_app):
-    app = build_app([StreamingHandler()])
+    app = build_app(handlers=[StreamingHandler()])
     client = TestClient(app)
 
     response = client.get("/stream")
@@ -170,7 +177,7 @@ def test_non_streaming_passthrough(build_app):
         async def data(self):
             return {"x": 1}
 
-    app = build_app([Handler()])
+    app = build_app(handlers=[Handler()])
     client = TestClient(app)
 
     response = client.get("/data")
@@ -184,7 +191,7 @@ def test_only_http_handler_instances_are_used(build_app):
     class NotAHandler:
         pass
 
-    app = build_app([SimpleHandler(), NotAHandler()])
+    app = build_app(handlers=[SimpleHandler(), NotAHandler()])
 
     client = TestClient(app)
 
@@ -199,7 +206,7 @@ def test_no_routes_if_no_decorators(build_app):
         async def foo(self):
             return {"x": 1}
 
-    app = build_app([EmptyHandler()])
+    app = build_app(handlers=[EmptyHandler()])
     client = TestClient(app)
 
     response = client.get("/foo")
@@ -209,7 +216,7 @@ def test_no_routes_if_no_decorators(build_app):
 
 
 def test_multiple_routes_on_single_handler(build_app):
-    app = build_app([MultipleRouteHandler()])
+    app = build_app(handlers=[MultipleRouteHandler()])
     client = TestClient(app)
 
     assert client.get("/a").status_code == 200
@@ -225,7 +232,7 @@ def test_async_handler_supported(build_app):
             await asyncio.sleep(0)
             return {"ok": True}
 
-    app = build_app([AsyncHandler()])
+    app = build_app(handlers=[AsyncHandler()])
     client = TestClient(app)
 
     response = client.get("/async")
@@ -236,7 +243,7 @@ def test_async_handler_supported(build_app):
 
 def test_endpoint_signature_preserved(build_app):
     handler = SimpleHandler()
-    app = build_app([handler])
+    app = build_app(handlers=[handler])
 
     route = next(r for r in app.routes if getattr(r, "path", None) == "/hello")
     sig = inspect.signature(route.endpoint)
@@ -251,7 +258,7 @@ def test_endpoint_signature_preserved_with_parameters(build_app):
         async def get_item(self, item_id: str):
             return {"item_id": item_id}
 
-    app = build_app([ParamHandler()])
+    app = build_app(handlers=[ParamHandler()])
 
     route = next(r for r in app.routes if getattr(r, "path", None) == "/items/{item_id}")
     sig = inspect.signature(route.endpoint)
@@ -271,7 +278,7 @@ def test_path_parameter_binding(build_app):
         async def get_item(self, item_id: str):
             return {"item_id": item_id}
 
-    app = build_app([Handler()])
+    app = build_app(handlers=[Handler()])
     client = TestClient(app)
 
     response = client.get("/items/abc123")
@@ -287,7 +294,7 @@ def test_query_parameter_binding(build_app):
         async def search(self, q: str):
             return {"q": q}
 
-    app = build_app([Handler()])
+    app = build_app(handlers=[Handler()])
     client = TestClient(app)
 
     response = client.get("/search?q=test-query")
@@ -303,7 +310,7 @@ def test_optional_query_parameters(build_app):
         async def search(self, q: str = "default"):
             return {"q": q}
 
-    app = build_app([Handler()])
+    app = build_app(handlers=[Handler()])
     client = TestClient(app)
 
     response = client.get("/search")
@@ -325,7 +332,7 @@ def test_request_body_binding(build_app):
         async def create(self, payload: Payload):
             return {"name": payload.name}
 
-    app = build_app([Handler()])
+    app = build_app(handlers=[Handler()])
     client = TestClient(app)
 
     response = client.post("/items", json={"name": "flotilla"})
@@ -350,7 +357,7 @@ def test_mixed_parameters(build_app):
                 "verbose": verbose,
             }
 
-    app = build_app([Handler()])
+    app = build_app(handlers=[Handler()])
     client = TestClient(app)
 
     response = client.post(
@@ -378,7 +385,7 @@ def test_body_validation_error(build_app):
         async def create(self, payload: Payload):
             return {"value": payload.value}
 
-    app = build_app([Handler()])
+    app = build_app(handlers=[Handler()])
     client = TestClient(app)
 
     response = client.post("/items", json={"value": "not-an-int"})
@@ -396,7 +403,7 @@ def test_fastapi_request_injection(build_app):
         async def request_test(self, request: Request):
             return {"method": request.method}
 
-    app = build_app([Handler()])
+    app = build_app(handlers=[Handler()])
     client = TestClient(app)
 
     response = client.get("/request-test")
@@ -429,7 +436,7 @@ def test_custom_exception_handler_invoked(build_app):
                 content={"error": str(exc)},
             )
 
-    app = build_app([Handler(), MyErrorHandler()])
+    app = build_app(handlers=[Handler()], exception_handlers=[MyErrorHandler()])
     client = TestClient(app)
 
     response = client.get("/boom")
@@ -457,7 +464,7 @@ def test_exception_handler_receives_request(build_app):
                 content={"path": request.url.path},
             )
 
-    app = build_app([Handler(), MyErrorHandler()])
+    app = build_app(handlers=[Handler()], exception_handlers=[MyErrorHandler()])
     client = TestClient(app)
 
     response = client.get("/boom")
@@ -476,7 +483,7 @@ def test_unhandled_exception_propagates(build_app):
         async def boom(self):
             raise MyError("unhandled")
 
-    app = build_app([Handler()])
+    app = build_app(handlers=[Handler()])
     client = TestClient(app, raise_server_exceptions=False)
 
     response = client.get("/boom")
@@ -500,8 +507,7 @@ def test_duplicate_exception_handlers_fail_startup():
         async def handle(self, request, exc):
             return JSONResponse(status_code=500, content={"b": 2})
 
-    container = FakeContainer([Handler1(), Handler2()])
-    adapter = FastAPIAdapter(container)
+    adapter = FastAPIAdapter(handlers=[], exception_handlers=[Handler1(), Handler2()], interceptors=[])
 
     with pytest.raises(ValueError):
         adapter.start()
@@ -523,10 +529,7 @@ def test_only_http_exception_handler_instances_are_used(build_app):
         async def handle(self, request, exc):
             return JSONResponse(status_code=400, content={"error": "handled"})
 
-    class NotAHandler:
-        pass
-
-    app = build_app([Handler(), MyErrorHandler(), NotAHandler()])
+    app = build_app(handlers=[Handler()], exception_handlers=[MyErrorHandler()])
     client = TestClient(app)
 
     response = client.get("/boom")
@@ -611,7 +614,7 @@ def test_interceptor_is_invoked(build_app):
 
     interceptor = Interceptor()
 
-    app = build_app([Handler(), interceptor])
+    app = build_app(handlers=[Handler()], interceptors=[interceptor])
     client = TestClient(app)
 
     response = client.get("/test")
@@ -653,7 +656,7 @@ def test_interceptor_can_short_circuit(build_app):
         async def dispatch(self, request, call_next):
             return JSONResponse(status_code=403, content={"error": "blocked"})
 
-    app = build_app([Handler(), Interceptor()])
+    app = build_app(handlers=[Handler()], interceptors=[Interceptor()])
     client = TestClient(app)
 
     response = client.get("/test")
@@ -743,7 +746,7 @@ def test_interceptor_can_read_request_headers(build_app):
 
     interceptor = Interceptor()
 
-    app = build_app([Handler(), interceptor])
+    app = build_app(handlers=[Handler()], interceptors=[interceptor])
     client = TestClient(app)
 
     response = client.get("/test", headers={"x-test-header": "hello"})

@@ -19,7 +19,6 @@ Flotilla is built around a different philosophy:
 - **Production-oriented architecture** — intended for real applications, not just demos
 
 Flotilla is especially well-suited for use cases such as:
-
 - approval workflows
 - operational exception handling
 - support and remediation flows
@@ -121,7 +120,7 @@ This separation is intentional: Flotilla aims to make agentic systems easier to 
 ### Clone the repository
 
 ```bash
-git clone https://github.com/YOUR-ORG/flotilla.git
+git clone https://github.com/flotilla-dev/flotilla.git
 cd flotilla
 ```
 

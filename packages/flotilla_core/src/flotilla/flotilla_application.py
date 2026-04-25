@@ -4,6 +4,7 @@ import sys
 from typing import Any, Dict, Type, get_type_hints, Optional
 
 from flotilla.config.errors import FlotillaConfigurationError
+from flotilla.container.flotilla_container import FlotillaContainer
 from flotilla.telemetry.telemetry_policy import TelemetryPolicy
 from flotilla.telemetry.logger_telemetry import LoggerTelemetry
 
@@ -66,6 +67,8 @@ class FlotillaApplication:
         self._container = None
         self._built = False
         self._started = False
+        self._run = False
+        self._shutdown = False
 
         # cache of declared annotations
         self._annotations: Dict[str, Type[Any]] = {}
@@ -74,7 +77,7 @@ class FlotillaApplication:
     # Container Wiring
     # ------------------------------------------------------------------
 
-    def _attach_container(self, container) -> None:
+    def _attach_container(self, container: FlotillaContainer) -> None:
         if self._container is not None:
             raise FlotillaConfigurationError("Container already attached")
         self._container = container
@@ -119,6 +122,8 @@ class FlotillaApplication:
             self._annotations[name] = service
 
             self._install_property(name)
+
+        self._execute_build()
 
         self._built = True
 
@@ -172,25 +177,32 @@ class FlotillaApplication:
 
         Subclasses override this method to initialize application resources.
         """
-
-        if not self._built:
-            raise RuntimeError("Application must be built before start()")
-
+        self._assert_built()
+        self._execute_start()
         self._started = True
 
-    def run(self) -> None:
+    def run(self, **kwargs) -> None:
         """
         Optional blocking execution loop.
 
         Applications may override this method to run long-lived services
         such as HTTP servers or message consumers.
         """
-        pass
+        try:
+            self._run = True
+            self._execute_run(**kwargs)
+        finally:
+            self.shutdown()
 
     def shutdown(self) -> None:
         """
         Shutdown the application and release resources.
         """
+        if self._shutdown:
+            return
+
+        self._shutdown = True
+        self._execute_shutdown()
         self._container = None
         self._started = False
 
@@ -202,9 +214,41 @@ class FlotillaApplication:
     def started(self) -> bool:
         return self._started
 
+    @property
+    def telemetry(self) -> TelemetryPolicy:
+        return self._telemetry
+
     # -------------------------
     # Lifecycle helpers
     # -------------------------
     def _assert_started(self):
         if not self.started:
             raise RuntimeError("Application not started")
+
+    def _assert_built(self):
+        if not self._built:
+            raise RuntimeError("Application must be built before start()")
+
+    def _execute_build(self):
+        """
+        Lifecycle method that allows subclasses execute within the build lifecycle of the FlotillaApplication
+        """
+        pass
+
+    def _execute_start(self):
+        """
+        Lifecycle method that allows subclasses execute within the start lifecycle of the FlotillaApplication
+        """
+        pass
+
+    def _execute_run(self, **kwargs):
+        """
+        Lifecycle method that allows subclasses execute within the run lifecycle of the FlotillaApplication
+        """
+        pass
+
+    def _execute_shutdown(self):
+        """
+        Lifecycle method that allows subclasses execute within the shutdown lifecycle of the FlotillaApplication
+        """
+        pass

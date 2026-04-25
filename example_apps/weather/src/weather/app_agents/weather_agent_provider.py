@@ -1,5 +1,5 @@
 from langchain.chat_models import BaseChatModel
-from app_agents.weather_agent import WeatherAgent
+from example_apps.weather.src.weather.app_agents.weather_agent import WeatherAgent
 from flotilla.tools.flotilla_tool import FlotillaTool
 from typing import List
 

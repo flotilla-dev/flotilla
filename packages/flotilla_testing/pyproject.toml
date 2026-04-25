@@ -9,7 +9,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
+python = ">=3.11,<4.0"
 # Depend on core
 flotilla-core = { path = "../flotilla_core", develop = true }
 

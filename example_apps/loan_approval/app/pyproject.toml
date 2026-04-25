@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "flotilla-example-app-loan-approval"
+version = "0.1.0"
+description = "Example loan approval app for Flotilla"
+authors = ["geoff <geoffschneider@gmail.com>"]
+packages = [{ include = "loan_server", from = "src" }]
+
+[tool.pytest.ini_options]
+addopts = "-v --strict-markers"
+asyncio_mode = "auto"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+flotilla-core = { path = "../../../packages/flotilla_core", develop = true }
+flotilla-langchain = { path = "../../../packages/flotilla_langchain", develop = true }
+flotilla-fastapi = { path = "../../../packages/flotilla_fastapi", develop = true }
+flotilla-sql = { path = "../../../packages/flotilla_sql", develop = true }
+
+# App-specific dependencies
+langgraph-checkpoint-postgres = "^3.0.5"
+psycopg = {version = "^3.2", extras = ["binary"]}
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
