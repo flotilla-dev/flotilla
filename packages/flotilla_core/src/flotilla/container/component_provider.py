@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol, Any, Optional, TYPE_CHECKING
+from typing import Protocol, Any, Awaitable, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from flotilla.container.flotilla_container import FlotillaContainer
@@ -18,4 +18,4 @@ class ComponentProvider(Protocol):
         container: FlotillaContainer,
         config: Optional[dict],
         **kwargs: Any,
-    ) -> Any: ...
+    ) -> Any | Awaitable[Any]: ...

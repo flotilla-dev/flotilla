@@ -1,9 +1,22 @@
+import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import httpx
 import pytest
+
+
+def subprocess_env():
+    repo_root = Path(__file__).resolve().parents[4]
+    paths = [
+        str(repo_root / "packages" / "flotilla_fastapi" / "src"),
+        str(repo_root / "packages" / "flotilla_core" / "src"),
+    ]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(paths + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    return env
 
 
 def wait_for_server(url, timeout=10):
@@ -33,6 +46,7 @@ def test_hosted_uvicorn():
             "--port",
             "8001",
         ],
+        env=subprocess_env(),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -61,6 +75,7 @@ def test_embedded_mode():
             "-m",
             "packages.flotilla_fastapi.tests.integration.app_fixture",
         ],
+        env=subprocess_env(),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

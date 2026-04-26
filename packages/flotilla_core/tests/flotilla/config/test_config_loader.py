@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from typing import Any, Dict
 
@@ -36,7 +37,7 @@ def test_config_loader_merges_sources_last_wins():
         secrets=[],
     )
 
-    settings = loader.load()
+    settings = asyncio.run(loader.load())
 
     assert isinstance(settings, FlotillaSettings)
     assert settings.config["a"] == 1
@@ -55,7 +56,7 @@ def test_config_loader_resolves_secret_last_non_none_wins():
         ],
     )
 
-    settings = loader.load()
+    settings = asyncio.run(loader.load())
     assert settings.config["api_key"] == "second"
 
 
@@ -68,7 +69,7 @@ def test_config_loader_none_does_not_override_real_value():
         ],
     )
 
-    settings = loader.load()
+    settings = asyncio.run(loader.load())
     assert settings.config["api_key"] == "valid"
 
 
@@ -79,7 +80,7 @@ def test_config_loader_raises_if_secret_unresolved():
     )
 
     with pytest.raises(SecretResolutionError) as exc:
-        loader.load()
+        asyncio.run(loader.load())
 
 
 def test_config_loader_ignores_non_secret_values():
@@ -88,7 +89,7 @@ def test_config_loader_ignores_non_secret_values():
         secrets=[],
     )
 
-    settings = loader.load()
+    settings = asyncio.run(loader.load())
     assert settings.config["value"] == "plain-string"
 
 
@@ -119,7 +120,7 @@ def test_config_loader_resolves_config_reference():
         secrets=[],
     )
 
-    settings = loader.load()
+    settings = asyncio.run(loader.load())
 
     assert settings.config["agent"]["llm"] == {
         "model": "gpt-4",
@@ -152,7 +153,7 @@ def test_config_loader_resolves_config_with_overrides():
         secrets=[],
     )
 
-    settings = loader.load()
+    settings = asyncio.run(loader.load())
 
     assert settings.config["agent"]["llm"] == {
         "model": "gpt-4",
@@ -184,7 +185,7 @@ def test_config_loader_resolves_config_before_secret():
         ],
     )
 
-    settings = loader.load()
+    settings = asyncio.run(loader.load())
 
     assert settings.config["agent"]["llm"] == {
         "model": "gpt-4",
@@ -209,7 +210,7 @@ def test_config_loader_raises_on_invalid_config_reference():
     )
 
     with pytest.raises(ValueError):
-        loader.load()
+        asyncio.run(loader.load())
 
 
 def test_config_loader_asserts_no_unresolved_secret_refs():
@@ -223,7 +224,7 @@ def test_config_loader_asserts_no_unresolved_secret_refs():
     )
 
     with pytest.raises(ValueError) as exc:
-        loader.load()
+        asyncio.run(loader.load())
 
     assert isinstance(exc.value, SecretResolutionError)
 
@@ -247,7 +248,7 @@ def test_config_mapping_node_is_fully_resolved():
     }
 
     config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
-    settings = config_loader.load()
+    settings = asyncio.run(config_loader.load())
     resolved = settings.config
 
     llm_cfg = resolved["agents"]["weather_agent"]["llm"]
@@ -267,7 +268,7 @@ def test_no_config_tokens_remain_after_load():
         },
     }
     config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
-    settings = config_loader.load()
+    settings = asyncio.run(config_loader.load())
     resolved = settings.config
 
     def walk(node):
@@ -296,7 +297,7 @@ def test_config_inside_component_arguments():
     }
 
     config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
-    settings = config_loader.load()
+    settings = asyncio.run(config_loader.load())
     resolved = settings.config
 
     agent_cfg = resolved["agent"]
@@ -318,7 +319,7 @@ def test_config_resolution_is_recursive():
     }
 
     config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
-    settings = config_loader.load()
+    settings = asyncio.run(config_loader.load())
     resolved = settings.config
     assert resolved["outer"]["inner"]["a"] == 1
 
@@ -332,7 +333,7 @@ def test_unresolved_config_raises_error():
     config_loader = ConfigLoader(sources=[DictConfigurationSource(config)], secrets=[])
 
     with pytest.raises(Exception):
-        config_loader.load()
+        asyncio.run(config_loader.load())
 
 
 ########################################
@@ -344,7 +345,7 @@ def test_config_scalar_form_is_invalid():
     loader = ConfigLoader(sources=[DictConfigurationSource(config)])
 
     with pytest.raises(ConfigurationResolutionError):
-        loader.load()
+        asyncio.run(loader.load())
 
 
 def test_secret_scalar_form_is_invalid():
@@ -353,4 +354,4 @@ def test_secret_scalar_form_is_invalid():
     loader = ConfigLoader(sources=[DictConfigurationSource(config)])
 
     with pytest.raises(SecretResolutionError):
-        loader.load()
+        asyncio.run(loader.load())

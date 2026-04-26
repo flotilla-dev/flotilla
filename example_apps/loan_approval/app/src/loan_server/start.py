@@ -1,3 +1,4 @@
+import asyncio
 from flotilla.flotilla_bootstrap import FlotillaBootstrap
 from flotilla.config.resolvers.env_secret_resolver import EnvSecretResolver
 from flotilla.config.sources.yaml_configuration_source import YamlConfigurationSource
@@ -13,11 +14,10 @@ from pathlib import Path
 CONFIG_DIR = Path(__file__).parent
 
 
-def start_app():
+async def build_app():
     print("Start loan application")
 
-    # bootstrap the app
-    app = FlotillaBootstrap.create(
+    return await FlotillaBootstrap.create(
         cls=FastApiFlotillaApplication,
         config_sources=[YamlConfigurationSource(config_dir=CONFIG_DIR), LocalEnvSource()],
         secret_resolvers=[EnvSecretResolver()],
@@ -28,6 +28,11 @@ def start_app():
             "postgres_saver_provider": create_postgres_saver,
         },
     )
+
+
+def start_app():
+    # bootstrap the app
+    app = asyncio.run(build_app())
 
     # run the embedded app
     app.run()

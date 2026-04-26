@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 
 from flotilla.container.component_compiler import ComponentCompiler
@@ -33,6 +34,10 @@ def map_provider(mapping):
     return {"type": "map", "mapping": mapping}
 
 
+async def async_provider(value):
+    return {"type": "async", "value": value}
+
+
 # -----------------------------
 # Test helpers
 # -----------------------------
@@ -47,6 +52,7 @@ def create_container(config: dict) -> FlotillaContainer:
     container.register_provider("composite", composite_provider)
     container.register_provider("list_provider", list_provider)
     container.register_provider("map_provider", map_provider)
+    container.register_provider("async_provider", async_provider)
     container.register_provider(REFLECTION_PROVIDER_KEY, ReflectionProvider())
 
     return container
@@ -58,7 +64,7 @@ def compile_config(config: dict) -> FlotillaContainer:
 
     compiler.discover_components(config)
     compiler.analyze_dependencies()
-    compiler.instantiate_components()
+    asyncio.run(compiler.instantiate_components())
 
     return container
 
@@ -72,6 +78,12 @@ def test_compile_simple_component():
     config = {"a": {"$provider": "simple", "x": 1}}
     container = compile_config(config)
     assert container.get("a")["kwargs"]["x"] == 1
+
+
+def test_compile_async_provider_component():
+    config = {"a": {"$provider": "async_provider", "value": 1}}
+    container = compile_config(config)
+    assert container.get("a") == {"type": "async", "value": 1}
 
 
 def test_name_override_replaces_path_name():

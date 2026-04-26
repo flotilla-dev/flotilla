@@ -12,7 +12,7 @@ from flotilla.config.errors import FlotillaConfigurationError
 class FlotillaBootstrap:
 
     @staticmethod
-    def create(
+    async def create(
         cls: Type[FlotillaApplication],
         config_sources: List[ConfigurationSource],
         secret_resolvers: Optional[List[SecretResolver]] = None,
@@ -39,7 +39,7 @@ class FlotillaBootstrap:
 
         config_loader = ConfigLoader(sources=config_sources, secrets=secret_resolvers)
 
-        settings = config_loader.load()
+        settings = await config_loader.load()
 
         # ----------------------------
         # Create container
@@ -52,7 +52,7 @@ class FlotillaBootstrap:
             container.register_provider(name, provider)
 
         # Build container
-        container.build()
+        await container.build()
 
         # ----------------------------
         # Construct application
@@ -60,7 +60,7 @@ class FlotillaBootstrap:
 
         app: FlotillaApplication = container.create_component(cls)
         app._attach_container(container=container)
-        app.build()
+        await app.build()
         app.start()
 
         return app

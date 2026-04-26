@@ -1,4 +1,5 @@
 import pytest
+from docker.errors import DockerException
 from testcontainers.postgres import PostgresContainer
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
@@ -8,8 +9,12 @@ from importlib.resources import files
 # --- Container (session scoped) ---
 @pytest.fixture(scope="session")
 def postgres_container():
-    with PostgresContainer("postgres:15") as pg:
-        yield pg
+    pytest.importorskip("asyncpg", reason="flotilla_sql PostgreSQL integration tests require asyncpg")
+    try:
+        with PostgresContainer("postgres:15") as pg:
+            yield pg
+    except DockerException as exc:
+        pytest.skip(f"flotilla_sql PostgreSQL integration tests require Docker access: {exc}")
 
 
 # --- DSN conversion ---
@@ -21,6 +26,7 @@ def async_dsn(postgres_container):
 # --- Engine ---
 @pytest.fixture
 async def engine(async_dsn):
+    pytest.importorskip("asyncpg", reason="flotilla_sql PostgreSQL integration tests require asyncpg")
     engine = create_async_engine(async_dsn)
 
     # Load schema

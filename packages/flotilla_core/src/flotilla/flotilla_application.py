@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import inspect
 from typing import Any, Dict, Type, get_type_hints, Optional
 
 from flotilla.config.errors import FlotillaConfigurationError
@@ -86,7 +87,7 @@ class FlotillaApplication:
     # Build Phase
     # ------------------------------------------------------------------
 
-    def build(self) -> None:
+    async def build(self) -> None:
         """
         Resolve declared services from the container.
 
@@ -123,7 +124,9 @@ class FlotillaApplication:
 
             self._install_property(name)
 
-        self._execute_build()
+        result = self._execute_build()
+        if inspect.isawaitable(result):
+            await result
 
         self._built = True
 

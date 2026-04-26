@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any, Dict, List, Set, TYPE_CHECKING
 
 from flotilla.config.config_utils import ConfigUtils
@@ -290,14 +291,14 @@ class ComponentCompiler:
     # Phase 3 — Instantiation
     # ------------------------------------------------------------------
 
-    def instantiate_components(self) -> None:
+    async def instantiate_components(self) -> None:
         if not self._analyzed:
             self.analyze_dependencies()
 
         for name in self._topo_order:
-            self._instantiate_component(name)
+            await self._instantiate_component(name)
 
-    def _instantiate_component(self, name: str) -> None:
+    async def _instantiate_component(self, name: str) -> None:
         if name in self._instantiated:
             return
 
@@ -311,14 +312,16 @@ class ComponentCompiler:
         for key, val in node.items():
             if key in {self._TAG_PROVIDER, self._TAG_NAME}:
                 continue
-            kwargs[key] = self._materialize_value(val, owner_path=cfg_path, arg_name=key)
+            kwargs[key] = await self._materialize_value(val, owner_path=cfg_path, arg_name=key)
 
         component = provider(**kwargs)
+        if inspect.isawaitable(component):
+            component = await component
 
         self._container.register_component(component_name=name, component=component)
         self._instantiated.add(name)
 
-    def _materialize_value(self, value, *, owner_path, arg_name):
+    async def _materialize_value(self, value, *, owner_path, arg_name):
         # ----- Reject scalar directive forms -----
         if isinstance(value, str):
             stripped = value.strip()
@@ -344,7 +347,7 @@ class ComponentCompiler:
                 if len(value) != 1:
                     raise FlotillaConfigurationError(f"{owner_path}.{arg_name}: $ref mapping must contain only '$ref'")
                 target = value[self._TAG_REF]
-                self._instantiate_component(target)
+                await self._instantiate_component(target)
                 return self._container.get(target)
 
             # $list
@@ -354,7 +357,7 @@ class ComponentCompiler:
                         f"{owner_path}.{arg_name}: $list mapping must contain only '$list'"
                     )
                 return [
-                    self._materialize_value(
+                    await self._materialize_value(
                         item,
                         owner_path=owner_path,
                         arg_name=f"{arg_name}[{idx}]",
@@ -367,7 +370,7 @@ class ComponentCompiler:
                 if len(value) != 1:
                     raise FlotillaConfigurationError(f"{owner_path}.{arg_name}: $map mapping must contain only '$map'")
                 return {
-                    k: self._materialize_value(
+                    k: await self._materialize_value(
                         v,
                         owner_path=owner_path,
                         arg_name=f"{arg_name}.{k}",
@@ -390,7 +393,7 @@ class ComponentCompiler:
                 if not self._analyzed:
                     self.analyze_dependencies()
 
-                self._instantiate_component(embedded_name)
+                await self._instantiate_component(embedded_name)
                 return self._container.get(embedded_name)
 
             # ----- Any other dict is illegal -----
