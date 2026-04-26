@@ -278,7 +278,7 @@ class FlotillaContainer:
         except Exception as ex:
             raise FlotillaConfigurationError(f"Failed to construct {cls.__name__}") from ex
 
-    def build(self) -> FlotillaContainer:
+    async def build(self) -> FlotillaContainer:
         """
         Build the DI container from the resolved configuration.
 
@@ -300,7 +300,9 @@ class FlotillaContainer:
         # Phase 0: pre-compile hooks
         # ---------------------------
         for hook in self._pre_compile_hooks:
-            hook(self, config)
+            result = hook(self, config)
+            if inspect.isawaitable(result):
+                await result
 
         # TODO: Change compiler hooks to be container events that are fired for each step
 
@@ -311,13 +313,15 @@ class FlotillaContainer:
 
         compiler.discover_components(config)
         compiler.analyze_dependencies()
-        compiler.instantiate_components()
+        await compiler.instantiate_components()
 
         # ---------------------------
         # Phase 4: post-compile hooks
         # ---------------------------
         for hook in self._post_compile_hooks:
-            hook(self)
+            result = hook(self)
+            if inspect.isawaitable(result):
+                await result
 
         self._built = True
         return self

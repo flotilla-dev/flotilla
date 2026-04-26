@@ -57,7 +57,7 @@ class YamlConfigurationSource:
     # ConfigurationSource API
     # ------------------------------------------------------------
 
-    def load(self) -> Dict[str, Any]:
+    async def load(self) -> Dict[str, Any]:
         merged: Dict[str, Any] = {}
         
         logger.info("Start loading configuration from YAML")

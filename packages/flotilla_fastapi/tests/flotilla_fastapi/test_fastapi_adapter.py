@@ -3,7 +3,7 @@ import asyncio
 import inspect
 from typing import AsyncIterator, List, Optional
 
-from fastapi.testclient import TestClient
+import httpx
 
 from flotilla_fastapi.handler import HTTPHandler
 
@@ -18,6 +18,29 @@ from fastapi.responses import JSONResponse
 # --------------------------------------------------
 # Test Utilities
 # --------------------------------------------------
+
+
+class ASGITestClient:
+    def __init__(self, app, raise_server_exceptions: bool = True):
+        self._app = app
+        self._raise_server_exceptions = raise_server_exceptions
+
+    def get(self, url: str, **kwargs):
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs):
+        return self.request("POST", url, **kwargs)
+
+    def request(self, method: str, url: str, **kwargs):
+        async def run_request():
+            transport = httpx.ASGITransport(
+                app=self._app,
+                raise_app_exceptions=self._raise_server_exceptions,
+            )
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                return await client.request(method, url, **kwargs)
+
+        return asyncio.run(run_request())
 
 
 class FakeContainer:
@@ -108,7 +131,7 @@ def build_app():
 def test_route_registration(build_app):
     app = build_app(handlers=[SimpleHandler()])
 
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/hello")
 
@@ -119,7 +142,7 @@ def test_route_registration(build_app):
 def test_handler_invocation(build_app):
     app = build_app(handlers=[SimpleHandler()])
 
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/hello")
 
@@ -131,7 +154,7 @@ def test_dependency_injection(build_app):
     handler = DIHandler(value="injected")
 
     app = build_app(handlers=[handler])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/di")
 
@@ -142,7 +165,7 @@ def test_dependency_injection(build_app):
 def test_multiple_handlers(build_app):
     app = build_app(handlers=[SimpleHandler(), MultipleRouteHandler()])
 
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     r1 = client.get("/hello")
     r2 = client.get("/a")
@@ -155,7 +178,7 @@ def test_multiple_handlers(build_app):
 
 def test_async_iterator_streaming(build_app):
     app = build_app(handlers=[StreamingHandler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/stream")
 
@@ -178,7 +201,7 @@ def test_non_streaming_passthrough(build_app):
             return {"x": 1}
 
     app = build_app(handlers=[Handler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/data")
 
@@ -193,7 +216,7 @@ def test_only_http_handler_instances_are_used(build_app):
 
     app = build_app(handlers=[SimpleHandler(), NotAHandler()])
 
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/hello")
 
@@ -207,7 +230,7 @@ def test_no_routes_if_no_decorators(build_app):
             return {"x": 1}
 
     app = build_app(handlers=[EmptyHandler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/foo")
 
@@ -217,7 +240,7 @@ def test_no_routes_if_no_decorators(build_app):
 
 def test_multiple_routes_on_single_handler(build_app):
     app = build_app(handlers=[MultipleRouteHandler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     assert client.get("/a").status_code == 200
     assert client.get("/b").status_code == 200
@@ -233,7 +256,7 @@ def test_async_handler_supported(build_app):
             return {"ok": True}
 
     app = build_app(handlers=[AsyncHandler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/async")
 
@@ -279,7 +302,7 @@ def test_path_parameter_binding(build_app):
             return {"item_id": item_id}
 
     app = build_app(handlers=[Handler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/items/abc123")
 
@@ -295,7 +318,7 @@ def test_query_parameter_binding(build_app):
             return {"q": q}
 
     app = build_app(handlers=[Handler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/search?q=test-query")
 
@@ -311,7 +334,7 @@ def test_optional_query_parameters(build_app):
             return {"q": q}
 
     app = build_app(handlers=[Handler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/search")
 
@@ -333,7 +356,7 @@ def test_request_body_binding(build_app):
             return {"name": payload.name}
 
     app = build_app(handlers=[Handler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.post("/items", json={"name": "flotilla"})
 
@@ -358,7 +381,7 @@ def test_mixed_parameters(build_app):
             }
 
     app = build_app(handlers=[Handler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.post(
         "/items/xyz?verbose=true",
@@ -386,7 +409,7 @@ def test_body_validation_error(build_app):
             return {"value": payload.value}
 
     app = build_app(handlers=[Handler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.post("/items", json={"value": "not-an-int"})
 
@@ -404,7 +427,7 @@ def test_fastapi_request_injection(build_app):
             return {"method": request.method}
 
     app = build_app(handlers=[Handler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/request-test")
 
@@ -437,7 +460,7 @@ def test_custom_exception_handler_invoked(build_app):
             )
 
     app = build_app(handlers=[Handler()], exception_handlers=[MyErrorHandler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/boom")
 
@@ -465,7 +488,7 @@ def test_exception_handler_receives_request(build_app):
             )
 
     app = build_app(handlers=[Handler()], exception_handlers=[MyErrorHandler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/boom")
 
@@ -484,7 +507,7 @@ def test_unhandled_exception_propagates(build_app):
             raise MyError("unhandled")
 
     app = build_app(handlers=[Handler()])
-    client = TestClient(app, raise_server_exceptions=False)
+    client = ASGITestClient(app, raise_server_exceptions=False)
 
     response = client.get("/boom")
 
@@ -530,7 +553,7 @@ def test_only_http_exception_handler_instances_are_used(build_app):
             return JSONResponse(status_code=400, content={"error": "handled"})
 
     app = build_app(handlers=[Handler()], exception_handlers=[MyErrorHandler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/boom")
 
@@ -558,7 +581,7 @@ def test_fastapi_http_exception_can_be_overridden(build_app):
             )
 
     app = build_app([Handler(), MyHTTPExceptionHandler()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/boom")
 
@@ -589,7 +612,7 @@ def test_interceptor_is_invoked(build_app):
     interceptor = Interceptor()
 
     app = build_app([Handler(), interceptor])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/test")
 
@@ -615,7 +638,7 @@ def test_interceptor_is_invoked(build_app):
     interceptor = Interceptor()
 
     app = build_app(handlers=[Handler()], interceptors=[interceptor])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/test")
 
@@ -636,7 +659,7 @@ def test_interceptor_can_short_circuit(build_app):
             return JSONResponse(status_code=403, content={"error": "blocked"})
 
     app = build_app([Handler(), Interceptor()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/test")
 
@@ -657,7 +680,7 @@ def test_interceptor_can_short_circuit(build_app):
             return JSONResponse(status_code=403, content={"error": "blocked"})
 
     app = build_app(handlers=[Handler()], interceptors=[Interceptor()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/test")
 
@@ -680,7 +703,7 @@ def test_only_interceptor_instances_are_used(build_app):
         pass
 
     app = build_app([Handler(), Interceptor(), NotAnInterceptor()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/test")
 
@@ -701,7 +724,7 @@ def test_interceptor_receives_request(build_app):
             return await call_next(request)
 
     app = build_app([Handler(), Interceptor()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/test")
 
@@ -722,7 +745,7 @@ def test_interceptor_receives_request(build_app):
             return await call_next(request)
 
     app = build_app([Handler(), Interceptor()])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/test")
 
@@ -747,7 +770,7 @@ def test_interceptor_can_read_request_headers(build_app):
     interceptor = Interceptor()
 
     app = build_app(handlers=[Handler()], interceptors=[interceptor])
-    client = TestClient(app)
+    client = ASGITestClient(app)
 
     response = client.get("/test", headers={"x-test-header": "hello"})
 

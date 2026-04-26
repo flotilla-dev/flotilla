@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 import copy
+import inspect
 
 from flotilla.config.errors import SecretResolutionError, ConfigurationResolutionError
 from flotilla.config.config_utils import ConfigUtils
@@ -44,12 +45,12 @@ class ConfigLoader:
     # Public API
     # ------------------------------------------------------------
 
-    def load(self) -> FlotillaSettings:
+    async def load(self) -> FlotillaSettings:
         # load from merged sources
-        merged = self._merge_sources()
+        merged = await self._merge_sources()
 
         # Phase 1: resolve secrets (scalar only)
-        merged = self._resolve_secrets(merged)
+        merged = await self._resolve_secrets(merged)
 
         # Phase 2: resolve $config (structural, recursive)
         merged = self._resolve_config_nodes(merged, root=merged)
@@ -69,13 +70,13 @@ class ConfigLoader:
     # Secret resolution (internal)
     # ------------------------------------------------------------
 
-    def _resolve_secrets(self, config: Any) -> Any:
+    async def _resolve_secrets(self, config: Any) -> Any:
         """
         Walk the config tree and resolve any $secret references.
         """
-        return self._walk(config, path=[])
+        return await self._walk(config, path=[])
 
-    def _walk(self, value: Any, path: List[str]) -> Any:
+    async def _walk(self, value: Any, path: List[str]) -> Any:
         location = ".".join(path) if path else "<root>"
 
         # 🚨 Reject scalar $secret form
@@ -93,20 +94,22 @@ class ConfigLoader:
                     raise SecretResolutionError(
                         f"$secret mapping must contain only '$secret' key (at {location})"
                     )
-                return self._resolve_secret(value, path)
+                return await self._resolve_secret(value, path)
 
-            return {
-                key: self._walk(val, path + [str(key)]) for key, val in value.items()
-            }
+            resolved = {}
+            for key, val in value.items():
+                resolved[key] = await self._walk(val, path + [str(key)])
+            return resolved
 
         if isinstance(value, list):
-            return [
-                self._walk(item, path + [str(idx)]) for idx, item in enumerate(value)
-            ]
+            resolved = []
+            for idx, item in enumerate(value):
+                resolved.append(await self._walk(item, path + [str(idx)]))
+            return resolved
 
         return value
 
-    def _resolve_secret(self, value: Dict[str, Any], path: List[str]) -> Any:
+    async def _resolve_secret(self, value: Dict[str, Any], path: List[str]) -> Any:
         secret_key = value.get("$secret")
 
         if not isinstance(secret_key, str):
@@ -115,7 +118,8 @@ class ConfigLoader:
 
         resolved = None
         for resolver in self._secrets:
-            result = resolver.resolve(secret_key)  # may raise → allowed
+            result = resolver.resolve(secret_key)  # may raise -> allowed
+            result = await self._await_if_needed(result)
             if result is not None:
                 resolved = result  # last non-None wins
 
@@ -199,7 +203,7 @@ class ConfigLoader:
 
         return node
 
-    def _merge_sources(self) -> dict:
+    async def _merge_sources(self) -> dict:
         """
         Load and merge configuration from all ConfigurationSource instances.
 
@@ -213,9 +217,15 @@ class ConfigLoader:
 
         for source in self._sources:
             data = source.load()
+            data = await self._await_if_needed(data)
             if not data:
                 continue
 
             merged = ConfigUtils.deep_merge(merged, data)
 
         return merged
+
+    async def _await_if_needed(self, value: Any) -> Any:
+        if inspect.isawaitable(value):
+            return await value
+        return value

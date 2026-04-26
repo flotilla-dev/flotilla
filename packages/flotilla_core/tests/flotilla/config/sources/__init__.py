@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from pathlib import Path
 
@@ -31,7 +32,7 @@ flotilla:
     )
 
     source = YamlConfigurationSource(config_dir=tmp_path)
-    config = source.load()
+    config = asyncio.run(source.load())
 
     assert config["flotilla"]["agent_selector"]["type"] == "keyword"
 
@@ -60,13 +61,13 @@ llm:
         env="test",
     )
 
-    config = source.load()
+    config = asyncio.run(source.load())
     assert config["llm"]["defaults"]["model"] == "gpt-4-mini"
 
 
 def test_yaml_source_missing_files_is_ok(tmp_path: Path):
     source = YamlConfigurationSource(config_dir=tmp_path)
-    config = source.load()
+    config = asyncio.run(source.load())
     assert config == {}
 
 
@@ -83,7 +84,7 @@ flotilla:
     source = YamlConfigurationSource(config_dir=tmp_path)
 
     with pytest.raises(YamlConfigurationError):
-        source.load()
+        asyncio.run(source.load())
 
 
 def test_yaml_source_schema_validation_failure(tmp_path: Path):
@@ -111,7 +112,7 @@ properties:
     )
 
     with pytest.raises(YamlSchemaValidationError):
-        source.load()
+        asyncio.run(source.load())
 
 
 def test_yaml_source_schema_validation_success(tmp_path: Path):
@@ -140,5 +141,5 @@ properties:
         schema_path=tmp_path / "schema.yml",
     )
 
-    config = source.load()
+    config = asyncio.run(source.load())
     assert "flotilla" in config

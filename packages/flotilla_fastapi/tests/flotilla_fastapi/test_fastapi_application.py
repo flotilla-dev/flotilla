@@ -1,6 +1,6 @@
 import pytest
+import httpx
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from unittest.mock import patch
 
 from flotilla.container.flotilla_container import FlotillaContainer
@@ -9,6 +9,12 @@ from flotilla_fastapi.application import FastApiFlotillaApplication
 from flotilla_fastapi.config import FastAPIRunConfig
 from flotilla_fastapi.handler import HTTPHandler
 from flotilla_fastapi.routes import routes
+
+
+async def request(app, method: str, url: str, **kwargs):
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        return await client.request(method, url, **kwargs)
 
 
 class TestFastAPIFlotillaApplication(FastApiFlotillaApplication):
@@ -22,32 +28,34 @@ class TestFastAPIFlotillaApplication(FastApiFlotillaApplication):
         self.shutdown_count += 1
 
 
-def build_container(*components):
+async def build_container(*components):
     container = FlotillaContainer(FlotillaSettings(raw={}))
 
     for i, component in enumerate(components):
         container.register_component(component_name=f"component_{i}", component=component)
 
-    container.build()
+    await container.build()
     return container
 
 
-def test_build_resolves_fastapi_adapter():
-    container = build_container()
+@pytest.mark.asyncio
+async def test_build_resolves_fastapi_adapter():
+    container = await build_container()
 
     application = FastApiFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
 
     assert application.adapter is not None
 
 
-def test_app_property_exposes_fastapi_app_after_build():
-    container = build_container()
+@pytest.mark.asyncio
+async def test_app_property_exposes_fastapi_app_after_build():
+    container = await build_container()
 
     application = FastApiFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
 
     assert application.app is not None
 
@@ -61,12 +69,13 @@ def test_app_property_raises_if_not_built():
         _ = application.app
 
 
-def test_start_calls_adapter_start():
-    container = build_container()
+@pytest.mark.asyncio
+async def test_start_calls_adapter_start():
+    container = await build_container()
 
     application = FastApiFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
     application.start()
 
     assert application.started
@@ -74,8 +83,9 @@ def test_start_calls_adapter_start():
     assert application.app
 
 
-def test_start_raises_if_not_built():
-    container = build_container()
+@pytest.mark.asyncio
+async def test_start_raises_if_not_built():
+    container = await build_container()
 
     application = FastApiFlotillaApplication()
     application._attach_container(container=container)
@@ -84,7 +94,8 @@ def test_start_raises_if_not_built():
         application.start()
 
 
-def test_routes_are_live_after_start():
+@pytest.mark.asyncio
+async def test_routes_are_live_after_start():
     class Handler(HTTPHandler):
 
         @routes.get("/hello")
@@ -93,26 +104,26 @@ def test_routes_are_live_after_start():
 
     container = FlotillaContainer(FlotillaSettings({}))
     container.register_component(component_name="handler", component=Handler())
-    container.build()
+    await container.build()
 
     application = FastApiFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
     application.start()
 
-    client = TestClient(application.app)
-    response = client.get("/hello")
+    response = await request(application.app, "GET", "/hello")
 
     assert response.status_code == 200
     assert response.json() == {"message": "hello"}
 
 
-def test_run_uses_defaults_when_no_fastapi_run_config():
+@pytest.mark.asyncio
+async def test_run_uses_defaults_when_no_fastapi_run_config():
     container = FlotillaContainer(FlotillaSettings({}))
-    container.build()
+    await container.build()
     application = FastApiFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
     application.start()
 
     with patch("uvicorn.run") as mock_run:
@@ -127,15 +138,16 @@ def test_run_uses_defaults_when_no_fastapi_run_config():
         )
 
 
-def test_run_uses_injected_fastapi_run_config():
+@pytest.mark.asyncio
+async def test_run_uses_injected_fastapi_run_config():
     container = FlotillaContainer(FlotillaSettings({}))
     config = FastAPIRunConfig(port=8080, reload=True)
     container.register_component(component_name="fast_api_config", component=config)
-    container.build()
+    await container.build()
 
     application = FastApiFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
     application.start()
 
     with patch("uvicorn.run") as mock_run:
@@ -150,15 +162,16 @@ def test_run_uses_injected_fastapi_run_config():
         )
 
 
-def test_run_kwargs_override_injected_fastapi_run_config():
+@pytest.mark.asyncio
+async def test_run_kwargs_override_injected_fastapi_run_config():
     container = FlotillaContainer(FlotillaSettings({}))
     config = FastAPIRunConfig(port=8080, reload=True)
     container.register_component(component_name="fast_api_config", component=config)
-    container.build()
+    await container.build()
 
     application = FastApiFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
     application.start()
 
     with patch("uvicorn.run") as mock_run:
@@ -173,41 +186,44 @@ def test_run_kwargs_override_injected_fastapi_run_config():
         )
 
 
-def test_start_registers_shutdown_hook():
+@pytest.mark.asyncio
+async def test_start_registers_shutdown_hook():
     container = FlotillaContainer(FlotillaSettings({}))
-    container.build()
+    await container.build()
     application = TestFastAPIFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
     application.start()
 
-    with TestClient(application.app):
-        pass
+    await application.app.router.startup()
+    await application.app.router.shutdown()
 
     assert application.shutdown_called is True
     assert application.shutdown_count == 1
 
 
-def test_build_does_not_register_shutdown_hook():
+@pytest.mark.asyncio
+async def test_build_does_not_register_shutdown_hook():
     container = FlotillaContainer(FlotillaSettings({}))
-    container.build()
+    await container.build()
     application = TestFastAPIFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
 
-    with TestClient(application.app):
-        pass
+    await application.app.router.startup()
+    await application.app.router.shutdown()
 
     assert application.shutdown_called is False
     assert application.shutdown_count == 0
 
 
-def test_shutdown_is_idempotent():
+@pytest.mark.asyncio
+async def test_shutdown_is_idempotent():
     container = FlotillaContainer(FlotillaSettings({}))
-    container.build()
+    await container.build()
     application = TestFastAPIFlotillaApplication()
     application._attach_container(container=container)
-    application.build()
+    await application.build()
     application.start()
 
     application.shutdown()

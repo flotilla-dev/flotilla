@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from unittest.mock import MagicMock
 
@@ -73,7 +74,7 @@ def test_start_sets_started_flag(container):
     app = FlotillaApplication()
     app._attach_container(container)
 
-    app.build()
+    asyncio.run(app.build())
     app.start()
 
     assert app.started is True
@@ -83,7 +84,7 @@ def test_shutdown_resets_started_flag(container):
     app = FlotillaApplication()
     app._attach_container(container)
 
-    app.build()
+    asyncio.run(app.build())
     app.start()
     app.shutdown()
 
@@ -130,7 +131,7 @@ def test_attach_container_twice_raises():
 def test_build_resolves_declared_services(container):
     app = BaseApp()
     app._attach_container(container)
-    app.build()
+    asyncio.run(app.build())
 
     assert isinstance(app.service_a, ServiceA)
 
@@ -139,7 +140,7 @@ def test_build_calls_container_lookup(container):
     app = BaseApp()
     app._attach_container(container)
 
-    app.build()
+    asyncio.run(app.build())
 
     container.find_one_by_type.assert_called_with(ServiceA)
 
@@ -148,17 +149,17 @@ def test_build_requires_container():
     app = BaseApp()
 
     with pytest.raises(RuntimeError):
-        app.build()
+        asyncio.run(app.build())
 
 
 def test_build_runs_once(container):
     app = BaseApp()
     app._attach_container(container)
 
-    app.build()
+    asyncio.run(app.build())
 
     with pytest.raises(RuntimeError):
-        app.build()
+        asyncio.run(app.build())
 
 
 # ------------------------------------------------------------
@@ -170,7 +171,7 @@ def test_service_property_access(container):
     app = BaseApp()
     app._attach_container(container)
 
-    app.build()
+    asyncio.run(app.build())
 
     assert isinstance(app.service_a, ServiceA)
 
@@ -179,7 +180,7 @@ def test_service_property_is_read_only(container):
     app = BaseApp()
     app._attach_container(container)
 
-    app.build()
+    asyncio.run(app.build())
 
     with pytest.raises(AttributeError):
         app.service_a = ServiceA()
@@ -194,7 +195,7 @@ def test_build_resolves_services_from_parent_class(container):
     app = ChildApp()
     app._attach_container(container)
 
-    app.build()
+    asyncio.run(app.build())
 
     assert isinstance(app._service_a, ServiceA)
     assert isinstance(app._service_b, ServiceB)
@@ -204,7 +205,7 @@ def test_property_access_from_parent_class(container):
     app = ChildApp()
     app._attach_container(container)
 
-    app.build()
+    asyncio.run(app.build())
 
     assert isinstance(app.service_a, ServiceA)
     assert isinstance(app.service_b, ServiceB)
@@ -219,7 +220,7 @@ def test_subclass_annotation_override(container):
     app = OverrideApp()
     app._attach_container(container)
 
-    app.build()
+    asyncio.run(app.build())
 
     assert isinstance(app._service_a, ServiceB)
     assert isinstance(app.service_a, ServiceB)

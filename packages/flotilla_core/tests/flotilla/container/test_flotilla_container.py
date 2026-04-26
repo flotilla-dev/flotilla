@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 
 from flotilla.container.flotilla_container import FlotillaContainer
@@ -160,18 +161,18 @@ def test_build_sets_built_and_is_one_shot(container, monkeypatch):
         def __init__(self, container): ...
         def discover_components(self, config): ...
         def analyze_dependencies(self): ...
-        def instantiate_components(self): ...
+        async def instantiate_components(self): ...
 
     import flotilla.container.flotilla_container as fc_mod
 
     monkeypatch.setattr(fc_mod, "ComponentCompiler", DummyCompiler)
 
     assert container._built is False
-    container.build()
+    asyncio.run(container.build())
     assert container._built is True
 
     with pytest.raises(RuntimeError):
-        container.build()
+        asyncio.run(container.build())
 
 
 def test_create_requires_container_built(container):

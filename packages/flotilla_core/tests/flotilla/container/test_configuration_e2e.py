@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from typing import Dict
 
@@ -133,7 +134,7 @@ tools:
 
     # create config loader
     config_loader = ConfigLoader(sources=[config_source], secrets=[secret_resolver])
-    settings = config_loader.load()
+    settings = asyncio.run(config_loader.load())
 
     # create the container and register the reflection provider
     container = FlotillaContainer(settings=settings)
@@ -147,7 +148,7 @@ tools:
     container.register_provider("tool_1_provider", tool_1_provider)
 
     # start building the container
-    container.build()
+    asyncio.run(container.build())
 
     # ---------------------------
     # Check components were built and registered on the container

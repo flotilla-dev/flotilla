@@ -16,6 +16,6 @@ class DictConfigurationSource:
     def __init__(self, data: Dict[str, Any]):
         self._data = data
 
-    def load(self) -> Dict[str, Any]:
+    async def load(self) -> Dict[str, Any]:
         # Return a shallow copy to prevent mutation
         return dict(self._data)

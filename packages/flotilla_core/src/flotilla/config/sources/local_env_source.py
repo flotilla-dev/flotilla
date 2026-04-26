@@ -4,5 +4,5 @@ from dotenv import load_dotenv
 
 class LocalEnvSource(ConfigurationSource):
 
-    def load(self):
+    async def load(self):
         load_dotenv()

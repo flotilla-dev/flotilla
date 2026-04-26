@@ -8,6 +8,11 @@ packages = [{ include = "loan_server", from = "src" }]
 [tool.pytest.ini_options]
 addopts = "-v --strict-markers"
 asyncio_mode = "auto"
+pythonpath = [
+    "src",
+    "../../../packages/flotilla_core/src",
+    "../../../packages/flotilla_langchain/src",
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"

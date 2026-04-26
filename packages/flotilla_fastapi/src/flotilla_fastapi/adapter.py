@@ -52,12 +52,14 @@ class FastAPIAdapter:
                 endpoint = self._build_endpoint(handler, route_def)
                 endpoint = self._apply_wrappers(endpoint, handler, route_def)  # no-op v1
                 endpoint = self._wrap_execution(endpoint)
+                route_kwargs = dict(route_def.kwargs)
+                route_kwargs.setdefault("response_model", None)
 
                 self._app.add_api_route(
                     path=route_def.path,
                     endpoint=endpoint,
                     methods=[route_def.http_method],
-                    **route_def.kwargs,
+                    **route_kwargs,
                 )
 
     def _get_route_methods(self, handler: HTTPHandler) -> List[RouteDefinition]:
