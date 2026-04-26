@@ -37,20 +37,31 @@
 
 ---
 
-## 2. System Architecture Context
+## 2. Architectural Context
 
-Execution order:
+Intended execution order:
 
 1. Runtime appends `SuspendEntry` durably.
 2. Runtime reloads thread and reconstructs `ThreadContext`.
 3. Runtime emits suspend response to the requester.
-4. Runtime invokes `SuspendPolicy` synchronously (best-effort).
+4. Runtime may invoke `SuspendPolicy` synchronously (best-effort).
 
-`SuspendPolicy` is invoked after durability and after terminal semantics are established. It cannot alter the canonical shape of the thread.
+`SuspendPolicy` is designed to be invoked after durability and after terminal semantics are established. It cannot alter the canonical shape of the thread.
 
 ---
 
-## 3. Canonical Interface
+## 3. Core Concepts
+
+`SuspendPolicy` is a post-terminal, best-effort notification policy intended to run after a `SuspendEntry` is durably appended.
+
+Core inputs:
+
+- `ThreadContext` reconstructed after durable reload.
+- Durable `SuspendEntry` for the terminated phase.
+- Issued `ResumeToken` associated with that suspend entry.
+- `PhaseContext` used by the phase.
+
+### Canonical Interface
 
 `SuspendPolicy` MUST expose semantics equivalent to:
 
@@ -58,8 +69,8 @@ Execution order:
 async def handle_suspend(
     thread_context: ThreadContext,
     suspend_entry: SuspendEntry,
-    resume_token: ResumeToken,
-    execution_config: ExecutionConfig,
+    resume_token: str,
+    execution_config: PhaseContext,
 ) -> None:
     ...
 ```
@@ -69,16 +80,37 @@ async def handle_suspend(
 - `thread_context` MUST reflect durable state after reload.
 - `suspend_entry` MUST be the durable terminal entry for the phase.
 - `resume_token` MUST correspond to that suspend entry.
-- `execution_config` MUST match the configuration used for the phase.
+- `execution_config` MUST be the `PhaseContext` used for the phase.
 - All inputs MUST be treated as immutable.
 
 ---
 
-## 4. Behavioral Contract
+## 4. Responsibilities
+
+`SuspendPolicy` is responsible for:
+
+- Handling suspend information when invoked after durable terminal state is established.
+- Performing best-effort routing or notification.
+- Returning without mutating durable state.
+- Allowing runtime completion to proceed even when notification fails.
+
+## 5. Non-Responsibilities
+
+`SuspendPolicy` is NOT responsible for:
+
+- Creating, modifying, validating, or consuming `ResumeToken`.
+- Appending or modifying `ThreadEntry` objects.
+- Determining thread status.
+- Altering execution outcomes.
+- Enforcing resume authorization.
+
+---
+
+## 6. Behavioral Contract
 
 ### 4.1 Invocation Timing
 
-Runtime MUST invoke `SuspendPolicy`:
+When runtime invokes `SuspendPolicy`, it MUST invoke it:
 
 - Only after `SuspendEntry` has been durably appended
 - Only after reload of `ThreadContext`
@@ -88,7 +120,7 @@ Runtime MUST NOT invoke `SuspendPolicy` before durable mutation.
 
 ### 4.2 Synchronous, Non-Blocking Semantics
 
-Runtime MUST await `SuspendPolicy` completion before exiting runtime execution. However:
+When invoked, runtime MUST await `SuspendPolicy` completion before exiting runtime execution. However:
 
 - `SuspendPolicy` MUST NOT delay runtime completion indefinitely.
 - Runtime SHOULD enforce a configurable timeout for `SuspendPolicy` execution.
@@ -107,7 +139,7 @@ Runtime MUST await `SuspendPolicy` completion before exiting runtime execution. 
 
 ---
 
-## 5. Error Handling Rules
+### Error Handling
 
 `SuspendPolicy` MUST NOT allow errors to leak into runtime execution flow.
 
@@ -132,7 +164,7 @@ Runtime MAY log the error or emit telemetry (if configured). Runtime MUST still 
 
 ---
 
-## 6. Invariants
+## 7. Constraints & Guarantees
 
 `SuspendPolicy` MUST preserve:
 
@@ -150,7 +182,7 @@ Runtime MAY log the error or emit telemetry (if configured). Runtime MUST still 
 
 ---
 
-## 7. Architectural Guarantees
+### Architectural Guarantees
 
 This design guarantees:
 
@@ -166,4 +198,4 @@ This design guarantees:
 - FlotillaRuntime
 - Thread Model (`SuspendEntry`)
 - ResumeToken
-- ExecutionConfig
+- PhaseContext

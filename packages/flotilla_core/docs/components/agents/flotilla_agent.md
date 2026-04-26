@@ -45,12 +45,12 @@ All durable state mutation occurs outside the agent boundary.
 Deterministic behavior is defined by:
 
 - `ThreadContext` contents
-- `ExecutionConfig`
+- `PhaseContext`
 - Injected reasoning engine behavior
 
 ---
 
-## 2. System Architecture Context
+## 2. Architectural Context
 
 ### Position in Flotilla
 
@@ -104,16 +104,16 @@ FlotillaAgent **must NOT**:
 
 ---
 
-## 3. Canonical Types / Interfaces
+## 3. Core Concepts
 
 ### Public API (Single Entry Point)
 
 ```python
 async def run(
     self,
-    thread: ThreadContext,
-    config: ExecutionConfig,
-    input_parts: Optional[List[ContentPart]]
+    thread_context: ThreadContext,
+    phase_context: PhaseContext,
+    input_parts: Optional[List[ContentPart]] = None
 ) -> AsyncIterator[AgentEvent]
 ```
 
@@ -134,7 +134,7 @@ FlotillaAgent MUST:
  - Never assume input_parts contains initiating user input.
  - Never duplicate the most recent durable UserInput or ResumeEntry.
 
-  If input_parts is None, it MUST be treated as an empty list.
+  If `input_parts` is `None`, it is passed through to the subclass `_execute()` implementation as `None`.
 
 ### Closed Set: Emitted Event Types
 
@@ -142,7 +142,28 @@ The agent may emit only canonical `AgentEvent` types defined in the AgentEvent s
 
 ---
 
-## 4. Behavioral Contract
+## 4. Responsibilities
+
+`FlotillaAgent` is responsible for:
+
+- Executing one agent phase against immutable thread context and execution configuration.
+- Emitting canonical `AgentEvent` objects.
+- Producing exactly one terminal event per run.
+- Keeping execution stateless across invocations.
+
+## 5. Non-Responsibilities
+
+`FlotillaAgent` is NOT responsible for:
+
+- Appending durable `ThreadEntry` objects.
+- Managing runtime lifecycle, CAS, or thread closure.
+- Issuing or validating `ResumeToken` values.
+- Routing suspend notifications.
+- Translating events into `RuntimeResponse` or `RuntimeEvent`.
+
+---
+
+## 6. Behavioral Contract
 
 ### Core Lifecycle Rules
 
@@ -161,7 +182,7 @@ The agent may emit only canonical `AgentEvent` types defined in the AgentEvent s
 
 Deterministic behavior is defined by:
 -   `ThreadContext` contents
--   `ExecutionConfig`
+-   `PhaseContext`
 -   `input_parts`
 -   Injected reasoning engine behavior
 - 
@@ -186,14 +207,14 @@ Agent MUST NEVER emit zero events.
 
 ---
 
-## 5. Structural Schema
+### Structural Schema
 
 ### `run()` Parameters
 
 | Field | Type | Nullable | Notes |
 |---|---|---|---|
 | `thread` | `ThreadContext` | No | Durable snapshot |
-| `config` | `ExecutionConfig` | No | Immutable config |
+| `phase_context` | `PhaseContext` | No | Immutable phase metadata and agent configuration |
 
 ### Emitted Event Requirements
 
@@ -205,12 +226,31 @@ Agent MUST NEVER emit zero events.
 
 - Agent instances MUST be stateless across calls.
 - `ThreadContext` MUST be treated as read-only.
-- `ExecutionConfig` MUST NOT be mutated.
+- `PhaseContext` MUST NOT be mutated.
 - No internal mutable state allowed per execution.
+
+### Error Handling
+
+If reasoning execution fails:
+
+- Agent MUST emit `error`.
+- Agent MUST NOT emit `message_final` afterward.
+
+Initialization failures:
+
+- MUST raise at construction.
+- MUST fail fast.
+- MUST NOT defer to runtime.
+
+Tool exceptions:
+
+- MUST propagate to agent.
+- MUST result in `error` event unless subclass explicitly transforms the failure.
+- MUST NOT fail silently.
 
 ---
 
-## 6. Durable Mutation Boundaries
+## 7. State Model
 
 FlotillaAgent produces **no durable mutations**.
 
@@ -223,7 +263,7 @@ Durable mutations occur only after `AgentEvent` leaves the agent boundary.
 
 ---
 
-## 7. Invariants
+## 8. Constraints & Guarantees
 
 The following must always hold:
 
@@ -243,7 +283,7 @@ Each invariant must be directly testable.
 
 ---
 
-## 8. Extension & Override Points
+## 9. Extension Points
 
 ### Template Method Pattern
 
@@ -270,28 +310,7 @@ Subclasses **MUST NOT**:
 
 ---
 
-## 9. Error Handling Rules
-
-### Execution Failures
-
-If reasoning execution fails:
-- Agent MUST emit `error`.
-- Agent MUST NOT emit `message_final` afterward.
-
-### Initialization Failures
-
-- MUST raise at construction (fail-fast).
-- MUST NOT defer to runtime.
-
-### Tool Exceptions
-
-- MUST propagate to agent.
-- MUST result in `error` event (unless subclass explicitly transforms).
-- Silent failure is forbidden.
-
----
-
-## 10. Observability & Telemetry
+## 10. Observability
 
 Agent **MAY**:
 - Include metadata within `AgentEvent`.
@@ -307,7 +326,7 @@ Observability MUST NOT affect ordering or determinism.
 
 ---
 
-## 11. Ordering Guarantees
+### Ordering Guarantees
 
 - Events MUST be emitted in causal order.
 - No artificial reordering.
@@ -316,9 +335,7 @@ Observability MUST NOT affect ordering or determinism.
 - No hidden buffering beyond reasoning engine constraints.
 - No hidden mutation of event stream.
 
----
-
-## 12. Architectural Guarantees
+### Architectural Guarantees
 
 - Stateless execution
 - Deterministic replay from `ThreadContext` + ivocation delta
@@ -331,7 +348,7 @@ Observability MUST NOT affect ordering or determinism.
 
 ---
 
-## 13. Related Specifications
+## 11. Related Specifications
 
 Only specifications directly interacting with FlotillaAgent:
 

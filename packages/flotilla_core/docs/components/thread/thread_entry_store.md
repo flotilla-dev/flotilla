@@ -38,7 +38,7 @@ It provides:
 
 ---
 
-## 2. System Architecture Context
+## 2. Architectural Context
 
 `ThreadEntryStore` sits below:
 
@@ -51,7 +51,7 @@ It provides:
 
   
 
-## 3. Canonical Types / Interfaces
+## 3. Core Concepts
 
 ### ThreadEntryStore Interface
 
@@ -96,7 +96,29 @@ The returned `ThreadEntry` is NOT authoritative state and MUST NOT be used to co
 
 ---
 
-## 4. Behavioral Contract
+## 4. Responsibilities
+
+`ThreadEntryStore` is responsible for:
+
+- Creating durable thread identities.
+- Loading thread entries in authoritative durable order.
+- Appending entries atomically and conditionally.
+- Assigning durable entry identity and timestamps.
+- Enforcing append-only persistence and CAS predicates.
+
+## 5. Non-Responsibilities
+
+`ThreadEntryStore` is NOT responsible for:
+
+- Creating threads implicitly during append.
+- Interpreting lifecycle semantics.
+- Running agents or orchestration.
+- Implementing suspend routing or timeout logic.
+- Issuing or validating `ResumeToken` values.
+
+---
+
+## 6. Behavioral Contract
 
 ### 4.1 Thread Creation
 
@@ -210,7 +232,7 @@ On successful append:
   - Duplicate `entry_order`
   - Gaps in `entry_order`
 
-### 4.8  Authoritative State Model
+## 7. State Model
 
 `ThreadContext` obtained via `load()` is the ONLY authoritative representation of thread state
 
@@ -247,7 +269,7 @@ Any deviation from this invariant MUST be treated as either:
 - Raise `ThreadNotFoundError` if the thread does not exist
 ---
 
-## 5. ContentPart Persistence
+### ContentPart Persistence
 
 `ThreadEntryStore` MUST:
 
@@ -267,7 +289,7 @@ For each `ThreadEntry`:
 
 ---
 
-## 6. Error Handling Rules
+### Error Handling
 
 `ThreadEntryStore` MUST distinguish between two classes of append failure:
 
@@ -315,7 +337,7 @@ Because `ThreadContext` is immutable and authoritative, any mismatch with the cu
 
 ---
 
-## 7. Related Specifications
+## 8. Related Specifications
 
 - Thread Model (`ThreadEntry` / `ThreadContext`)
 - ContentPart

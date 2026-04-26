@@ -28,7 +28,7 @@ It is a pure execution abstraction, intentionally structurally symmetrical to `F
 - A `ThreadEntryStore` client
 - A `ResumeToken` issuer
 - A suspend router
-- A concurrency manager
+- The owner of runtime concurrency enforcement
 - A timeout enforcer
 - A side-effect reliability mechanism
 
@@ -36,7 +36,7 @@ All durable mutation and lifecycle enforcement are owned by `FlotillaRuntime`.
 
 ---
 
-## 2. Architectural Role
+## 2. Architectural Context
 
 | Property | Value |
 |---|---|
@@ -52,7 +52,7 @@ All durable mutation and lifecycle enforcement are owned by `FlotillaRuntime`.
 
 ---
 
-## 3. Interface Contract
+## 3. Core Concepts
 
 ### Canonical Invocation
 
@@ -61,18 +61,43 @@ All durable mutation and lifecycle enforcement are owned by `FlotillaRuntime`.
 ```python
 async def execute(
     thread_context: ThreadContext,
-    execution_config: ExecutionConfig
+    phase_context: PhaseContext
 ) -> AsyncIterator[AgentEvent]
 ```
 
 
 ---
 
-## 4. Structural Symmetry With FlotillaAgent
+## 4. Responsibilities
+
+`OrchestrationStrategy` is responsible for:
+
+- Defining phase execution topology.
+- Coordinating one or more `FlotillaAgent` or nested `OrchestrationStrategy` instances.
+- Producing canonical `AgentEvent` streams.
+- Terminating each phase with exactly one terminal `AgentEvent`.
+
+## 5. Non-Responsibilities
+
+`OrchestrationStrategy` is NOT responsible for:
+
+- Durable mutation.
+- Direct storage access.
+- Issuing or validating `ResumeToken`.
+- Suspend routing.
+- Runtime concurrency enforcement.
+- Timeout enforcement.
+- Side-effect reliability.
+
+---
+
+## 6. Behavioral Contract
+
+### Structural Symmetry With FlotillaAgent
 
 `OrchestrationStrategy` and `FlotillaAgent` share the same execution contract:
 
-- **Input:** immutable `ThreadContext` + `ExecutionConfig`
+- **Input:** immutable `ThreadContext` + `PhaseContext`
 - **Output:** stream of `AgentEvent`
 - Exactly one terminal `AgentEvent`
 - No out-of-band mutation
@@ -87,15 +112,15 @@ Because of this symmetry:
 
 ---
 
-## 5. Behavioral Contract
-
 ### 5.1 Statelessness
 
 `OrchestrationStrategy` MUST:
 
 - Be stateless across invocations.
 - Not rely on in-memory persisted state between phases.
-- Derive all required execution state from `thread_context`, `execution_config`, and `AgentEvent` produced during execution.
+- Derive all required execution state from `thread_context`, `phase_context`, and `AgentEvent` produced during execution.
+- Support concurrent handling of multiple independent requests without shared-state corruption.
+- Avoid blocking unrelated requests while one invocation is executing.
 
 ### 5.2 No Durable Mutation
 
@@ -163,7 +188,7 @@ Agent-to-agent coordination MUST occur via structured `ContentPart` objects only
 
 ---
 
-## 6. Composition Rules
+## 7. Interaction Model
 
 `OrchestrationStrategy` MAY:
 
@@ -191,7 +216,9 @@ This mechanism enables multi-agent workflows without modifying the durable threa
 
 ---
 
-## 7. Ordering Guarantees
+## 8. Constraints & Guarantees
+
+### Ordering Guarantees
 
 `OrchestrationStrategy` MUST:
 
@@ -210,7 +237,7 @@ If internal parallelism is implemented, emitted `AgentEvent` order MUST remain d
 
 ---
 
-## 8. Suspend Semantics
+### Suspend Semantics
 
 If `OrchestrationStrategy` yields `AgentEvent.suspend`:
 
@@ -223,7 +250,7 @@ Suspend handling remains runtime-owned.
 
 ---
 
-## 9. Crash Semantics
+### Crash Semantics
 
 If the runtime process crashes during strategy execution:
 
@@ -234,7 +261,7 @@ If the runtime process crashes during strategy execution:
 
 ---
 
-## 10. Prohibited Behaviors
+### Prohibited Behaviors
 
 `OrchestrationStrategy` MUST NOT:
 
@@ -248,21 +275,30 @@ If the runtime process crashes during strategy execution:
 
 ---
 
-## 11. Invariants
+### Invariants
 
 For every invocation:
 
 - Exactly one terminal `AgentEvent` MUST be yielded.
 - All events MUST conform to the canonical `AgentEvent` spec.
 - `thread_context` MUST remain immutable.
-- `execution_config` MUST remain immutable.
+- `phase_context` MUST remain immutable.
 - No durable mutation occurs within strategy.
 - Inter-agent coordination MUST NOT modify durable state.
 - No ContentPart used for coordination may be durably appended.
 
 ---
 
-## 12. Architectural Guarantees
+### Architectural Guarantees
+
+## 9. Related Specifications
+
+- `FlotillaRuntime`
+- `FlotillaAgent`
+- `AgentEvent`
+- `Thread Model`
+- `ExecutionTimeoutPolicy`
+- `SuspendPolicy`
 
 This design guarantees:
 
