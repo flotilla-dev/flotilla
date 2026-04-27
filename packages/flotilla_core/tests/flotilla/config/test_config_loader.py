@@ -5,6 +5,7 @@ from typing import Any, Dict
 from flotilla.config.config_loader import ConfigLoader, SecretResolutionError
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.sources.dict_configuration_source import DictConfigurationSource
+from flotilla.config.sources.yaml_configuration_source import YamlConfigurationSource
 from flotilla.config.configuration_source import ConfigurationSource
 from flotilla.config.secret_resolver import SecretResolver
 from flotilla.config.errors import ConfigurationResolutionError
@@ -43,6 +44,50 @@ def test_config_loader_merges_sources_last_wins():
     assert settings.config["a"] == 1
     assert settings.config["b"] == 2
     assert settings.config["nested"]["x"] == 2
+
+
+def test_config_loader_merges_yaml_sources_last_file_wins(tmp_path):
+    base_config = tmp_path / "application.yml"
+    override_config = tmp_path / "dev-override.yml"
+
+    base_config.write_text(
+        """
+components:
+  approval_agent:
+    $provider: approval_agent_provider
+    model: gpt-4
+    temperature: 0.2
+  unchanged:
+    $provider: unchanged_provider
+    value: original
+""",
+        encoding="utf-8",
+    )
+    override_config.write_text(
+        """
+components:
+  approval_agent:
+    model: gpt-4-mini
+""",
+        encoding="utf-8",
+    )
+
+    loader = ConfigLoader(
+        sources=[
+            YamlConfigurationSource(path=base_config),
+            YamlConfigurationSource(path=override_config),
+        ],
+        secrets=[],
+    )
+
+    settings = asyncio.run(loader.load())
+
+    assert settings.config["components"]["approval_agent"] == {
+        "$provider": "approval_agent_provider",
+        "model": "gpt-4-mini",
+        "temperature": 0.2,
+    }
+    assert settings.config["components"]["unchanged"]["value"] == "original"
 
 
 def test_config_loader_resolves_secret_last_non_none_wins():

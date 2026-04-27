@@ -19,7 +19,7 @@ async def build_app():
 
     return await FlotillaBootstrap.create(
         cls=FastApiFlotillaApplication,
-        config_sources=[YamlConfigurationSource(config_dir=CONFIG_DIR), LocalEnvSource()],
+        config_sources=[YamlConfigurationSource(path=CONFIG_DIR / "flotilla.yml"), LocalEnvSource()],
         secret_resolvers=[EnvSecretResolver()],
         providers={
             "$class": ReflectionProvider(),

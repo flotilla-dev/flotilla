@@ -129,7 +129,7 @@ tools:
     )
 
     # create configuration source and secret resolver
-    config_source = YamlConfigurationSource(config_dir=tmp_path)
+    config_source = YamlConfigurationSource(path=tmp_path / "flotilla.yml")
     secret_resolver = SpySecretResolver(secrets={"secret_key": "testing"})
 
     # create config loader

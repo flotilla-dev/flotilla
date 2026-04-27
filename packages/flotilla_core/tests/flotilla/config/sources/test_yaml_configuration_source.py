@@ -21,9 +21,10 @@ def write(path: Path, content: str):
 # Tests
 # ---------------------------------------------------------------------
 
-def test_yaml_source_loads_base_file(tmp_path: Path):
+def test_yaml_source_loads_file_from_explicit_path(tmp_path: Path):
+    config_path = tmp_path / "application.yml"
     write(
-        tmp_path / "flotilla.yml",
+        config_path,
         """
 flotilla:
   agent_selector:
@@ -31,64 +32,38 @@ flotilla:
 """
     )
 
-    source = YamlConfigurationSource(config_dir=tmp_path)
+    source = YamlConfigurationSource(path=config_path)
     config = asyncio.run(source.load())
 
     assert config["flotilla"]["agent_selector"]["type"] == "keyword"
 
 
-def test_yaml_source_env_override_wins(tmp_path: Path):
-    write(
-        tmp_path / "flotilla.yml",
-        """
-llm:
-  defaults:
-    model: gpt-4
-"""
-    )
-
-    write(
-        tmp_path / "flotilla-test.yml",
-        """
-llm:
-  defaults:
-    model: gpt-4-mini
-"""
-    )
-
-    source = YamlConfigurationSource(
-        config_dir=tmp_path,
-        env="test",
-    )
-
-    config = asyncio.run(source.load())
-    assert config["llm"]["defaults"]["model"] == "gpt-4-mini"
-
-
-def test_yaml_source_missing_files_is_ok(tmp_path: Path):
-    source = YamlConfigurationSource(config_dir=tmp_path)
-    config = asyncio.run(source.load())
-    assert config == {}
+def test_yaml_source_missing_file_raises(tmp_path: Path):
+    source = YamlConfigurationSource(path=tmp_path / "missing.yml")
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(source.load())
 
 
 def test_yaml_source_invalid_yaml_raises(tmp_path: Path):
+    config_path = tmp_path / "application.yml"
     write(
-        tmp_path / "flotilla.yml",
+        config_path,
         """
 flotilla: 
     key: [ unclosed
 """
     )
 
-    source = YamlConfigurationSource(config_dir=tmp_path)
+    source = YamlConfigurationSource(path=config_path)
 
     with pytest.raises(YamlConfigurationError):
         asyncio.run(source.load())
 
 
 def test_yaml_source_schema_validation_failure(tmp_path: Path):
+    config_path = tmp_path / "application.yml"
     write(
-        tmp_path / "flotilla.yml",
+        config_path,
         """
 unexpected: true
 """
@@ -106,7 +81,7 @@ properties:
     )
 
     source = YamlConfigurationSource(
-        config_dir=tmp_path,
+        path=config_path,
         schema_path=tmp_path / "schema.yml",
     )
 
@@ -115,8 +90,9 @@ properties:
 
 
 def test_yaml_source_schema_validation_success(tmp_path: Path):
+    config_path = tmp_path / "application.yml"
     write(
-        tmp_path / "flotilla.yml",
+        config_path,
         """
 flotilla:
   agent_selector:
@@ -136,7 +112,7 @@ properties:
     )
 
     source = YamlConfigurationSource(
-        config_dir=tmp_path,
+        path=config_path,
         schema_path=tmp_path / "schema.yml",
     )
 
