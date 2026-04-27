@@ -131,8 +131,11 @@ def cli(ctx, env: str):
 
     sources = [
         LocalEnvSource(),
-        YamlConfigurationSource(config_dir=str(config_dir), env=env),
+        YamlConfigurationSource(path=config_dir / "flotilla.yml"),
     ]
+    env_override_path = config_dir / f"flotilla-{env.lower()}.yml"
+    if env_override_path.exists():
+        sources.append(YamlConfigurationSource(path=env_override_path))
     secrets = [EnvSecretResolver()]
 
     providers = {
@@ -141,8 +144,13 @@ def cli(ctx, env: str):
         "weather_agent_provider": weather_agent_provider,
     }
 
-    app: FlotillaApplication = FlotillaBootstrap.create(
-        ExampleApp, config_sources=sources, secret_resolvers=secrets, providers=providers
+    app: FlotillaApplication = asyncio.run(
+        FlotillaBootstrap.create(
+            ExampleApp,
+            config_sources=sources,
+            secret_resolvers=secrets,
+            providers=providers,
+        )
     )
 
     # Save app in ctx for commands

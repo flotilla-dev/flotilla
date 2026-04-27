@@ -4,10 +4,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
-import jsonschema
 from jsonschema import Draft202012Validator
 
-from flotilla.config.config_utils import ConfigUtils
 from flotilla.config.configuration_source import ConfigurationSource
 from flotilla.utils.logger import get_logger
 
@@ -31,24 +29,24 @@ class YamlSchemaValidationError(YamlConfigurationError):
 
 class YamlConfigurationSource:
     """
-    ConfigurationSource that loads Flotilla configuration from YAML files.
+    ConfigurationSource that loads one explicit Flotilla YAML configuration file.
 
     Responsibilities:
-      - Load flotilla.yml
-      - Load flotilla-{env}.yml (if present)
-      - Deep-merge (env overrides base)
-      - Validate merged config against schema
+      - Load the configured YAML file
+      - Validate the loaded config against an optional schema
+
+    Compose multiple YAML files by passing multiple YamlConfigurationSource
+    instances to ConfigLoader. Sources are merged in order by ConfigLoader, so
+    later files override earlier files.
     """
 
     def __init__(
         self,
         *,
-        config_dir: Path,
-        env: Optional[str] = None,
+        path: Path,
         schema_path: Optional[Path] = None,
     ):
-        self._config_dir = Path(config_dir)
-        self._env = env.lower() if env else None
+        self._path = Path(path)
         self._schema_path = schema_path
 
         self._validator = self._load_schema_validator(schema_path)
@@ -58,49 +56,33 @@ class YamlConfigurationSource:
     # ------------------------------------------------------------
 
     async def load(self) -> Dict[str, Any]:
-        merged: Dict[str, Any] = {}
-        
-        logger.info("Start loading configuration from YAML")
+        logger.info(f"Start loading configuration from YAML file '{self._path}'")
 
-        # 1. Load base config
-        merged = ConfigUtils.deep_merge(
-            merged,
-            self._load_yaml("flotilla.yml"),
-        )
+        config = self._load_yaml()
 
-        # 2. Load environment override
-        if self._env:
-            merged = ConfigUtils.deep_merge(
-                merged,
-                self._load_yaml(f"flotilla-{self._env}.yml"),
-            )
-
-        # 3. Schema validation (source-level)
         if self._validator:
-            self._validate_schema(merged)
+            self._validate_schema(config)
         
-        logger.info("Finished loading configuration from YAML")
-        return merged
+        logger.info(f"Finished loading configuration from YAML file '{self._path}'")
+        return config
 
     # ------------------------------------------------------------
     # YAML loading
     # ------------------------------------------------------------
 
-    def _load_yaml(self, filename: str) -> Dict[str, Any]:
-        path = self._config_dir / filename
-        logger.info(f"Check if path {path} exists")
-        if not path.exists():
-            logger.info(f"Path {path} does not exist")
-            return {}
+    def _load_yaml(self) -> Dict[str, Any]:
+        logger.info(f"Check if path {self._path} exists")
+        if not self._path.exists():
+            raise FileNotFoundError(f"YAML configuration file not found: {self._path}")
         
-        logger.info(f"Load YAML Configuration from '{path}'")
+        logger.info(f"Load YAML Configuration from '{self._path}'")
         try:
-            with path.open("r", encoding="utf-8") as f:
+            with self._path.open("r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
                 return data or {}
         except yaml.YAMLError as e:
             raise YamlConfigurationError(
-                f"Failed to parse YAML file: {path}"
+                f"Failed to parse YAML file: {self._path}"
             ) from e
 
     # ------------------------------------------------------------

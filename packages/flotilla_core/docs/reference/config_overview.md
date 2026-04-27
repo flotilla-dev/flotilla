@@ -46,7 +46,7 @@ Flotilla does not require configuration to originate from a specific file format
 Instead, configuration is supplied through objects implementing the `ConfigurationSource` interface.
 ```python
 class  ConfigurationSource(Protocol):  
-  def  load(self) -> Dict[str, Any]
+  def  load(self) -> Dict[str, Any] | Awaitable[Dict[str, Any]]
 ```
 Each source returns a configuration fragment represented as a Python dictionary.
 
@@ -62,6 +62,12 @@ Flotilla includes built-in implementations such as:
 
 -   `YamlConfigurationSource`
 -   `DictConfigurationSource`
+
+`YamlConfigurationSource` loads one explicit YAML file path. To layer multiple
+YAML files, pass multiple sources to `ConfigLoader` in the desired order. Later
+files override earlier files, so a developer can load `application.yml` followed
+by `dev-override.yml` and only redefine the component entries that should
+change.
 
 YAML is the **recommended human-authored format**, but the runtime configuration graph is always represented internally as a Python dictionary.
 
