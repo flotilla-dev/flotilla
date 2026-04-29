@@ -13,7 +13,7 @@ class EnvSecretResolver:
     async def resolve(self, secret_key: str) -> Any | None:
         if not secret_key:
             return None
-        logger.info(f"Look up secret from environment {secret_key}")
+        logger.debug("Look up secret key '%s' from environment", secret_key)
         try:
             return os.getenv(secret_key)
         except Exception as exc:  # extremely rare, but explicit

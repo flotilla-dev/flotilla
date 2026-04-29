@@ -53,12 +53,13 @@ class FlotillaBootstrap:
 
         # Build container
         await container.build()
+        await container.startup()
 
         # ----------------------------
         # Construct application
         # ----------------------------
 
-        app: FlotillaApplication = container.create_component(cls)
+        app: FlotillaApplication = await container.create_component(cls)
         app._attach_container(container=container)
         await app.build()
         app.start()

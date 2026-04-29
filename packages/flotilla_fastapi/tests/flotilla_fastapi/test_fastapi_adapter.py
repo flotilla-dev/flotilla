@@ -51,7 +51,7 @@ class FakeContainer:
     def __init__(self, instances):
         self._instances = instances
 
-    def find_instances_by_type(self, base_type):
+    async def find_instances_by_type(self, base_type):
         return [i for i in self._instances if isinstance(i, base_type)]
 
 

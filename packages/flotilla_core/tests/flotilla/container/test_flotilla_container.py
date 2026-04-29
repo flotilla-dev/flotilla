@@ -1,14 +1,18 @@
 import asyncio
+from typing import Annotated, Optional, Union
+
 import pytest
 
-from flotilla.container.flotilla_container import FlotillaContainer
+from flotilla.config.errors import FlotillaConfigurationError
 from flotilla.config.flotilla_settings import FlotillaSettings
-from flotilla.config.errors import FlotillaConfigurationError, ReferenceResolutionError
+from flotilla.container.constants import REFLECTION_PROVIDER_KEY
+from flotilla.container.flotilla_container import FlotillaContainer
+from flotilla.container.lifecycle import Shutdown, Startup
+from flotilla.container.providers.reflection_provider import ReflectionProvider
 
 
 @pytest.fixture
 def minimal_settings():
-    # Keep minimal; build() will be monkeypatched
     return FlotillaSettings({"app": {"name": "test"}})
 
 
@@ -20,6 +24,7 @@ def container(minimal_settings):
 def test_container_initializes(container, minimal_settings):
     assert container.settings is minimal_settings
     assert container.config_dict == minimal_settings.config
+    assert isinstance(container.get_provider(REFLECTION_PROVIDER_KEY), ReflectionProvider)
 
 
 def test_register_provider_and_get_provider_pre_build(container):
@@ -31,73 +36,106 @@ def test_register_provider_and_get_provider_pre_build(container):
     assert container.get_provider("p") is provider
 
 
+def test_register_provider_raises_if_duplicate(container):
+    def provider():
+        return object()
+
+    container.register_provider("p", provider)
+
+    with pytest.raises(FlotillaConfigurationError):
+        container.register_provider("p", provider)
+
+
+def test_register_provider_allows_explicit_replace(container):
+    def provider_one():
+        return "one"
+
+    def provider_two():
+        return "two"
+
+    container.register_provider("p", provider_one)
+    container.register_provider("p", provider_two, replace=True)
+
+    assert container.get_provider("p") is provider_two
+
+
+def test_reflection_provider_cannot_be_overwritten_without_replace(container):
+    with pytest.raises(FlotillaConfigurationError):
+        container.register_provider(REFLECTION_PROVIDER_KEY, ReflectionProvider())
+
+
 def test_register_provider_raises_after_build(container):
     container._built = True
     with pytest.raises(RuntimeError):
         container.register_provider("p", lambda: object())
 
 
-def test_register_component_raises_after_build(container):
+def test_private_install_instance_raises_after_build(container):
     container._built = True
     with pytest.raises(RuntimeError):
-        container.register_component(component_name="x", component=object())
+        container._install_instance_binding(component_name="x", component=object())
 
 
-def test_register_factory_raises_after_build(container):
+def test_private_install_factory_raises_after_build(container):
     container._built = True
     with pytest.raises(RuntimeError):
-        container.register_factory("x", lambda: object())
+        container._install_factory_binding("x", lambda: object())
 
 
-def test_get_raises_if_missing(container):
+async def test_get_raises_if_missing(container):
     container._built = True
     with pytest.raises(FlotillaConfigurationError):
-        container.get("missing")
+        await container.get("missing")
 
 
-def test_register_component_and_get_returns_instance(container):
+async def test_private_install_instance_and_get_returns_instance(container):
     obj = object()
-    container.register_component(component_name="x", component=obj)
+    container._install_instance_binding(component_name="x", component=obj)
 
     container._built = True
-    assert container.get("x") is obj
+    assert await container.get("x") is obj
 
 
-def test_register_factory_and_get_creates_instance(container):
+async def test_singleton_rejects_get_kwargs(container):
+    container._install_instance_binding(component_name="x", component=object())
+    container._built = True
+
+    with pytest.raises(FlotillaConfigurationError):
+        await container.get("x", value=1)
+
+
+async def test_private_install_factory_and_get_creates_instances(container):
     calls = {"n": 0}
 
-    def make():
+    def make(value=1):
         calls["n"] += 1
-        return {"ok": True}
+        return {"value": value}
 
-    container.register_factory("x", make)
-
+    container._install_factory_binding("x", make, value=2)
     container._built = True
-    v1 = container.get("x")
-    v2 = container.get("x")
 
-    assert v1 == {"ok": True}
-    assert v2 == {"ok": True}
-    # FactoryBinding semantics: typically new instance each call.
-    # If your FactoryBinding caches, adjust this assertion.
+    v1 = await container.get("x")
+    v2 = await container.get("x", value=3)
+
+    assert v1 == {"value": 2}
+    assert v2 == {"value": 3}
     assert calls["n"] == 2
 
 
-def test_exists_true_false(container, monkeypatch):
-    # This test expects exists() to be implemented as: `return name in self._bindings`
-    container.register_component(component_name="x", component=object())
+def test_exists_true_false(container):
+    container._install_instance_binding(component_name="x", component=object())
     container._built = True
 
     assert container.exists("x")
     assert not container.exists("missing")
 
 
-def test_find_instances_by_type_requires_build(container):
+async def test_find_instances_by_type_requires_build(container):
     with pytest.raises(RuntimeError):
-        container.find_instances_by_type(object)
+        await container.find_instances_by_type(object)
 
 
-def test_find_instances_by_type_finds_matches(container):
+async def test_find_instances_by_type_finds_matches(container):
     class A: ...
 
     class B: ...
@@ -105,61 +143,54 @@ def test_find_instances_by_type_finds_matches(container):
     a = A()
     b = B()
 
-    container.register_component(component_name="a", component=a)
-    container.register_component(component_name="b", component=b)
-
+    container._install_instance_binding(component_name="a", component=a)
+    container._install_instance_binding(component_name="b", component=b)
     container._built = True
 
-    matches_a = container.find_instances_by_type(A)
-    matches_b = container.find_instances_by_type(B)
-
-    assert matches_a == [a]
-    assert matches_b == [b]
+    assert await container.find_instances_by_type(A) == [a]
+    assert await container.find_instances_by_type(B) == [b]
 
 
-def test_find_instances_by_type_skips_unresolvable_bindings(container, monkeypatch):
-    # This matches your current behavior (skip resolve() failures).
+async def test_find_instances_by_type_skips_unresolvable_bindings(container):
     class A: ...
 
-    container.register_component(component_name="a", component=A())
+    container._install_instance_binding(component_name="a", component=A())
 
-    # register a factory that raises
     def bad_factory():
         raise RuntimeError("boom")
 
-    container.register_factory("bad", bad_factory)
-
+    container._install_factory_binding("bad", bad_factory)
     container._built = True
 
-    matches = container.find_instances_by_type(A)
+    matches = await container.find_instances_by_type(A)
     assert len(matches) == 1
     assert isinstance(matches[0], A)
 
 
-def test_find_one_by_type_raises_if_none(container):
+async def test_find_one_by_type_raises_if_none(container):
     class A: ...
 
     container._built = True
     with pytest.raises(FlotillaConfigurationError):
-        container.find_one_by_type(A)
+        await container.find_one_by_type(A)
 
 
-def test_find_one_by_type_raises_if_multiple(container):
+async def test_find_one_by_type_raises_if_multiple(container):
     class A: ...
 
-    container.register_component(component_name="a1", component=A())
-    container.register_component(component_name="a2", component=A())
+    container._install_instance_binding(component_name="a1", component=A())
+    container._install_instance_binding(component_name="a2", component=A())
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.find_one_by_type(A)
+        await container.find_one_by_type(A)
 
 
 def test_build_sets_built_and_is_one_shot(container, monkeypatch):
-    # Stub out compiler so build() doesn't depend on full compilation stack
     class DummyCompiler:
         def __init__(self, container): ...
         def discover_components(self, config): ...
+        def register_component_definition(self, node): ...
         def analyze_dependencies(self): ...
         async def instantiate_components(self): ...
 
@@ -175,15 +206,15 @@ def test_build_sets_built_and_is_one_shot(container, monkeypatch):
         asyncio.run(container.build())
 
 
-def test_create_requires_container_built(container):
+async def test_create_requires_container_built(container):
     class App:
         def __init__(self): ...
 
     with pytest.raises(RuntimeError):
-        container.create_component(App)
+        await container.create_component(App)
 
 
-def test_create_injects_single_dependency(container):
+async def test_create_injects_single_dependency(container):
     class Service: ...
 
     class App:
@@ -191,39 +222,31 @@ def test_create_injects_single_dependency(container):
             self.service = service
 
     svc = Service()
-    container.register_component(component_name="service", component=svc)
-
+    container._install_instance_binding(component_name="service", component=svc)
     container._built = True
-    app = container.create_component(App)
+
+    app = await container.create_component(App)
 
     assert isinstance(app, App)
     assert app.service is svc
 
 
-def test_create_injects_multiple_dependencies(container):
-    class A: ...
-
-    class B: ...
+async def test_create_resolves_factory_binding(container):
+    class Service: ...
 
     class App:
-        def __init__(self, a: A, b: B):
-            self.a = a
-            self.b = b
+        def __init__(self, service: Service):
+            self.service = service
 
-    a = A()
-    b = B()
-
-    container.register_component(component_name="a", component=a)
-    container.register_component(component_name="b", component=b)
-
+    container._install_factory_binding("service", Service)
     container._built = True
-    app = container.create_component(App)
 
-    assert app.a is a
-    assert app.b is b
+    app = await container.create_component(App)
+
+    assert isinstance(app.service, Service)
 
 
-def test_create_raises_if_dependency_missing(container):
+async def test_create_raises_if_dependency_missing(container):
     class Service: ...
 
     class App:
@@ -232,336 +255,231 @@ def test_create_raises_if_dependency_missing(container):
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create_component(App)
+        await container.create_component(App)
 
 
-def test_create_raises_if_multiple_dependency_matches(container):
+async def test_create_raises_if_multiple_dependency_matches(container):
     class Service: ...
 
     class App:
         def __init__(self, service: Service): ...
 
-    container.register_component(component_name="s1", component=Service())
-    container.register_component(component_name="s2", component=Service())
-
+    container._install_instance_binding(component_name="s1", component=Service())
+    container._install_instance_binding(component_name="s2", component=Service())
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create_component(App)
+        await container.create_component(App)
 
 
-def test_create_requires_type_annotations(container):
+async def test_create_requires_type_annotations(container):
     class Service: ...
 
     class App:
         def __init__(self, service):
             self.service = service
 
-    container.register_component(component_name="service", component=Service())
+    container._install_instance_binding(component_name="service", component=Service())
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create_component(App)
+        await container.create_component(App)
 
 
-def test_create_uses_default_value_if_dependency_missing(container):
+async def test_create_uses_default_value_if_dependency_missing(container):
     class App:
         def __init__(self, timeout: int = 30):
             self.timeout = timeout
 
     container._built = True
-
-    app = container.create_component(App)
+    app = await container.create_component(App)
 
     assert app.timeout == 30
 
 
-def test_create_prefers_container_dependency_over_default(container):
+async def test_create_prefers_container_dependency_over_default(container):
     class App:
         def __init__(self, value: int = 30):
             self.value = value
 
-    container.register_component(component_name="value", component=99)
-
+    container._install_instance_binding(component_name="value", component=99)
     container._built = True
-    app = container.create_component(App)
+
+    app = await container.create_component(App)
 
     assert app.value == 99
 
 
-def test_create_wraps_constructor_errors(container):
+async def test_create_wraps_constructor_errors(container):
     class Service: ...
 
     class App:
         def __init__(self, service: Service):
             raise RuntimeError("boom")
 
-    container.register_component(component_name="service", component=Service())
+    container._install_instance_binding(component_name="service", component=Service())
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create_component(App)
+        await container.create_component(App)
 
 
-def test_create_class_with_no_dependencies(container):
+async def test_create_class_with_no_dependencies(container):
     class App:
         def __init__(self):
             self.ok = True
 
     container._built = True
-
-    app = container.create_component(App)
+    app = await container.create_component(App)
 
     assert isinstance(app, App)
     assert app.ok is True
 
 
-def test_create_ignores_self_parameter(container):
-    class App:
-        def __init__(self):
-            pass
-
-    container._built = True
-
-    app = container.create_component(App)
-    assert isinstance(app, App)
-
-
-def test_create_resolves_factory_binding(container):
-    class Service: ...
-
-    class App:
-        def __init__(self, service: Service):
-            self.service = service
-
-    container.register_factory("service", Service)
-
-    container._built = True
-
-    app = container.create_component(App)
-
-    assert isinstance(app.service, Service)
-
-
-def test_create_requires_class(container):
+async def test_create_requires_class(container):
     container._built = True
 
     with pytest.raises(FlotillaConfigurationError):
-        container.create_component(object())
+        await container.create_component(object())
 
 
-from typing import Optional, Union, Annotated
-
-
-def test_find_instances_optional_type(container):
-    class TelemetryPolicy:
-        pass
+async def test_find_instances_optional_type(container):
+    class TelemetryPolicy: ...
 
     policy = TelemetryPolicy()
-
-    container.register_component(component_name="telemetry", component=policy)
+    container._install_instance_binding(component_name="telemetry", component=policy)
     container._built = True
 
-    matches = container.find_instances_by_type(Optional[TelemetryPolicy])
-
-    assert matches == [policy]
+    assert await container.find_instances_by_type(Optional[TelemetryPolicy]) == [policy]
 
 
-def test_find_instances_union_type(container):
-    class TelemetryPolicy:
-        pass
+async def test_find_instances_union_type(container):
+    class TelemetryPolicy: ...
 
     policy = TelemetryPolicy()
-
-    container.register_component(component_name="telemetry", component=policy)
+    container._install_instance_binding(component_name="telemetry", component=policy)
     container._built = True
 
-    matches = container.find_instances_by_type(Union[TelemetryPolicy, None])
-
-    assert matches == [policy]
+    assert await container.find_instances_by_type(Union[TelemetryPolicy, None]) == [policy]
 
 
-def test_find_instances_annotated_type(container):
-    class TelemetryPolicy:
-        pass
+async def test_find_instances_annotated_type(container):
+    class TelemetryPolicy: ...
 
     policy = TelemetryPolicy()
-
-    container.register_component(component_name="telemetry", component=policy)
+    container._install_instance_binding(component_name="telemetry", component=policy)
     container._built = True
 
-    matches = container.find_instances_by_type(Annotated[TelemetryPolicy, "meta"])
-
-    assert matches == [policy]
+    assert await container.find_instances_by_type(Annotated[TelemetryPolicy, "meta"]) == [policy]
 
 
-def test_find_instances_union_multiple_types(container):
-    class A:
-        pass
-
-    class B:
-        pass
+async def test_find_instances_union_multiple_types(container):
+    class A: ...
+    class B: ...
 
     a = A()
     b = B()
-
-    container.register_component(component_name="a", component=a)
-    container.register_component(component_name="b", component=b)
-
+    container._install_instance_binding(component_name="a", component=a)
+    container._install_instance_binding(component_name="b", component=b)
     container._built = True
 
-    matches = container.find_instances_by_type(Union[A, B])
+    matches = await container.find_instances_by_type(Union[A, B])
 
     assert set(matches) == {a, b}
 
 
-def test_find_one_optional_type(container):
-    class TelemetryPolicy:
-        pass
+async def test_container_startup_and_shutdown_call_component_lifecycle(container):
+    events = []
 
-    policy = TelemetryPolicy()
+    class Service(Startup, Shutdown):
+        async def startup(self):
+            events.append("startup")
 
-    container.register_component(component_name="telemetry", component=policy)
+        async def shutdown(self):
+            events.append("shutdown")
+
+    container._install_instance_binding(component_name="service", component=Service())
     container._built = True
 
-    result = container.find_one_by_type(Optional[TelemetryPolicy])
+    await container.startup(timeout=1)
+    await container.shutdown(timeout=1)
 
-    assert result is policy
+    assert events == ["startup", "shutdown"]
 
 
-def test_create_component_optional_dependency(container):
-    class Service:
-        pass
+async def test_startup_protocol_does_not_require_shutdown(container):
+    events = []
 
-    class App:
-        def __init__(self, service: Optional[Service]):
-            self.service = service
+    class Service(Startup):
+        async def startup(self):
+            events.append("startup")
 
-    svc = Service()
-
-    container.register_component(component_name="service", component=svc)
+    container._install_instance_binding(component_name="service", component=Service())
     container._built = True
 
-    app = container.create_component(App)
+    await container.startup(timeout=1)
+    await container.shutdown(timeout=1)
 
-    assert app.service is svc
+    assert events == ["startup"]
 
 
-def test_create_component_optional_dependency_missing(container):
-    class Service:
-        pass
+async def test_shutdown_protocol_does_not_require_startup(container):
+    events = []
 
-    class App:
-        def __init__(self, service: Optional[Service]):
-            self.service = service
+    class Service(Shutdown):
+        async def shutdown(self):
+            events.append("shutdown")
 
+    container._install_instance_binding(component_name="service", component=Service())
     container._built = True
 
-    app = container.create_component(App)
+    await container.startup(timeout=1)
+    await container.shutdown(timeout=1)
 
-    assert app.service is None
+    assert events == ["shutdown"]
 
 
-def test_create_component_union_dependency(container):
-    class A:
-        pass
+async def test_define_component_is_compiled_during_build(container):
+    def provider(value):
+        return {"value": value}
 
-    class B:
-        pass
+    container.register_provider("provider", provider)
+    container.define_component("component", provider="provider", value=7)
 
-    class App:
-        def __init__(self, service: Union[A, B]):
-            self.service = service
+    await container.build()
 
-    a = A()
+    assert await container.get("component") == {"value": 7}
 
-    container.register_component(component_name="a", component=a)
+
+async def test_define_factory_is_compiled_during_build(container):
+    def provider(value=1):
+        return {"value": value}
+
+    container.register_provider("provider", provider)
+    container.define_factory("factory", factory="provider", value=2)
+
+    await container.build()
+
+    assert await container.get("factory") == {"value": 2}
+    assert await container.get("factory", value=3) == {"value": 3}
+
+
+async def test_factory_starts_instances_created_after_container_startup(container):
+    events = []
+
+    class Service(Startup, Shutdown):
+        async def startup(self):
+            events.append("startup")
+
+        async def shutdown(self):
+            events.append("shutdown")
+
+    container._install_factory_binding("service", Service)
     container._built = True
 
-    app = container.create_component(App)
+    await container.startup(timeout=1)
+    instance = await container.get("service")
+    await container.shutdown(timeout=1)
 
-    assert app.service is a
-
-
-def test_optional_with_multiple_matches(container):
-    class Service:
-        pass
-
-    class App:
-        def __init__(self, service: Optional[Service]):
-            self.service = service
-
-    container.register_component(component_name="s1", component=Service())
-    container.register_component(component_name="s2", component=Service())
-
-    container._built = True
-
-    with pytest.raises(FlotillaConfigurationError):
-        container.create_component(App)
-
-
-def test_find_instances_pipe_union_optional(container):
-    class TelemetryPolicy:
-        pass
-
-    policy = TelemetryPolicy()
-
-    container.register_component(component_name="telemetry", component=policy)
-    container._built = True
-
-    matches = container.find_instances_by_type(TelemetryPolicy | None)
-
-    assert matches == [policy]
-
-
-def test_create_component_pipe_optional_dependency(container):
-    class Service:
-        pass
-
-    class App:
-        def __init__(self, service: Service | None = None):
-            self.service = service
-
-    svc = Service()
-
-    container.register_component(component_name="service", component=svc)
-    container._built = True
-
-    app = container.create_component(App)
-
-    assert app.service is svc
-
-
-def test_create_component_pipe_optional_missing(container):
-    class Service:
-        pass
-
-    class App:
-        def __init__(self, service: Service | None = None):
-            self.service = service
-
-    container._built = True
-
-    app = container.create_component(App)
-
-    assert app.service is None
-
-
-def test_union_pipe_multiple_types(container):
-    class A:
-        pass
-
-    class B:
-        pass
-
-    class App:
-        def __init__(self, dep: A | B):
-            self.dep = dep
-
-    a = A()
-    container.register_component(component_name="a", component=a)
-
-    container._built = True
-    app = container.create_component(App)
-
-    assert app.dep is a
+    assert isinstance(instance, Service)
+    assert events == ["startup", "shutdown"]

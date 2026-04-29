@@ -14,14 +14,15 @@ import uvicorn
 
 class FastApiFlotillaApplication(FlotillaApplication):
 
-    def _execute_build(self):
+    async def _execute_build(self):
         self.telemetry.emit(
             TelemetryEvent.info(type="", component="FastAPIAdapter", message="Start creation of FastAPIAdapter")
         )
 
-        handlers = self._container.find_instances_by_type(HTTPHandler)
-        exception_handlers = self._container.find_instances_by_type(HTTPExceptionHandler)
-        interceptors = self._container.find_instances_by_type(HTTPRequestInterceptor)
+        handlers = await self._container.find_instances_by_type(HTTPHandler)
+        exception_handlers = await self._container.find_instances_by_type(HTTPExceptionHandler)
+        interceptors = await self._container.find_instances_by_type(HTTPRequestInterceptor)
+        self._fastapi_run_config = await self._resolve_config()
 
         self._adapter = self.create_adapter(
             handlers=handlers, exception_handlers=exception_handlers, interceptors=interceptors
@@ -62,13 +63,13 @@ class FastApiFlotillaApplication(FlotillaApplication):
         uvicorn.run(
             self.app,
             **{
-                **self._resolve_config().model_dump(),
+                **self._fastapi_run_config.model_dump(),
                 **kwargs,
             },
         )
 
-    def _resolve_config(self) -> FastAPIRunConfig:
-        configs = self._container.find_instances_by_type(FastAPIRunConfig)
+    async def _resolve_config(self) -> FastAPIRunConfig:
+        configs = await self._container.find_instances_by_type(FastAPIRunConfig)
         if len(configs) > 1:
             raise ValueError("Expected at most one FastAPIRunConfig")
 

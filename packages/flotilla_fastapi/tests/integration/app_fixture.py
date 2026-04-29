@@ -22,7 +22,7 @@ class TestApp(FastApiFlotillaApplication):
 async def build_application():
     # create the FlotillaContainer and regiser the HelloHandler
     container = FlotillaContainer(FlotillaSettings({}))
-    container.register_component(component_name="handler", component=HelloHandler())
+    container._install_instance_binding(component_name="handler", component=HelloHandler())
     await container.build()
 
     # create the FlotillaApplication and make FastAPI available

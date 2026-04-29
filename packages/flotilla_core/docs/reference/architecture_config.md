@@ -1,305 +1,268 @@
-# Flotilla Architecture Overview
+# Flotilla Configuration Architecture
 
-## What is Flotilla?
+## What Is Flotilla Configuration?
 
-Flotilla is a **declarative component graph specification language** that compiles YAML configuration into a fully-instantiated dependency injection container.
+Flotilla is a declarative component registry system. Configuration from YAML,
+Python, or other sources is loaded, validated, compiled into container bindings,
+and then started as part of application lifecycle.
 
-### Key Insight
+The core idea remains:
 
-Flotilla does not interpret YAML dynamically at runtime. Instead, it treats configuration as **code that compiles** into a deterministic object graph before your application runs.
+- configuration errors are caught during build/startup
+- component references are validated before runtime execution
+- singleton components are instantiated deterministically
+- factory bindings are validated and can create parameterized instances
+- component lifecycle is coordinated by the container
 
-This means:
-- Configuration errors are caught at startup, not at runtime
-- No symbolic references or indirection during execution
-- Guaranteed valid dependency graph if compilation succeeds
+## Pipeline
 
----
-
-## Two-Phase Compilation Pipeline
-
-```
-YAML Configuration
-        ↓
+```text
+Configuration Sources
+        |
+        v
    ConfigLoader
-   (Phase 1: Resolve symbolic config)
-        ↓
-Resolved Configuration
-        ↓
+   - merge sources
+   - resolve $secret
+        |
+        v
+  FlotillaSettings
+        |
+        v
   ComponentCompiler
-  (Phase 2: Build object graph)
-        ↓
-  DI Container
-        ↓
-Runtime Execution
-(pure behavior, zero config overhead)
+   - collect YAML definitions
+   - collect Python definitions
+   - validate full registry
+   - install bindings
+        |
+        v
+  FlotillaContainer
+   - async get()
+   - async startup()
+   - async shutdown()
+        |
+        v
+ Runtime Execution
 ```
 
-Each phase has strict responsibilities and provides specific guarantees about what the next phase receives.
+Each phase has strict responsibilities and provides specific guarantees to the
+next phase.
 
----
+## Phase 1: Configuration Loading
 
-## Phase 1: Configuration Resolution
+Component: `ConfigLoader`
 
-**Component:** `ConfigLoader`
+Mission: transform configuration sources into a single deterministic
+configuration tree.
 
-**Mission:** Transform raw YAML sources into a single, fully-resolved configuration tree with all symbolic references eliminated.
+The loader handles:
 
-### What Gets Resolved
+- multi-source merging
+- secret resolution
+- async or sync source loading
 
-The ConfigLoader handles configuration-time concerns:
+After `ConfigLoader` runs:
 
-- **Multi-source merging** - Combine multiple config files with deterministic override semantics
-- **Secret resolution** - Replace `$secret` directives with actual values from secret stores
-- **Config injection** - Resolve `$config` references that inject configuration subtrees
-- **Environment substitution** - Handle environment variable references
+- source ordering has been applied
+- no `$secret` directives remain
+- the configuration dictionary is wrapped in `FlotillaSettings`
 
-### Why This Matters
+The loader does not resolve component references, create components, or perform
+factory semantics.
 
-After ConfigLoader runs, you have a **concrete configuration tree** with:
-- No references to other config sections
-- No unresolved secrets
-- No environment-dependent tokens
-- Complete determinism - the same config tree every time
+## Phase 2: Registry Compilation
 
-### Output Contract
+Component: `ComponentCompiler`
 
-The ConfigLoader produces `FlotillaSettings` containing a fully-resolved dictionary. This dictionary is **immutable** and ready for the compiler.
+Mission: build a unified registry from declarative configuration and Python
+registrations, then install validated container bindings.
 
-**Guarantee:** No configuration-time directives (`$secret`, `$config`) remain.
+The registry can contain:
 
----
+- singleton component definitions from YAML
+- factory definitions from YAML
+- singleton component definitions from Python configuration sources
+- factory definitions from Python configuration sources
+- pre-build Python component definitions
+- pre-build Python factory definitions
+- explicit instance bindings for framework integration
 
-## Phase 2: Component Compilation
+The compiler validates:
 
-**Component:** `ComponentCompiler`
+- duplicate names
+- missing references
+- dependency cycles
+- provider availability
+- factory parameterization
+- invalid singleton parameterization
+- structural grammar violations
 
-**Mission:** Build a validated dependency graph and instantiate all components in the correct order.
+The compiler installs:
 
-### The Component Graph Model
+- `SingletonBinding` for `$provider` and `$class` definitions
+- `FactoryBinding` for `$factory` definitions
 
-Flotilla treats your configuration as a **component graph specification**:
+## Singleton Bindings
 
-- Each `factory` node defines a component
-- `$ref` directives create edges in the dependency graph
-- The compiler validates the graph (no cycles, no missing dependencies)
-- Components are instantiated in topological order
+Singleton definitions are instantiated during build in dependency order.
 
-### What Gets Compiled
+```yaml
+store:
+  $provider: stores.memory
 
-The ComponentCompiler transforms directive nodes into concrete objects:
+runtime:
+  $provider: runtime.default
+  store:
+    $ref: store
+```
 
-- **Component definitions** (`factory` nodes) → Instantiated objects
-- **`$ref` directives** → References to already-instantiated components
-- **`$list` directives** → Python lists containing resolved values
-- **`$map` directives** → Python dictionaries containing resolved values
+The compiler materializes `$ref`, `$list`, and `$map` values before invoking the
+provider.
 
-### The Compilation Process
+## Factory Bindings
 
-1. **Discovery** - Scan the config tree and register all component definitions
-2. **Graph Construction** - Build the dependency graph by analyzing `$ref` usage
-3. **Validation** - Detect cycles, missing references, and structural errors
-4. **Topological Sort** - Determine safe instantiation order
-5. **Instantiation** - Create components, materializing all directives
+Factory definitions are installed during build but do not eagerly create their
+produced instances.
 
-### Why This Matters
+```yaml
+llm_factory:
+  $factory: llm.openai
+  model: gpt-4o-mini
+```
 
-The compiler catches errors **before your application runs**:
-- Missing component references
-- Circular dependencies
-- Invalid factory signatures
-- Type mismatches
+Resolving a factory binding creates a new instance.
 
-If compilation succeeds, you're guaranteed a valid object graph.
+```python
+llm = await container.get("llm_factory", temperature=0.1)
+```
 
-### Output Contract
+Factories may also be referenced from configuration.
 
-The ComponentCompiler produces an **immutable DI container** containing fully-instantiated components.
+```yaml
+agent:
+  $provider: agents.weather
+  llm:
+    $ref: llm_factory
+    $params:
+      temperature: 0.1
+```
 
-**Guarantee:** No directives (`$ref`, `$list`, `$map`) or raw data structures remain - only concrete Python objects.
+`$params` is only valid for factory references. Passing parameters to a
+singleton reference is a build error.
 
----
+## Python And YAML Composition
 
-## Phase Boundaries and Guarantees
+Python and YAML definitions participate in one registry. This allows:
 
-Each phase eliminates certain types of symbolic references, progressively transforming the configuration into concrete objects.
+- YAML components to depend on Python-defined components
+- Python-defined components to depend on YAML components
+- YAML and Python factories to be consumed through the same `$ref` semantics
 
-### After Phase 1 (ConfigLoader)
+Application developers should register component definitions, not finished
+components. Installing resolved component bindings is the compiler's job.
 
-**Input:** Raw YAML with config-time directives  
-**Output:** Fully-resolved configuration tree
+Python configuration sources are the preferred way to contribute programmatic
+configuration:
 
-**Eliminated:**
-- `$secret` directives
-- `$config` references
-- Environment variables
-- Multi-source ambiguity
+```python
+def configure_runtime():
+    return {
+        "runtime": {
+            "$provider": "runtime.default",
+        }
+    }
+```
 
-**Result:** A single, deterministic configuration dictionary ready for compilation.
+Multiple Python configuration methods may be composed by a source in a known
+order and merged like any other configuration source.
 
-### After Phase 2 (ComponentCompiler)
+Although Python configuration functions and providers are both callables, they
+belong to different phases. Configuration functions return dictionaries that
+describe definitions. Providers return actual runtime objects. Factory bindings
+wrap providers or factory callables and create new runtime objects when
+resolved.
 
-**Input:** Resolved configuration with component directives  
-**Output:** Immutable DI container with instantiated objects
+## Container Lifecycle
 
-**Eliminated:**
-- `$ref` directives
-- `$list` wrappers
-- `$map` wrappers
-- Raw lists and dicts (enforced structural validation)
-- `factory` definitions (replaced with instances)
+The container has an explicit async lifecycle.
 
-**Result:** A fully-instantiated object graph with zero indirection.
+```python
+await container.build()
+await container.startup(timeout=30)
+component = await container.get("component")
+await container.shutdown(timeout=30)
+```
 
----
+Components opt into lifecycle by implementing either method:
 
-## The Determinism Guarantee
+```python
+def startup() -> None | Awaitable[None]: ...
+def shutdown() -> None | Awaitable[None]: ...
+```
 
-Flotilla's compilation approach provides a critical guarantee:
+Startup behavior:
 
-> **If your application starts successfully, your entire component graph is valid.**
+- runs after build
+- runs in dependency order
+- applies timeout to awaitable lifecycle calls
+- if startup fails, already-started bindings are shut down
 
-This means:
+Shutdown behavior:
 
-### No Runtime Wiring Failures
+- runs in reverse dependency order
+- continues best-effort across failures
+- applies timeout to awaitable lifecycle calls
+- is safe to call after partial startup failure
 
-All dependencies are resolved at compile time. You'll never encounter:
-- "Component not found" errors during execution
-- Null reference exceptions from missing dependencies
-- Late-bound configuration errors
+`FactoryBinding` tracks every instance it creates. If the container has already
+started, a factory-created instance is started before it is returned. During
+shutdown, factory-created instances are shut down in reverse creation order.
 
-### Fail Fast
+## Runtime Contract
 
-All configuration and wiring errors are detected **before** your application code runs:
-- Missing components are caught during compilation
-- Circular dependencies are detected immediately
-- Invalid factory signatures fail early
-- Type mismatches are found before execution
+After successful startup:
 
-### Zero Configuration Overhead at Runtime
+- singleton components are constructed
+- factory bindings are ready for async resolution
+- all known dependency edges are valid
+- lifecycle ownership is known
+- raw configuration directives do not reach runtime collaborators
 
-Once compiled:
-- No symbolic lookups
-- No lazy resolution
-- No configuration parsing
-- Pure object references and method calls
-
-Your application runs with the same performance as if you had hand-wired all dependencies in code.
-
-### Predictable Behavior
-
-The same configuration always produces:
-- The same dependency graph
-- The same instantiation order
-- The same object identities
-- The same runtime behavior
-
-No hidden state, no environment-dependent surprises.
-
----
+The runtime may resolve factory bindings to create new instances, but those
+instances are still owned by the binding that created them.
 
 ## Design Philosophy
 
-### Configuration as Code
-
-Flotilla treats configuration not as data, but as **code that compiles**.
-
-Traditional configuration systems:
-- Parse config files at runtime
-- Look up values dynamically
-- Wire dependencies on-demand
-- Fail late with cryptic errors
-
-Flotilla instead:
-- Compiles configuration into code
-- Validates all dependencies upfront
-- Instantiates the full graph before execution
-- Fails early with clear error messages
-
 ### Explicit Over Implicit
 
-Flotilla rejects "convention over configuration" in favor of "explicit over implicit":
+Every binding must be declared. Every reference must resolve. Every parameterized
+reference must target a factory.
 
-- **No magic** - Every component, dependency, and collection must be declared
-- **No shortcuts** - Raw lists and dicts are forbidden; use `$list` and `$map`
-- **No surprises** - What you see in the config is exactly what you get at runtime
+### Build-Time Validation
 
-### Structural Enforcement
+Flotilla should fail before application execution when the component registry is
+invalid. Runtime code should not discover missing providers or invalid
+references by accident.
 
-The configuration grammar is **intentionally restrictive**:
+### Mixed Source Composition
 
-- Only specific node types are allowed
-- Free-form nested structures are forbidden
-- Every mapping must have a clear purpose (`factory`, directive, or scalar)
+YAML is a convenient human-authored format, not the only source of truth.
+Python-generated configuration and pre-build Python registrations are first
+class contributors to the same registry.
 
-This rigidity ensures:
-- Configurations are machine-readable and analyzable
-- Tooling can provide intelligent validation
-- Refactoring is safe and predictable
+### Lifecycle As Ownership
 
-### Compile-Time Validation
+The binding that owns an instance is responsible for starting it and shutting it
+down. Singleton bindings own singleton instances. Factory bindings own the
+instances they create.
 
-By catching all errors at compile time, Flotilla enables:
-- **Confident deployments** - If it compiles, it works
-- **Fast feedback** - Errors appear immediately, not in production
-- **Better testing** - Integration tests can assume valid wiring
+## When To Use Flotilla
 
----
+Flotilla is useful when an application has:
 
-## Why This Architecture Matters
+- mixed YAML and Python composition needs
+- multiple components with explicit dependencies
+- resources requiring startup and shutdown coordination
+- factories that create parameterized runtime objects
+- a need for build-time validation of wiring
 
-### For Developers
-
-- **Write once, run correctly** - Valid config means valid runtime behavior
-- **Refactor safely** - The compiler catches breaking changes immediately
-- **Debug easily** - Clear error messages at compile time, not cryptic runtime failures
-- **Test confidently** - No need to test wiring; focus on business logic
-
-### For Operations
-
-- **Deploy safely** - Failed compilation prevents bad deploys
-- **Understand dependencies** - The component graph is explicit and analyzable
-- **Troubleshoot quickly** - No hidden configuration state or lazy loading surprises
-
-### For System Design
-
-- **Enforce boundaries** - Components can only depend on explicitly declared dependencies
-- **Control complexity** - The dependency graph is visible and validated
-- **Enable tooling** - IDEs, linters, and visualizers can understand the config
-
----
-
-## Mental Model
-
-Think of Flotilla configuration like TypeScript or Rust:
-
-1. **You write code** (configuration DSL)
-2. **The compiler validates it** (ConfigLoader + ComponentCompiler)
-3. **You get artifacts** (DI Container)
-4. **You run the artifacts** (your application)
-
-The configuration **is not read at runtime**. It's **compiled into runtime**.
-
----
-
-## When to Use Flotilla
-
-Flotilla is ideal when you need:
-
-- **Complex dependency graphs** - Many components with intricate wiring
-- **High reliability requirements** - Can't afford runtime wiring failures
-- **Large teams** - Need clear contracts and safe refactoring
-- **Long-lived systems** - Want maintainable, understandable configuration
-
-Flotilla may be overkill for:
-
-- Simple applications with few dependencies
-- Prototypes where flexibility matters more than validation
-- Systems that need truly dynamic runtime configuration
-
----
-
-## Further Reading
-
-For detailed syntax rules, directive specifications, and grammar requirements, see the **Flotilla Configuration Rules** documentation.
-
-This overview provides the conceptual foundation; the rules document provides the technical specification.
+It may be unnecessary for small applications with only a few hand-wired objects.

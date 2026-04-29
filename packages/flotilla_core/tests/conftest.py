@@ -35,7 +35,7 @@ def container_factory():
     def _factory(components: Optional[Dict[str, Any]] = {}):
         container = FlotillaContainer(settings=FlotillaSettings({}))
         for name, componet in components.items():
-            container.register_component(component_name=name, component=componet)
+            container._install_instance_binding(component_name=name, component=componet)
         return container
 
     return _factory

@@ -8,6 +8,7 @@ Start with capabilities when you want to understand how Flotilla works as a work
 
 Capability specs describe end-to-end behavior across multiple components.
 
+- [Application Composition](capabilities/application_composition.md)
 - [Agent Orchestration](capabilities/agent_orchestration.md)
 
 ## Components

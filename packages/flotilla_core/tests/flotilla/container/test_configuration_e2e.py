@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 from typing import Dict
 
@@ -6,8 +5,6 @@ from flotilla.config.sources.yaml_configuration_source import YamlConfigurationS
 from flotilla.config.secret_resolver import SecretResolver
 from flotilla.config.config_loader import ConfigLoader
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.container.constants import REFLECTION_PROVIDER_KEY
-from flotilla.container.providers.reflection_provider import ReflectionProvider
 from flotilla.runtime.flotilla_runtime import FlotillaRuntime
 from flotilla.tools.flotilla_tool import FlotillaTool
 
@@ -37,11 +34,16 @@ class Tool1(FlotillaTool):
         return self.run
 
 
+class InlineHandler:
+    def __init__(self, label: str):
+        self.label = label
+
+
 def write(path: Path, content: str):
     path.write_text(content, encoding="utf-8")
 
 
-def test_configuration_e2e(tmp_path: Path, agent_factory, tool_factory, resume_service_valid, store, telemetry_policy):
+async def test_configuration_e2e(tmp_path: Path, agent_factory, tool_factory, resume_service_valid, store, telemetry_policy):
 
     def mock_agent_provider(**kwargs):
         return agent_factory(name="Mock Agent", **kwargs)
@@ -60,6 +62,9 @@ def test_configuration_e2e(tmp_path: Path, agent_factory, tool_factory, resume_s
 
     def tool_1_provider(key: str):
         return Tool1(key=key)
+
+    def mock_router_provider(handlers: Dict[str, object]):
+        return {"handlers": handlers}
 
     write(
         path=tmp_path / "flotilla.yml",
@@ -117,14 +122,27 @@ agent:
     $provider: mock_agent_provider
     tools:
         $list:
-            - $ref: tool_1
+            - $ref: tool_factory
+              $params:
+                key:
+                    $secret: secret_key
             - $provider: mock_tool_2_provider
 tools:
-    tool_1:
-        $provider: tool_1_provider
-        $name: tool_1
-        key:
-            $secret: secret_key
+    tool_factory:
+        $factory: tool_1_provider
+        $name: tool_factory
+
+router:
+    $provider: mock_router_provider
+    handlers:
+        $map:
+            factory_tool:
+                $ref: tool_factory
+                $params:
+                    key: map-tool
+            inline_handler:
+                $class: container.test_configuration_e2e.InlineHandler
+                label: inline
 """,
     )
 
@@ -134,21 +152,21 @@ tools:
 
     # create config loader
     config_loader = ConfigLoader(sources=[config_source], secrets=[secret_resolver])
-    settings = asyncio.run(config_loader.load())
+    settings = await config_loader.load()
 
-    # create the container and register the reflection provider
+    # create the container
     container = FlotillaContainer(settings=settings)
     # Register providers
-    container.register_provider(REFLECTION_PROVIDER_KEY, ReflectionProvider())
     container.register_provider("mock_resume_provider", mock_resume_provider)
     container.register_provider("fake_store_provider", mock_store_provider)
     container.register_provider("mock_telemetry_provider", mock_telemtry_provider)
     container.register_provider("mock_agent_provider", mock_agent_provider)
     container.register_provider("mock_tool_2_provider", mock_tool2_provider)
     container.register_provider("tool_1_provider", tool_1_provider)
+    container.register_provider("mock_router_provider", mock_router_provider)
 
     # start building the container
-    asyncio.run(container.build())
+    await container.build()
 
     # ---------------------------
     # Check components were built and registered on the container
@@ -164,16 +182,18 @@ tools:
     assert container.exists("example.suspend_policy")
     assert container.exists("example.telemetry")
     assert container.exists("agent")
+    assert container.exists("tool_factory")
+    assert container.exists("router")
 
     # ---------------------------
     # Assert $ref
     # ---------------------------
-    runtime: FlotillaRuntime = container.get("runtime")
+    runtime: FlotillaRuntime = await container.get("runtime")
 
     assert runtime
     assert runtime._orchestration
     # confirm that orchestration on runtime is the same as the container
-    assert runtime._orchestration is container.get("orchestration_strategy")
+    assert runtime._orchestration is await container.get("orchestration_strategy")
     assert runtime._store
     assert runtime._phase_context_service
     assert runtime._resume_service
@@ -181,32 +201,42 @@ tools:
     assert runtime._telemetry_policy
     assert runtime._timeout_policy
     # assert embedded componet is attached to runtime and is the same as on the container
-    assert runtime._timeout_policy is container.get("example.runtime.execution_timeout_policy")
+    assert runtime._timeout_policy is await container.get("example.runtime.execution_timeout_policy")
 
     # ---------------------------
     # Assert $list
     # ---------------------------
 
-    agent = container.get("agent")
+    agent = await container.get("agent")
     assert agent
     assert agent.extra_kwargs["tools"]
     assert len(agent.extra_kwargs["tools"]) == 2
     assert isinstance(agent.extra_kwargs["tools"][0], FlotillaTool)
 
     # ---------------------------
-    # Assert $secret
+    # Assert $factory, $params and $secret
     # ---------------------------
 
-    tool_1 = container.get("tool_1")
-    assert tool_1
-    assert tool_1.api_key
-    # assert against value set on secret resolver before config
-    assert tool_1.api_key == "testing"
+    tool_from_agent = agent.extra_kwargs["tools"][0]
+    assert isinstance(tool_from_agent, Tool1)
+    assert tool_from_agent.api_key == "testing"
 
-    # ---------------------------
-    # Assert $config
-    # ---------------------------
+    tool_from_factory = await container.get("tool_factory", key="manual")
+    assert isinstance(tool_from_factory, Tool1)
+    assert tool_from_factory.api_key == "manual"
+    assert tool_from_factory is not tool_from_agent
 
     # ---------------------------
     # Assert $map
     # ---------------------------
+
+    router = await container.get("router")
+    handlers = router["handlers"]
+
+    assert isinstance(handlers["factory_tool"], Tool1)
+    assert handlers["factory_tool"].api_key == "map-tool"
+    assert handlers["factory_tool"] is not tool_from_agent
+    assert handlers["factory_tool"] is not tool_from_factory
+
+    assert isinstance(handlers["inline_handler"], InlineHandler)
+    assert handlers["inline_handler"].label == "inline"

@@ -1,5 +1,4 @@
 from typing import Any, Dict, Optional
-from flotilla.config.errors import ConfigurationResolutionError
 
 
 class ConfigUtils:
@@ -87,96 +86,6 @@ class ConfigUtils:
                 return None
 
         return current
-
-    # ------------------------------------------------------------
-    # NEW: $config resolution
-    # ------------------------------------------------------------
-
-    @staticmethod
-    def resolve_config_refs(
-        config: Any,
-        *,
-        root: Dict[str, Any],
-    ) -> Any:
-        """
-        Resolve all $config references in the given config tree.
-
-        $config semantics:
-          - Must resolve to a dict
-          - Optional overrides are deep-merged
-          - Resolution is recursive
-        """
-
-        def resolver(node: Any) -> Any:
-            if isinstance(node, dict) and "$config" in node:
-                return ConfigUtils._resolve_config_ref(node, root)
-            return node
-
-        return ConfigUtils.walk_and_replace(config, resolver)
-
-    @staticmethod
-    def resolve_config_refs(config: Any, *, root: Dict[str, Any]) -> Any:
-        return ConfigUtils._resolve_config_refs_internal(
-            config,
-            root=root,
-            resolving=[],
-        )
-
-    @staticmethod
-    def _resolve_config_refs_internal(
-        value: Any,
-        *,
-        root: Dict[str, Any],
-        resolving: list[str],
-    ) -> Any:
-        def resolver(node: Any) -> Any:
-            if isinstance(node, dict) and "$config" in node:
-                return ConfigUtils._resolve_config_ref(
-                    node,
-                    root=root,
-                    resolving=resolving,
-                )
-            return node
-
-        return ConfigUtils.walk_and_replace(value, resolver)
-
-    @staticmethod
-    def _resolve_config_ref(
-        ref: Dict[str, Any], *, root: Dict[str, Any], resolving: list[str]
-    ) -> Dict[str, Any]:
-        path = ref.get("$config")
-
-        if not isinstance(path, str):
-            raise ConfigurationResolutionError("$config must be a string path")
-
-        # 🚨 Cycle detection
-        if path in resolving:
-            cycle = " -> ".join(resolving + [path])
-            raise ConfigurationResolutionError(f"$config cycle detected: {cycle}")
-
-        base_cfg = ConfigUtils.get_at_path(root, path)
-        if not isinstance(base_cfg, dict):
-            raise ConfigurationResolutionError(
-                f"$config '{path}' must resolve to a config object"
-            )
-
-        overrides = ref.get("overrides", {})
-        if overrides is not None and not isinstance(overrides, dict):
-            raise ConfigurationResolutionError("overrides must be a dict if provided")
-
-        # Push path onto resolution stack
-        resolving.append(path)
-        try:
-            merged = ConfigUtils.deep_merge(base_cfg, overrides or {})
-            # Recurse with updated resolving stack
-            return ConfigUtils._resolve_config_refs_internal(
-                merged,
-                root=root,
-                resolving=resolving,
-            )
-        finally:
-            # Always pop, even if resolution fails
-            resolving.pop()
 
     @staticmethod
     def contains_tag(value: Any, *, tag: str) -> bool:

@@ -1,659 +1,481 @@
 # Flotilla Configuration Rules
 
->  **Note:** This document provides the detailed technical specification of Flotilla's configuration grammar. For a conceptual overview of how Flotilla works and why it's designed this way, see the **Flotilla Architecture Overview**.
----
-## Overview
+This document defines the configuration grammar and container build rules for
+Flotilla.
 
-Flotilla configuration is a **declarative component graph specification language**, not arbitrary YAML, generic JSON, or loosely-typed config. It compiles YAML into a component graph of components defined by provider directives.
- 
+Flotilla configuration is a declarative component graph specification language.
+It may be authored in YAML, Python, or any other source that produces the same
+configuration dictionary. The configuration is compiled into a validated
+component registry and then into container bindings.
 
-**Core Philosophy:**
-- Explicit is required
-- Implicit is forbidden
-- Structure is enforced
-- Slop is rejected
----
-## Component Identity and Default Naming
+## Core Principles
 
-Each component registered in the DI container has a **component identity** used for `$ref` resolution.
+- Explicit is required.
+- Implicit is forbidden.
+- Structure is enforced.
+- Configuration sources may be mixed.
+- Component wiring errors fail during build, not runtime execution.
 
-----------
+## Configuration Sources
 
-### Default Naming Convention
+Configuration fragments are provided by objects implementing the
+`ConfigurationSource` protocol.
 
-By default the compiler derives the component name from the **configuration path** of the component definition.
-
-The path is constructed by joining the mapping keys from the root of the configuration tree to the component node.
-
-Example:
-```yaml
-services:  
- user_service:  
- $provider: services.user
-```
-Default component name:
 ```python
+class ConfigurationSource(Protocol):
+    def load(self) -> Dict[str, Any] | Awaitable[Dict[str, Any]]: ...
+```
+
+Examples include:
+
+- YAML files
+- Python functions returning configuration fragments
+- Python objects exposing selected configuration methods
+- environment-derived configuration
+- remote configuration services
+- test fixtures
+
+`ConfigLoader` loads all sources and merges them into a single configuration
+tree.
+
+Merge semantics:
+
+- sources are applied in order
+- later sources override earlier sources
+- mappings are deep-merged
+- scalar values and lists replace earlier values
+
+## ConfigLoader Phase
+
+`ConfigLoader` is responsible for source-level concerns:
+
+- loading configuration fragments
+- merging fragments into one deterministic tree
+- resolving `$secret` directives
+
+After `ConfigLoader.load()`:
+
+- no `$secret` directives remain
+- the output is wrapped in `FlotillaSettings`
+- the result is ready for `ComponentCompiler`
+
+`ConfigLoader` does not perform component construction and does not own
+component reuse semantics.
+
+## Component Compiler Phase
+
+`ComponentCompiler` owns the build registry. The registry is the union of:
+
+- component specs discovered from configuration sources
+- component specs registered from Python before build
+- factory specs discovered from configuration sources
+- factory specs registered from Python before build
+- explicit instance bindings registered as framework escape hatches
+
+Application developers should register component definitions or factory
+definitions, not finished components. Installing resolved component bindings is
+an internal compiler/container operation.
+
+The compiler:
+
+1. Discovers component and factory definitions.
+2. Merges them with pre-build Python registrations.
+3. Validates names, references, parameters, and dependency cycles.
+4. Instantiates singleton component bindings in dependency order.
+5. Installs factory bindings without eagerly creating produced instances.
+6. Freezes the container registry.
+
+## Component Identity
+
+Each binding registered in the container has a unique identity used for `$ref`
+resolution.
+
+By default, the compiler derives the component name from the configuration path
+of the definition.
+
+```yaml
+services:
+  user_service:
+    $provider: services.user
+```
+
+Default component name:
+
+```text
 services.user_service
 ```
-----------
 
-### Nested Components
+If `$name` is provided, it overrides the path-derived identity.
 
-Nested components follow the same rule.
-
-Example:
 ```yaml
-agent:  
- $provider: agents.weather  
- llm:  
-	 $provider: llm.openai
+agent:
+  $provider: agents.weather
+  $name: weather_agent
 ```
-Component names produced by the compiler:
-```python
-agent  
-agent.llm
-```
-----------
 
-### `$name` Override
+Rules:
 
-If `$name` is provided, it overrides the default path-based name.
-
-Example:
-```yaml
-agent:  
-	$provider: agents.weather  
-	llm:  
-		$provider: llm.openai  
-		$name: weather_llm
-```
-Registered component names:
-```python
-agent  
-weather_llm
-```
-----------
-
-### Naming Invariants
-
--   Component names **must be unique**
--   Duplicate names cause a compilation error
--   `$ref` resolution uses the final component identity
-
+- names must be unique across YAML and Python registrations
+- duplicate names fail compilation
+- `$ref` resolution uses the final component identity
 
 ## Directives
 
-### $secret
+### `$secret`
 
-**Purpose:** Resolve a secure scalar value from a SecretResolver
+Purpose: resolve a secure scalar value from a `SecretResolver`.
 
-**Resolution Phase:** ConfigLoader
+Resolution phase: `ConfigLoader`
 
-**Rules:**
-- Must resolve to a scalar value
-- May appear anywhere a value is allowed
-- Must be fully resolved before compilation
-- Unresolved `$secret` → `SecretResolutionError`  
+Syntax:
 
-**Syntax:**
 ```yaml
-arg:
-	$secret: SECRET_KEY
+api_key:
+  $secret: OPENAI_API_KEY
 ```
-**Requirements:**
+
+Rules:
+
 - MUST be a mapping node
 - MUST contain only `$secret`
-- Value MUST be string
-  
-**Invariant:** No `$secret` may exist after `ConfigLoader.load()`
+- value MUST be a string
+- may appear anywhere a value is allowed
+- unresolved secrets fail loading
+- no `$secret` may exist after `ConfigLoader.load()`
 
-  ---
-### $config
+### `$provider`
 
-**Purpose:** Inject configuration anchored at a named path elsewhere in the config
+Purpose: define a singleton component constructed by a registered provider.
 
-**Resolution Phase:** ConfigLoader
+Resolution phase: `ComponentCompiler`
 
-**Syntax:**
-```yaml
-llm:
-	$config: llm.openai
-	overrides:
-		max_tokens: 5000
-```
-**Meaning:**
-- Resolve `llm.openai`
-- Deep-copy the referenced config subtree
-- Deep-merge the `overrides` mapping on top (last-wins)
-- Recursively resolve any nested `$config`
+Syntax:
 
-**Disallowed Form:**
-```yaml
-llm:
-	$config: llm.openai
-	max_tokens: 5000  # ❌ Illegal - arbitrary sibling keys not allowed
-```
-**Rules:**
-- MUST be a mapping node
-- MUST contain `$config`
-- MAY contain `overrides`
-- No other keys allowed
-- May appear anywhere in the config tree
-- Resolution is recursive and must reach a fixpoint
-- Referenced paths must exist
-- Injects structure via deep copy, not references
-- Unresolved `$config` → `ConfigurationResolutionError`
- 
-**Invariant:** No `$config` may exist after `ConfigLoader.load()`
-
-  ---
- 
-### $provider
- 
-**Purpose**: Construct a component using a registered provider in the DI container.  Custom Providers are registered via the FlotillaApplication.register_provider() method
-
-**Resolution Phase**: ComponentCompiler
-
-**Syntax**:
 ```yaml
 component:
-	$provider: provider.identifier
-	arg1: value
-	arg2: value
+  $provider: provider.identifier
+  arg1: value
+  arg2: value
 ```
-  
+
 Rules:
+
 - MUST be a mapping node
 - MUST contain `$provider`
-- Value MUST be a string
-- Other keys are interpreted as constructor keyword arguments
--  `$provider` MUST NOT appear with `$class`, other directives are allowed
----
+- value MUST be a string
+- MUST NOT appear with `$class` or `$factory`
+- MAY contain `$name`
+- other keys are constructor keyword arguments
+- argument values must conform to the Flotilla grammar
+- produces a singleton binding
 
+### `$class`
 
-### $class
+Purpose: define a singleton component constructed through reflection.
 
-**Purpose**: Construct a component using Python class reflection.  This is a short cut for the $provider usage where the Provider is assumed to be the automatically registered ReflectionProvider
+Resolution phase: `ComponentCompiler`
 
-**Resolution Phase**: ComponentCompiler
+Syntax:
 
-**Syntax**:
-  
 ```yaml
 component:
-	$class: package.module.ClassName
-	arg1: value
+  $class: package.module.ClassName
+  arg1: value
 ```
-  
-**Rules**:
+
+Rules:
+
 - MUST be a mapping node
 - MUST contain `$class`
-- Value MUST be a string
-- Other keys are interpreted as constructor keyword arguments
--  `$class` MUST NOT appear with `$provider`, other directives are allowed
+- value MUST be a string
+- MUST NOT appear with `$provider` or `$factory`
+- MAY contain `$name`
+- other keys are constructor keyword arguments
+- argument values must conform to the Flotilla grammar
+- produces a singleton binding
 
----
-### $name
+### `$factory`
 
-**Purpose**: Override the default component identity.  
+Purpose: define a factory binding that creates a new instance each time it is
+resolved.
 
-**Resolution Phase**: ComponentCompiler
+Resolution phase: `ComponentCompiler`
 
-**Syntax**:
+Syntax:
+
+```yaml
+llm_factory:
+  $factory: llm.openai
+  model: gpt-4o-mini
+```
+
+Rules:
+
+- MUST be a mapping node
+- MUST contain `$factory`
+- value MUST be a registered provider identifier or factory identifier
+- MUST NOT appear with `$provider` or `$class`
+- MAY contain `$name`
+- other keys are default keyword arguments for the factory
+- produces a `FactoryBinding`
+- the binding creates instances through `resolve(**kwargs)`
+- call-site kwargs override factory defaults
+- generated instances are owned by the factory binding for lifecycle purposes
+
+### `$name`
+
+Purpose: override the default component identity.
+
+Resolution phase: `ComponentCompiler`
+
+Syntax:
+
 ```yaml
 component:
   $provider: example.provider
   $name: custom_component_name
 ```
-**Rules**:
-- Optional
-- Value MUST be string
----
 
-### $ref
+Rules:
 
-**Purpose:** Reference a component instance in the DI container.  TThe name of the component is the `$name` value if present, otherwise the component key.
+- optional on `$provider`, `$class`, and `$factory` definitions
+- value MUST be a string
+- final names must be unique
 
-**Resolution Phase:** ComponentCompiler
+### `$ref`
 
-**Canonical Rule:** { `$ref: <token>` } is valid if and only if `<token>` resolves to a component retrievable via `FlotillaContainer.get(<token>)`
+Purpose: resolve a container binding by identity.
 
-**Syntax:**
+Resolution phase: `ComponentCompiler`
+
+Syntax:
 
 ```yaml
-arg:
-	$ref: component_name
+dependency:
+  $ref: component_name
 ```
 
-**Rules:**
+Parameterized factory syntax:
+
+```yaml
+dependency:
+  $ref: llm_factory
+  $params:
+    temperature: 0.1
+    max_tokens: 500
+```
+
+Rules:
+
 - MUST be a mapping node
-- MUST contain only the key `$ref`
-- Value MUST be a string
--  **Scalar form (`"$ref component"`) is invalid**
-- Is a compiler instruction, not a data value
-- Must be resolved during compilation
-- May not reach runtime or factory invocation
-- Missing or invalid `$ref` → `ReferenceResolutionError`
----
+- MUST contain `$ref`
+- `$ref` value MUST be a string
+- MAY contain `$params`
+- no other keys are allowed
+- scalar form is invalid
+- references may target singleton or factory bindings
+- `$params` is valid only when the target is a factory binding
+- singleton binding plus `$params` fails compilation
+- `$params` MUST be a mapping
+- `$params` values must conform to the Flotilla grammar
+- references must resolve against the full build registry, including YAML and Python registrations
+- no `$ref` may reach provider or factory invocation
 
-### $list
+### `$params`
 
-**Purpose:** Declare an ordered collection of values and/or `$ref` entries
+Purpose: provide call-site keyword arguments when resolving a factory binding.
 
-**Resolution Phase:** ComponentCompiler
+Resolution phase: `ComponentCompiler`
 
-**Syntax:**
+Rules:
+
+- only valid as a sibling of `$ref`
+- MUST be a mapping
+- only valid when `$ref` targets a factory binding
+- values are materialized before factory invocation
+- call-site values override factory defaults
+
+### `$list`
+
+Purpose: declare an ordered collection of values.
+
+Resolution phase: `ComponentCompiler`
+
+Syntax:
 
 ```yaml
-arg:
-	$list:
-	- <value>
-	- <value>
+items:
+  $list:
+    - value
+    - $ref: component_name
 ```
 
-**Rules:**
+Rules:
+
 - MUST be a mapping node
-- MUST contain only the key `$list`
-- Value MUST be a YAML list
--  **Raw lists (`[1,2,3]`) are invalid**
-- Elements may include:
--  `$ref <component>`
-- scalars
-- embedded components
-- All `$ref` entries must resolve
-- Each element must conform to the Flotilla grammar
+- MUST contain only `$list`
+- value MUST be a YAML list
+- raw lists are invalid
+- elements may be scalars, `$ref`, `$list`, `$map`, or embedded definitions
 
----
+### `$map`
 
-### $map
+Purpose: declare a mapping of values.
 
-**Purpose:** Declare a mapping of values and/or `$ref` entries
+Resolution phase: `ComponentCompiler`
 
-**Resolution Phase:** ComponentCompiler
+Syntax:
 
-**Syntax:**
 ```yaml
-arg:
-	$map:
-		key1: <value>
-		key2: <value>
+mapping:
+  $map:
+    primary:
+      $ref: component_name
 ```
 
-**Rules:**
+Rules:
+
 - MUST be a mapping node
-- MUST contain only the key `$map`
-- Value MUST be a YAML mapping
--  **Raw dicts used as free-form nested objects are invalid**
-- Values may include:
-- { `$ref: <component>` }
-- scalars
-- embedded components
-- All `$ref` entries must resolve
-- Each value must conform to the Flotilla grammar
+- MUST contain only `$map`
+- value MUST be a YAML mapping
+- raw arbitrary dicts are invalid
+- values may be scalars, `$ref`, `$list`, `$map`, or embedded definitions
 
----
+## Embedded Definitions
 
-  
+Component and factory definitions may appear anywhere a value is allowed:
 
-## Allowed Node Types
+- top-level entries
+- constructor arguments
+- `$list` items
+- `$map` values
 
-### Component Definition Node
+Embedded singleton definitions produce singleton bindings with path-derived
+names. Embedded factory definitions produce factory bindings with path-derived
+names.
 
-A component definition is a mapping node containing exactly one provider directive.
+## Allowed Scalars
 
-Supported provider directives:
--   `$provider` — constructs the component using a provider registered in the `FlotillaContainer`    
--   `$class` — constructs the component using Python class reflection
-    
-A component definition mapping:
+Allowed scalar values:
 
--   MUST contain exactly one provider directive (`$provider` or `$class`)
--   MAY contain `$name`**, which overrides the component identity
--   MAY contain additional keys, interpreted as constructor keyword arguments
--   MUST NOT contain any other directive keys at the same mapping level
-    
-Constructor argument values may themselves contain valid nested directives such as `$ref`, `$list`, `$map`, `$provider`, or `$class`, so long as those nested values independently conform to the Flotilla grammar.
-
-**Structure**:
-```yaml
-component_name:
-	$provider: <provider.identifier>
-	<argument_key>: <value>
-	$name: <optional_override_name>
-```
-  
-**Rules:**
-
-- MUST contain `$provider`
-- MAY contain `$name`
-- Other keys are interpreted as constructor keyword arguments
-- Argument values must themselves conform to the Flotilla grammar
-
----
-
-### Scalars
-
-**Allowed scalar values:**
-- string (non-directive)
+- string values that do not begin with `$`
 - int
 - float
 - bool
 - null
 
-**Disallowed scalar values:**
+Disallowed scalar directive forms:
 
--  `$provider something`
--  `$name something`
--  `$ref something`
--  `$list something`
--  `$map something`
--  `$config something`
--  `$secret something`
+- `$provider something`
+- `$factory something`
+- `$name something`
+- `$ref something`
+- `$list something`
+- `$map something`
+- `$params something`
+- `$secret something`
 
-**All directives must be mapping-form.**
+All directives must use mapping form.
 
----
+## Canonical Structural Rule
 
-## Embedded Component Definitions
+A mapping node is valid if and only if it satisfies exactly one of:
 
-### Rule
+1. Contains exactly one definition directive: `$provider`, `$class`, or `$factory`.
+2. Contains `$ref`, optionally with `$params`.
+3. Contains exactly one collection directive: `$list` or `$map`.
+4. Contains exactly one configuration directive: `$secret`.
 
-A component definition node (mapping containing `$provider` or `$class`)  
-MAY appear anywhere a value is allowed.
+Any other mapping node is invalid unless it is the root configuration mapping or
+a source-level grouping mapping that contains nested valid nodes.
 
-- As a top-level component
-- As a constructor argument to another component
-- As an element inside `$list`
-- As a value inside `$map`
+## Container Binding Resolution
 
-### Example
-
-**Nested component definition:**
-```yaml
-agent:
-	$provider: agents.weather_agent
-	llm:
-		$provider: llm.openai
-		model: gpt-4o-mini
-```
-
-This defines a nested component. The nested `llm` component is treated identically to a top-level component definition.
-
-
-### Additional Examples
-
-**Inside `$list`:**
-
-```yaml
-
-pipeline:
-	$provider: pipeline.sequential
-	stages:
-		$list:
-			- $provider: stages.preprocessor
-				arg: basic
-			- $provider: stages.analyzer
-				arg: advanced
-```
-
-**Inside `$map`:**
-
-```yaml
-router:
-	$provider: routing.conditional_router
-	handlers:
-		$map:
-			success:
-				$provider: handlers.success_handler
-			failure:
-				$provider: handlers.error_handler
-```
-
----
-
-## Illegal Structures
-
-### Raw Lists
-
-```yaml
-arg: [1, 2, 3] # ❌ Illegal
-```
-Must use:
-
-```yaml
-arg:
-	$list:
-		- 1
-		- 2
-		- 3
-```
-
-### Raw Arbitrary Dicts
-
-```yaml
-arg:
-	foo: bar
-	baz: qux  # ❌ Illegal (free-form JSON-style nested maps)
-```
-
-Must use:
-```yaml
-arg:
-	$map:
-		foo: bar
-		baz: qux
-```
-
----
-## Configuration Graph Construction
-
-Before component compilation, Flotilla constructs a **resolved configuration graph** using the `ConfigLoader`.
-
-The `ConfigLoader` is responsible for:
-
-1.  Loading configuration fragments
-2.  Merging fragments into a single configuration tree   
-3.  Resolving `$secret` values
-4.  Resolving `$config` injections
-    
-After this phase, the configuration is **fully materialized** and ready for compilation.
-
-----------
-
-### Configuration Sources
-
-Configuration fragments are provided by objects implementing the `ConfigurationSource` protocol.
-```python
-class  ConfigurationSource(Protocol):  
-  def  load(self) -> Dict[str, Any]
-```
-Each source returns a mapping containing a configuration fragment.
-
-Examples of configuration sources may include:
-
--   YAML files
--  Python Dict object
--   environment-derived configuration
--   remote configuration services
--   test configuration fixtures
-    
-----------
-
-### Source Merging
-
-The `ConfigLoader` loads all sources and merges them into a single configuration tree.
-
-Merge semantics:
-
--   Sources are applied **in order**    
--   Later sources override earlier ones
--   Mappings are **deep merged**
--   Scalars and lists **replace earlier values**
-    
-This produces a single deterministic configuration dictionary.
-
-----------
-
-### Secret Resolution
-
-Secret values are resolved using `SecretResolver` implementations.
+`FlotillaContainer.get()` is async for all bindings.
 
 ```python
-class  SecretResolver(Protocol):  
-  def  resolve(self, secret_key: str) -> Any  |  None
-```
-Each resolver is queried in order.
-
-Resolution behavior:
-
--   If a resolver returns a value, it is considered resolved    
--   If multiple resolvers return values, the **last non-None result wins**
--   If no resolver resolves the secret, loading fails
-    
-Secrets must appear in mapping form:
-
-```yaml
-password:  
- $secret: DATABASE_PASSWORD
-```
-----------
-
-### `$config` Resolution
-
-`$config` allows one configuration subtree to reference another.
-
-Example:
-```yaml
-llm:  
- $config: llm.openai  
- overrides:  
- max_tokens: 5000
+component = await container.get("component_name")
+instance = await container.get("llm_factory", temperature=0.1)
 ```
 
-Resolution process:
+Rules:
 
-1.  Locate the referenced config path    
-2.  Deep-copy the referenced subtree
-3.  Apply overrides
-4.  Recursively resolve nested `$config`
-    
-----------
+- `get(name)` resolves the named binding
+- singleton bindings return their singleton instance
+- singleton bindings reject call-site kwargs
+- factory bindings create a new instance on each call
+- factory bindings accept call-site kwargs
+- call-site kwargs override factory default kwargs
+- missing bindings fail with a configuration error
 
-### Final Output of ConfigLoader
+## Component Lifecycle
 
-After `ConfigLoader.load()`:
+Components may opt into lifecycle management by implementing either protocol.
 
--   All `$secret` directives are resolved
--   All `$config` directives are resolved
--   The configuration tree contains **only concrete values**
-    
-The result is wrapped in `FlotillaSettings` and passed to the `ComponentCompiler`.
+```python
+class Startup(Protocol):
+    def startup(self) -> None | Awaitable[None]: ...
 
+class Shutdown(Protocol):
+    def shutdown(self) -> None | Awaitable[None]: ...
+```
 
-## Phase Separation
+The container exposes async lifecycle methods:
 
-### ConfigLoader Phase
+```python
+await container.startup(timeout=30)
+await container.shutdown(timeout=30)
+```
 
-**Resolves:**
--  `$config`
--  `$secret`
-- Environment substitution
-- Config source merging
+Lifecycle rules:
 
-**Guarantees:**
-- No `$config` remains
-- No `$secret` remains
-- Configuration is fully resolved and deterministic
-
-### ComponentCompiler Phase
-
-**Resolves:**
-
-- `$provider`
-- `$class`
-- `$name`
--  `$ref`
--  `$list`
--  `$map`
-
-
-**Builds:**
-- Dependency graph
-- Topologically sorted component instantiation
-- Immutable DI container
-
-**Guarantees:**
-- No directives remain
-- No raw lists
-- No raw dicts
-- Only concrete component instances exist
-
-The compiler must recursively discover and register all component definition nodes (provider directives), regardless of depth.
-
----
+- `startup()` may only run after build succeeds
+- startup runs in dependency order
+- shutdown runs in reverse dependency order
+- shutdown is best-effort and should continue across component failures
+- lifecycle calls may be synchronous or awaitable
+- awaitable lifecycle calls are bounded by the provided timeout
+- synchronous lifecycle calls must not block
+- startup failure triggers shutdown of already-started bindings
+- generated factory instances are tracked by their `FactoryBinding`
+- if a factory creates an instance after container startup, that instance is started before it is returned
+- factory instances shut down in reverse creation order
 
 ## Phase Ownership Summary
 
 | Token | Meaning | Resolved by | May reach runtime |
 |-------|---------|-------------|-------------------|
-| `$secret` | Secure scalar value | ConfigLoader | ❌ |
-| `$config` | Config subtree injection | ConfigLoader | ❌ |
-| `$provider` | Custom component creation logic | ComponentCompiler | ❌ |
-| `$class` | Full class name of the component to create via reflection | ComponentCompiler | ❌ |
-| `$name` | Name of the component on the DI container, overrides default naming convention | ComponentCompiler | ❌ |
-| `$ref` | Component identity | ComponentCompiler | ❌ |
-| `$list` | Component/value collection | ComponentCompiler | ❌ |
-| `$map` | Component/value mapping | ComponentCompiler | ❌ |
-
----
+| `$secret` | Secure scalar value | ConfigLoader | No |
+| `$provider` | Singleton component provider | ComponentCompiler | No |
+| `$class` | Singleton reflection component | ComponentCompiler | No |
+| `$factory` | Factory binding provider | ComponentCompiler | No |
+| `$name` | Binding identity override | ComponentCompiler | No |
+| `$ref` | Binding reference | ComponentCompiler | No |
+| `$params` | Factory call-site parameters | ComponentCompiler | No |
+| `$list` | Component/value collection | ComponentCompiler | No |
+| `$map` | Component/value mapping | ComponentCompiler | No |
 
 ## Global Invariants
 
-**After ConfigLoader:**
+After `ConfigLoader`:
 
-- ❌ No `$secret`
-- ❌ No `$config`
+- no `$secret`
+- source ordering is fully applied
 
-**After ComponentCompiler:**
+After `ComponentCompiler`:
 
-- ❌ No `$ref`
-- ❌ No raw lists
-- ❌ No raw dicts
+- no `$provider`
+- no `$class`
+- no `$factory`
+- no `$ref`
+- no `$params`
+- no raw lists
+- no raw arbitrary dicts
+- container contains validated bindings
 
-**Runtime sees:**
+If build succeeds:
 
-- ✅ Fully concrete config
-- ✅ Fully instantiated components
-- ✅ No symbolic directives
-
----
-
-## Canonical Structural Rule
-
-**A mapping node is valid if and only if it satisfies exactly one of:**
-
-1. Contains exactly one provider directive (`$provider` or `$class`)
-2. Contains exactly one structural directive (`$ref`, `$list`, `$map`)
-3. Contains exactly one configuration directive (`$config`, `$secret`)
-
-This rule applies uniformly at all depths in the configuration tree.
-
-**Any other mapping node is invalid.**
-
----
-
-## Determinism Guarantee
-
-If the application starts successfully:
-
-- The graph is valid
-- All dependencies are resolvable
-- No symbolic references remain
-- No runtime wiring errors can occur
-
-**At the end of compilation:**
-
-- The runtime sees no DSL constructs
-- All references are resolved
-- All wiring errors are detected before execution
-- Runtime execution is free of configuration indirection
+- the graph is valid
+- all dependencies are resolvable
+- lifecycle ownership is known
+- runtime execution is free of configuration indirection
