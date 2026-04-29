@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-import copy
 import inspect
 
-from flotilla.config.errors import SecretResolutionError, ConfigurationResolutionError
+from flotilla.config.errors import SecretResolutionError
 from flotilla.config.config_utils import ConfigUtils
 from flotilla.config.flotilla_settings import FlotillaSettings
 from flotilla.config.secret_resolver import SecretResolver
@@ -20,12 +19,10 @@ class ConfigLoader:
 
       - loads fragments from ConfigurationSource objects
       - deep-merges fragments (last wins)
-      - resolves $config references (config → config)
       - resolves $secret references (config → scalar)
       - constructs FlotillaSettings
 
     After load(), the returned config is fully materialized:
-      - no $config nodes
       - no $secret nodes
     """
 
@@ -46,24 +43,22 @@ class ConfigLoader:
     # ------------------------------------------------------------
 
     async def load(self) -> FlotillaSettings:
+        logger.info(
+            "Load Flotilla configuration from %d source(s) with %d secret resolver(s)",
+            len(self._sources),
+            len(self._secrets),
+        )
         # load from merged sources
         merged = await self._merge_sources()
 
         # Phase 1: resolve secrets (scalar only)
         merged = await self._resolve_secrets(merged)
 
-        # Phase 2: resolve $config (structural, recursive)
-        merged = self._resolve_config_nodes(merged, root=merged)
-
-        # Phase 3: invariant enforcement
+        # Phase 2: invariant enforcement
         if ConfigUtils.contains_tag(merged, tag="$secret"):
             raise SecretResolutionError("Not all $secret keys were properly resolved")
 
-        if ConfigUtils.contains_tag(merged, tag="$config"):
-            raise ConfigurationResolutionError(
-                "Not all $config keys were properly resolved"
-            )
-
+        logger.info("Flotilla configuration load complete")
         return FlotillaSettings(merged)
 
     # ------------------------------------------------------------
@@ -111,97 +106,35 @@ class ConfigLoader:
 
     async def _resolve_secret(self, value: Dict[str, Any], path: List[str]) -> Any:
         secret_key = value.get("$secret")
+        location = ".".join(path) if path else "<root>"
 
         if not isinstance(secret_key, str):
-            location = ".".join(path) if path else "<root>"
             raise SecretResolutionError(f"$secret must be a string (at {location})")
 
+        logger.debug("Resolve secret key '%s' at %s", secret_key, location)
         resolved = None
         for resolver in self._secrets:
+            logger.debug(
+                "Try secret resolver %s for key '%s' at %s",
+                resolver.__class__.__name__,
+                secret_key,
+                location,
+            )
             result = resolver.resolve(secret_key)  # may raise -> allowed
             result = await self._await_if_needed(result)
             if result is not None:
+                logger.debug(
+                    "Secret key '%s' resolved by %s at %s",
+                    secret_key,
+                    resolver.__class__.__name__,
+                    location,
+                )
                 resolved = result  # last non-None wins
 
         if resolved is None:
+            logger.error("Unable to resolve secret key '%s' at %s", secret_key, location)
             raise SecretResolutionError(f"Unable to resolve secret {secret_key}")
         return resolved
-
-    def _resolve_config_nodes(self, node: Any, *, root: Dict[str, Any]) -> Any:
-        """
-        Resolve $config directives.
-
-        Supported forms:
-        1. Scalar: "$config path.to.node"
-        2. Mapping:
-            {
-                "$config": "path.to.node",
-                "overrides": { ... }   # optional
-            }
-        """
-
-        if isinstance(node, str) and node.startswith("$config"):
-            raise ConfigurationResolutionError(
-                f"Scalar $config form is not allowed. Use {{$config: path}}"
-            )
-
-        # ----------------------------
-        # Scalar form: "$config path"
-        # ----------------------------
-        if isinstance(node, str) and node.startswith("$config"):
-            raise ConfigurationResolutionError(
-                f"Scalar $config form is not allowed. Use {{$config: path}}"
-            )
-
-        # ----------------------------
-        # Mapping form with overrides
-        # ----------------------------
-        if isinstance(node, dict) and "$config" in node:
-            allowed_keys = {"$config", "overrides"}
-            illegal = set(node.keys()) - allowed_keys
-            if illegal:
-                raise ConfigurationResolutionError(
-                    f"$config mapping may only contain $config and overrides "
-                    f"(found extra keys: {sorted(illegal)})"
-                )
-
-            path = node["$config"]
-            if not isinstance(path, str):
-                raise ConfigurationResolutionError(
-                    "$config value must be a string path"
-                )
-
-            base = ConfigUtils.get_at_path(root, path)
-            if base is None:
-                raise ConfigurationResolutionError(
-                    f"$config reference '{path}' could not be resolved"
-                )
-
-            # Deep copy base config
-            result = copy.deepcopy(base)
-
-            # Apply overrides (if present)
-            overrides = node.get("overrides")
-            if overrides is not None:
-                if not isinstance(overrides, dict):
-                    raise ConfigurationResolutionError("overrides must be a mapping")
-                result = ConfigUtils.deep_merge(result, overrides)
-
-            # Recurse to handle nested $config
-            return self._resolve_config_nodes(result, root=root)
-
-        # ----------------------------
-        # Recursive descent
-        # ----------------------------
-        if isinstance(node, dict):
-            return {
-                k: self._resolve_config_nodes(v, root=root) for k, v in node.items()
-            }
-
-        if isinstance(node, list):
-            return [self._resolve_config_nodes(v, root=root) for v in node]
-
-        return node
 
     async def _merge_sources(self) -> dict:
         """
@@ -215,13 +148,31 @@ class ConfigLoader:
         """
         merged: dict = {}
 
-        for source in self._sources:
+        for idx, source in enumerate(self._sources):
+            logger.debug(
+                "Load configuration source %d/%d: %s",
+                idx + 1,
+                len(self._sources),
+                source.__class__.__name__,
+            )
             data = source.load()
             data = await self._await_if_needed(data)
             if not data:
+                logger.debug(
+                    "Configuration source %d/%d produced no data: %s",
+                    idx + 1,
+                    len(self._sources),
+                    source.__class__.__name__,
+                )
                 continue
 
             merged = ConfigUtils.deep_merge(merged, data)
+            logger.debug(
+                "Merged configuration source %d/%d: %s",
+                idx + 1,
+                len(self._sources),
+                source.__class__.__name__,
+            )
 
         return merged
 

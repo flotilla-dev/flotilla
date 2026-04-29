@@ -116,7 +116,7 @@ class FlotillaApplication:
             if hasattr(self, private_name):
                 raise FlotillaConfigurationError(f"Service storage attribute '{private_name}' already exists")
 
-            service = self._container.find_one_by_type(service_type)
+            service = await self._container.find_one_by_type(service_type)
 
             setattr(self, private_name, service)
 

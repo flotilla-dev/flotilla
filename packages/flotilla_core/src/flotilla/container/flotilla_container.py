@@ -5,11 +5,13 @@ from typing import List, Optional, Any, Type, TypeVar, Callable, Union, get_orig
 from types import UnionType
 
 from flotilla.config.flotilla_settings import FlotillaSettings
+from flotilla.container.constants import REFLECTION_PROVIDER_KEY
 from flotilla.container.component_provider import ComponentProvider
 from flotilla.container.component_compiler import ComponentCompiler
 from flotilla.container.binding import Binding
 from flotilla.container.singleton_binding import SingletonBinding
 from flotilla.container.factory_binding import FactoryBinding
+from flotilla.container.providers.reflection_provider import ReflectionProvider
 from flotilla.utils.logger import get_logger
 from flotilla.config.errors import FlotillaConfigurationError
 
@@ -26,11 +28,17 @@ class FlotillaContainer:
         self.settings = settings
         self._providers: dict[str, ComponentProvider] = {}
         self._bindings: dict[str, Binding] = {}
+        self._component_specs: dict[str, dict[str, Any]] = {}
+        self._factory_specs: dict[str, dict[str, Any]] = {}
 
         self._pre_compile_hooks = []
         self._post_compile_hooks = []
 
         self._built = False
+        self._started = False
+        self._shutdown = False
+
+        self.register_provider(REFLECTION_PROVIDER_KEY, ReflectionProvider())
 
     # ----------------------------
     # Public API
@@ -40,16 +48,23 @@ class FlotillaContainer:
     def config_dict(self) -> dict:
         return self.settings.config
 
-    def register_provider(self, provider_name: str, provider: ComponentProvider):
+    def register_provider(self, provider_name: str, provider: ComponentProvider, *, replace: bool = False):
         """
         Register a provider function that can be referenced by name in config.
 
         Args:
             provider_name - The name (key) of the provider function
             provider - The provider function
+            replace - Allow an existing provider to be replaced
         """
         self._assert_not_built()
-        logger.info(f"Register provider '{provider_name}'")
+        if provider_name in self._providers and not replace:
+            logger.error("Provider '%s' is already registered", provider_name)
+            raise FlotillaConfigurationError(f"Provider '{provider_name}' is already registered")
+        if provider_name in self._providers:
+            logger.warning("Replacing provider '%s'", provider_name)
+        else:
+            logger.debug("Register provider '%s'", provider_name)
         self._providers[provider_name] = provider
 
     def get_provider(self, provider_name: str) -> Optional[ComponentProvider]:
@@ -62,32 +77,65 @@ class FlotillaContainer:
         Returns:
             The provider function for the name or None if it doesn't exist
         """
-        logger.info(f"Get provider for {provider_name}")
+        logger.debug("Get provider '%s'", provider_name)
         return self._providers.get(provider_name)
 
-    def register_component(
-        self,
-        *,
-        component_name: str,
-        component: Any,
-    ):
-        """ """
+    def define_component(self, component_name: str, *, provider: str | None = None, class_path: str | None = None, **kwargs):
+        """
+        Register a component definition to be compiled during build.
+        """
+        self._assert_not_built()
+        self._assert_name_available(component_name)
+        if (provider is None) == (class_path is None):
+            raise FlotillaConfigurationError("define_component requires exactly one of provider or class_path")
+
+        spec = dict(kwargs)
+        spec["$name"] = component_name
+        if provider is not None:
+            spec["$provider"] = provider
+        else:
+            spec["$class"] = class_path
+        logger.debug("Define component '%s'", component_name)
+        self._component_specs[component_name] = spec
+
+    def define_factory(self, component_name: str, *, factory: str, **kwargs):
+        """
+        Register a factory definition to be compiled during build.
+        """
+        self._assert_not_built()
+        self._assert_name_available(component_name)
+        spec = dict(kwargs)
+        spec["$name"] = component_name
+        spec["$factory"] = factory
+        logger.debug("Define factory '%s'", component_name)
+        self._factory_specs[component_name] = spec
+
+    def _install_instance_binding(self, component_name: str, component: Any):
+        """
+        Install a resolved singleton binding.
+
+        This is a framework/compiler API, not an application registration API.
+        """
         self._assert_not_built()
         if component_name in self._bindings:
             raise FlotillaConfigurationError(f"Component '{component_name}' already registered")
 
-        logger.info(f"Register component {component_name}")
+        logger.debug("Install singleton binding '%s'", component_name)
         self._bindings[component_name] = SingletonBinding(component)
 
-    def register_factory(self, component_name: str, factory: Callable[..., Any], **kwargs):
-        """ """
+    def _install_factory_binding(self, component_name: str, factory: Callable[..., Any], **kwargs):
+        """
+        Install a resolved factory binding.
+
+        This is a framework/compiler API, not an application registration API.
+        """
         self._assert_not_built()
         if component_name in self._bindings:
             raise FlotillaConfigurationError(f"Component '{component_name}' already registered")
-        logger.info(f"Register component factory {component_name}")
+        logger.debug("Install factory binding '%s'", component_name)
         self._bindings[component_name] = FactoryBinding(factory, **kwargs)
 
-    def get(self, name: str) -> Any:
+    async def get(self, name: str, **kwargs) -> Any:
         """
         Retrieve a resolved component from the container if it exists.
 
@@ -118,7 +166,8 @@ class FlotillaContainer:
         except KeyError:
             raise FlotillaConfigurationError(f"Component '{name}' not found in container")
 
-        return binding.resolve()
+        logger.debug("Resolve component '%s' with parameter keys %s", name, sorted(kwargs.keys()))
+        return await binding.resolve(**kwargs)
 
     def exists(self, name: str) -> bool:
         """
@@ -140,11 +189,17 @@ class FlotillaContainer:
         """
         return name in self._bindings
 
+    def is_factory_binding(self, name: str) -> bool:
+        try:
+            return self._bindings[name].is_factory
+        except KeyError:
+            raise FlotillaConfigurationError(f"Component '{name}' not found in container")
+
     T = TypeVar("T")
 
-    def find_instances_by_type(self, base_type: Type[T]) -> List[T]:
+    async def find_instances_by_type(self, base_type: Type[T]) -> List[T]:
 
-        logger.info(f"Find all instances of type {base_type}")
+        logger.debug("Find all instances of type %s", base_type)
         self._assert_built()
 
         runtime_types = self._normalize_runtime_types(base_type)
@@ -153,23 +208,23 @@ class FlotillaContainer:
 
         for binding in self._bindings.values():
             try:
-                instance = binding.resolve()
+                instance = await binding.resolve()
             except Exception:
                 continue
 
-            logger.info(f"Check if component {type(instance)} is instance of {base_type}")
+            logger.debug("Check if component %s is instance of %s", type(instance), base_type)
             if isinstance(instance, runtime_types):
                 matches.append(instance)
 
         return matches
 
-    def find_one_by_type(self, base_type: Type[T]) -> T:
+    async def find_one_by_type(self, base_type: Type[T]) -> T:
         """
         Convenience method to find a single instnace of a particular type on the DI container.  If anything on other
         than a single instacce is found on the DI container a FlotillaConfigurationError is raised.
         """
-        logger.info(f"Lookup one registered component by type {base_type}")
-        matches = self.find_instances_by_type(base_type)
+        logger.debug("Lookup one registered component by type %s", base_type)
+        matches = await self.find_instances_by_type(base_type)
 
         if not matches:
             raise FlotillaConfigurationError(f"No instances of type {base_type.__name__} found in container")
@@ -179,7 +234,7 @@ class FlotillaContainer:
 
         return matches[0]
 
-    def create_component(self, cls: Type[T]) -> T:
+    async def create_component(self, cls: Type[T]) -> T:
         """
         Construct a Python class using dependency injection from the container.
 
@@ -248,7 +303,7 @@ class FlotillaContainer:
 
             runtime_type = self._normalize_runtime_types(annotation)
 
-            matches = self.find_instances_by_type(runtime_type)
+            matches = await self.find_instances_by_type(runtime_type)
 
             if len(matches) == 1:
                 kwargs[name] = matches[0]
@@ -295,11 +350,13 @@ class FlotillaContainer:
         self._assert_not_built()
 
         config = self.config_dict
+        logger.info("Build FlotillaContainer")
 
         # ---------------------------
         # Phase 0: pre-compile hooks
         # ---------------------------
         for hook in self._pre_compile_hooks:
+            logger.debug("Run pre-compile hook %s", hook)
             result = hook(self, config)
             if inspect.isawaitable(result):
                 await result
@@ -312,6 +369,10 @@ class FlotillaContainer:
         compiler = ComponentCompiler(container=self)
 
         compiler.discover_components(config)
+        for spec in self._component_specs.values():
+            compiler.register_component_definition(spec)
+        for spec in self._factory_specs.values():
+            compiler.register_component_definition(spec)
         compiler.analyze_dependencies()
         await compiler.instantiate_components()
 
@@ -319,12 +380,60 @@ class FlotillaContainer:
         # Phase 4: post-compile hooks
         # ---------------------------
         for hook in self._post_compile_hooks:
+            logger.debug("Run post-compile hook %s", hook)
             result = hook(self)
             if inspect.isawaitable(result):
                 await result
 
         self._built = True
+        logger.info("FlotillaContainer build complete with %d bindings", len(self._bindings))
         return self
+
+    async def startup(self, *, timeout: float | None = None) -> None:
+        self._assert_built()
+        if self._started:
+            logger.debug("FlotillaContainer startup skipped because it is already started")
+            return
+        if self._shutdown:
+            raise RuntimeError("FlotillaContainer has already been shut down")
+
+        logger.info("Start FlotillaContainer lifecycle")
+        started = []
+        try:
+            for name, binding in self._bindings.items():
+                logger.debug("Start binding '%s'", name)
+                await binding.startup(timeout=timeout)
+                started.append((name, binding))
+        except Exception:
+            for _, binding in reversed(started):
+                try:
+                    await binding.shutdown(timeout=timeout)
+                except Exception:
+                    pass
+            raise
+
+        self._started = True
+        logger.info("FlotillaContainer startup complete")
+
+    async def shutdown(self, *, timeout: float | None = None) -> None:
+        if self._shutdown:
+            logger.debug("FlotillaContainer shutdown skipped because it is already shut down")
+            return
+        logger.info("Shut down FlotillaContainer lifecycle")
+        errors = []
+        for name, binding in reversed(list(self._bindings.items())):
+            try:
+                logger.debug("Shut down binding '%s'", name)
+                await binding.shutdown(timeout=timeout)
+            except Exception as ex:
+                logger.warning("Binding '%s' shutdown failed", name, exc_info=True)
+                errors.append((name, ex))
+
+        self._started = False
+        self._shutdown = True
+        if errors:
+            names = ", ".join(name for name, _ in errors)
+            raise FlotillaConfigurationError(f"Container shutdown failed for bindings: {names}") from errors[0][1]
 
     # --------------------------
     # Private API helpers
@@ -339,12 +448,20 @@ class FlotillaContainer:
         if not self._built:
             raise RuntimeError("FlotillaContainer.build() must be called before accessing components")
 
+    def _assert_name_available(self, component_name: str) -> None:
+        if (
+            component_name in self._bindings
+            or component_name in self._component_specs
+            or component_name in self._factory_specs
+        ):
+            raise FlotillaConfigurationError(f"Component '{component_name}' already registered")
+
     def _normalize_runtime_types(self, annotation: Any) -> tuple[type, ...]:
         """
         Convert typing annotations into runtime types suitable for isinstance().
         """
 
-        logger.info(f"Type of annotation: {annotation} : {type(annotation)}")
+        logger.debug("Normalize runtime annotation %s of type %s", annotation, type(annotation))
 
         origin = get_origin(annotation)
 

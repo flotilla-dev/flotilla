@@ -32,7 +32,7 @@ async def build_container(*components):
     container = FlotillaContainer(FlotillaSettings(raw={}))
 
     for i, component in enumerate(components):
-        container.register_component(component_name=f"component_{i}", component=component)
+        container._install_instance_binding(component_name=f"component_{i}", component=component)
 
     await container.build()
     return container
@@ -103,7 +103,7 @@ async def test_routes_are_live_after_start():
             return {"message": "hello"}
 
     container = FlotillaContainer(FlotillaSettings({}))
-    container.register_component(component_name="handler", component=Handler())
+    container._install_instance_binding(component_name="handler", component=Handler())
     await container.build()
 
     application = FastApiFlotillaApplication()
@@ -142,7 +142,7 @@ async def test_run_uses_defaults_when_no_fastapi_run_config():
 async def test_run_uses_injected_fastapi_run_config():
     container = FlotillaContainer(FlotillaSettings({}))
     config = FastAPIRunConfig(port=8080, reload=True)
-    container.register_component(component_name="fast_api_config", component=config)
+    container._install_instance_binding(component_name="fast_api_config", component=config)
     await container.build()
 
     application = FastApiFlotillaApplication()
@@ -166,7 +166,7 @@ async def test_run_uses_injected_fastapi_run_config():
 async def test_run_kwargs_override_injected_fastapi_run_config():
     container = FlotillaContainer(FlotillaSettings({}))
     config = FastAPIRunConfig(port=8080, reload=True)
-    container.register_component(component_name="fast_api_config", component=config)
+    container._install_instance_binding(component_name="fast_api_config", component=config)
     await container.build()
 
     application = FastApiFlotillaApplication()
