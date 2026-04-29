@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-from typing import Protocol, Any, Awaitable, Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from flotilla.container.flotilla_container import FlotillaContainer
+from typing import Any, Awaitable, Callable, TypeAlias
 
 
-class ComponentProvider(Protocol):
-    """
-    A callable responsible for constructing a framework component
-    from configuration and container context.
-    """
+ComponentProvider: TypeAlias = Callable[..., Any | Awaitable[Any]]
+"""
+Semantic type for callables that build Flotilla components.
 
-    def __call__(
-        self,
-        *,
-        container: FlotillaContainer,
-        config: Optional[dict],
-        **kwargs: Any,
-    ) -> Any | Awaitable[Any]: ...
+A component provider receives already-materialized keyword arguments from the
+component compiler and returns a component instance. Providers may be regular
+functions, async functions, classes, or callable objects.
+
+Providers are intentionally not passed the FlotillaContainer or raw config.
+Dependency graph wiring belongs in component configuration via directives such
+as ``$ref``, ``$list``, ``$map``, ``$factory``, and ``$params``. Custom object
+construction logic belongs inside the provider callable itself.
+"""
