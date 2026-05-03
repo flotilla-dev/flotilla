@@ -1,3 +1,3 @@
-from .no_op_suspend import NoOpSuspend
+from .no_op_suspend_service import NoOpSuspendService
 
-__all__ = ["NoOpSuspend"]
+__all__ = ["NoOpSuspendService"]

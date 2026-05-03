@@ -16,6 +16,9 @@ from flotilla.thread.errors import (
     ConcurrentThreadExecutionError,
 )
 from flotilla.runtime.content_part import ContentPartFactory
+from flotilla.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class SqlThreadEntryStore(ThreadEntryStore):
@@ -42,12 +45,14 @@ class SqlThreadEntryStore(ThreadEntryStore):
                 {"thread_id": thread_id, "created_at": now},
             )
 
+        logger.info("Created SQL thread '%s'", thread_id)
         return thread_id
 
     async def load(self, thread_id: str) -> List[ThreadEntry]:
         async with self._engine.begin() as conn:
 
             if not await self._thread_exists(conn, thread_id):
+                logger.warning("SQL thread '%s' was not found", thread_id)
                 raise ThreadNotFoundError(f"Thread does not exist: {thread_id}")
 
             entry_rows = (
@@ -78,6 +83,7 @@ class SqlThreadEntryStore(ThreadEntryStore):
             )
 
             if not entry_rows:
+                logger.debug("Loaded SQL thread '%s' with 0 entries", thread_id)
                 return []
 
             entry_ids = [row["entry_id"] for row in entry_rows]
@@ -128,6 +134,12 @@ class SqlThreadEntryStore(ThreadEntryStore):
 
             entries.append(ThreadEntryFactory.deserialize_entry(data))
 
+        logger.debug(
+            "Loaded SQL thread '%s' with %d entries and %d content part rows",
+            thread_id,
+            len(entries),
+            len(part_rows),
+        )
         return entries
 
     async def append(
@@ -137,10 +149,17 @@ class SqlThreadEntryStore(ThreadEntryStore):
     ) -> ThreadEntry:
 
         self._validate_append_request(entry)
+        logger.debug(
+            "Append %s entry to SQL thread '%s' expected_previous_entry_id='%s'",
+            type(entry).__name__,
+            entry.thread_id,
+            expected_previous_entry_id,
+        )
 
         async with self._engine.begin() as conn:
 
             if not await self._thread_exists(conn, entry.thread_id):
+                logger.warning("Append rejected because SQL thread '%s' does not exist", entry.thread_id)
                 raise ThreadNotFoundError(f"Thread does not exist: {entry.thread_id}")
 
             current_tail = await self._load_current_tail_for_update(conn, entry.thread_id)
@@ -231,6 +250,12 @@ class SqlThreadEntryStore(ThreadEntryStore):
                 )
 
             except IntegrityError as exc:
+                logger.warning(
+                    "Concurrent append detected for SQL thread '%s' phase '%s'",
+                    entry.thread_id,
+                    entry.phase_id,
+                    exc_info=True,
+                )
                 raise ConcurrentThreadExecutionError(
                     thread_id=entry.thread_id,
                     phase_id=entry.phase_id,
@@ -240,13 +265,21 @@ class SqlThreadEntryStore(ThreadEntryStore):
                     message=f"Concurrent append detected for thread {entry.thread_id}",
                 ) from exc
 
-            return entry.model_copy(
+            appended_entry = entry.model_copy(
                 update={
                     "entry_id": entry_id,
                     "timestamp": now,
                     "entry_order": entry_order,
                 }
             )
+            logger.info(
+                "Appended %s entry '%s' to SQL thread '%s' at order %d",
+                type(appended_entry).__name__,
+                appended_entry.entry_id,
+                appended_entry.thread_id,
+                appended_entry.entry_order,
+            )
+            return appended_entry
 
     # --------------------------------------------------------
     # Internal helpers
@@ -281,18 +314,22 @@ class SqlThreadEntryStore(ThreadEntryStore):
 
     def _validate_append_request(self, entry: ThreadEntry) -> None:
         if entry.entry_id is not None:
+            logger.warning("Append rejected for SQL thread '%s': client-supplied entry_id", entry.thread_id)
             raise AppendConflictError(
                 thread_id=entry.thread_id, phase_id=entry.phase_id, message="Client-supplied entry_id is not allowed"
             )
         if entry.timestamp is not None:
+            logger.warning("Append rejected for SQL thread '%s': client-supplied timestamp", entry.thread_id)
             raise AppendConflictError(
                 thread_id=entry.thread_id, phase_id=entry.phase_id, message="Client-supplied timestamp is not allowed"
             )
         if entry.entry_order not in (None, 0):
+            logger.warning("Append rejected for SQL thread '%s': client-supplied entry_order", entry.thread_id)
             raise AppendConflictError(
                 thread_id=entry.thread_id, phase_id=entry.phase_id, message="Client-supplied entry_order is not allowed"
             )
         if not entry.content:
+            logger.warning("Append rejected for SQL thread '%s': empty content", entry.thread_id)
             raise AppendConflictError(
                 thread_id=entry.thread_id, phase_id=entry.phase_id, message="ThreadEntry.content must not be empty"
             )
@@ -306,6 +343,11 @@ class SqlThreadEntryStore(ThreadEntryStore):
 
         if current_tail is None:
             if expected_previous_entry_id is not None:
+                logger.warning(
+                    "First append rejected for SQL thread '%s': expected_previous_entry_id was '%s'",
+                    entry.thread_id,
+                    expected_previous_entry_id,
+                )
                 raise AppendConflictError(
                     thread_id=entry.thread_id,
                     phase_id=entry.phase_id,
@@ -314,6 +356,11 @@ class SqlThreadEntryStore(ThreadEntryStore):
                     message="expected_previous_entry_id must be None",
                 )
             if entry.previous_entry_id is not None:
+                logger.warning(
+                    "First append rejected for SQL thread '%s': entry.previous_entry_id was '%s'",
+                    entry.thread_id,
+                    entry.previous_entry_id,
+                )
                 raise AppendConflictError(
                     thread_id=entry.thread_id,
                     phase_id=entry.phase_id,
@@ -326,6 +373,12 @@ class SqlThreadEntryStore(ThreadEntryStore):
         tail_id = current_tail["entry_id"]
 
         if expected_previous_entry_id != tail_id:
+            logger.warning(
+                "Append CAS rejected for SQL thread '%s': tail '%s' expected '%s'",
+                entry.thread_id,
+                tail_id,
+                expected_previous_entry_id,
+            )
             raise ConcurrentThreadExecutionError(
                 thread_id=entry.thread_id,
                 phase_id=entry.phase_id,
@@ -336,6 +389,12 @@ class SqlThreadEntryStore(ThreadEntryStore):
             )
 
         if entry.previous_entry_id != tail_id:
+            logger.warning(
+                "Append CAS rejected for SQL thread '%s': entry previous '%s' tail '%s'",
+                entry.thread_id,
+                entry.previous_entry_id,
+                tail_id,
+            )
             raise ConcurrentThreadExecutionError(
                 thread_id=entry.thread_id,
                 phase_id=entry.phase_id,

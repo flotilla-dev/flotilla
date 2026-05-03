@@ -1,79 +1,47 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from flotilla.thread.thread_entries import ThreadEntry
 
 
 class ThreadEntryStore(ABC):
     """
-    ThreadEntryStore defines the persistence interface for Flotilla's
-    append-only thread log. It is responsible for creating threads,
-    loading the ordered list of `ThreadEntry` records for a thread,
-    and appending new entries.
+    Durable append-only storage boundary for runtime thread state.
+
+    FlotillaRuntime uses this store to create threads, load the canonical
+    ordered ThreadEntry log, and append new entries with compare-and-set
+    concurrency protection. The loaded entries are converted into ThreadContext,
+    which is the runtime's source of truth for execution decisions.
 
     Implementations MUST preserve the exact order of entries and enforce
     optimistic concurrency through the `expected_previous_entry_id`
     parameter to ensure that only one writer can append the next entry.
 
-    ThreadEntryStore provides durable storage primitives only; it does
-    not enforce execution rules or thread semantics. Those guarantees are
-    the responsibility of `FlotillaRuntime`.
+    The store provides durable storage primitives only. It does not enforce
+    execution rules, resume semantics, timeout behavior, or orchestration
+    outcomes; those guarantees belong to FlotillaRuntime.
     """
 
-    async def create_thread(self) -> str: ...
+    @abstractmethod
+    async def create_thread(self) -> str:
+        """
+        Create a new empty thread log and return its thread id.
+        """
 
-    """
-    Creates a new thread instnace in the store and returns the new thread ID.  Needs to be called before
-    calling FlotillaRuntime
-    """
+    @abstractmethod
+    async def load(self, thread_id: str) -> list[ThreadEntry]:
+        """
+        Return the authoritative ordered ThreadEntry snapshot for a thread.
+        """
 
-    async def load(self, thread_id: str) -> list[ThreadEntry]: ...
-
-    """
-    Retuns a List of ThreadEntry objects that represent the current state of the Thread log
-    """
-
+    @abstractmethod
     async def append(
         self,
         entry: ThreadEntry,
         expected_previous_entry_id: str | None = None,
-    ) -> ThreadEntry: ...
+    ) -> ThreadEntry:
+        """
+        Append an entry if the current tail matches expected_previous_entry_id.
 
-    """
-    Append a new `ThreadEntry` to the thread's append-only log.
-
-    The `expected_previous_entry_id` parameter is used to enforce optimistic
-    concurrency. When provided, the store MUST verify that the current tail
-    entry of the thread matches this value before appending the new entry.
-    If the value does not match the current tail, the append MUST fail.
-
-    Parameters
-    ----------
-    entry:
-        The `ThreadEntry` to append to the thread log.
-
-    expected_previous_entry_id:
-        The expected `entry_id` of the current tail entry. Implementations
-        MUST treat this as a compare-and-set (CAS) guard. If the current
-        tail entry does not match the provided value, the append MUST be
-        rejected.
-
-    Returns
-    -------
-    ThreadEntry:
-        The updated ThreadEntry with the newly assigned entry_id and timestamp.  Note 
-        that this object is informative only and is NOT part of the ThreadContext 
-        and is NOT authoritative.  Authoritative ThreadEntry are only available via 
-        the load() method
-
-    Raises
-    ------
-    ThreadNotFoundError
-        Raised if the specified thread does not exist.
-
-    ConcurrentThreadExecutionError
-        Raised when the CAS check fails because another process appended
-        an entry to the thread before this operation completed.
-
-    AppendConflictError
-        Raised for other store-level append conflicts or persistence
-        failures that prevent the entry from being written.
-    """
+        The store assigns identity, timestamp, and ordering fields. The returned
+        ThreadEntry is informative; callers should reload with load() when they
+        need authoritative thread state.
+        """

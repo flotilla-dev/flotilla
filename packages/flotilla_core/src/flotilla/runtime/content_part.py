@@ -21,7 +21,12 @@ class ContentPartType(str, Enum):
 
 class ContentPartBase(BaseModel, ABC):
     """
-    Base class for all ContentPart variants.
+    Base value object for user, agent, and runtime message content.
+
+    Content parts are embedded in RuntimeRequest, RuntimeResponse,
+    RuntimeEvent, and durable ThreadEntry records. Subclasses define how a
+    specific payload type is validated and serialized so content can move
+    safely between API boundaries, thread storage, and agent execution.
     """
 
     model_config = ConfigDict(

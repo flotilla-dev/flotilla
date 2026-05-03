@@ -8,6 +8,12 @@ from flotilla.thread.thread_entry_store import ThreadEntryStore
 from flotilla.thread.in_memory_store import InMemoryStore
 from flotilla.runtime.runtime_request import RuntimeRequest
 from flotilla.agents.agent_event import AgentEvent
+from flotilla.runtime.phase_context_service import PhaseContextService
+from flotilla.runtime.orchestration_strategy import OrchestrationStrategy
+from flotilla.suspend.resume_service import ResumeService
+from flotilla.suspend.suspend_service import SuspendService
+from flotilla.telemetry.telemetry_service import TelemetryService
+from flotilla.timeout.execution_timeout_policy import ExecutionTimeoutPolicy
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +70,7 @@ class FaultInjectingStore(ThreadEntryStore):
         return await self._inner.append(entry, expected_previous_entry_id)
 
 
-class SpyPhaseContextService:
+class SpyPhaseContextService(PhaseContextService):
     def __init__(self):
         self.calls: List[str] = []
         self._counter = 0
@@ -80,7 +86,7 @@ class SpyPhaseContextService:
         )
 
 
-class SpyExecutionTimeoutPolicy:
+class SpyExecutionTimeoutPolicy(ExecutionTimeoutPolicy):
     def __init__(self, *, expired: bool):
         self.expired = expired
         self.calls: List[str] = []
@@ -90,19 +96,19 @@ class SpyExecutionTimeoutPolicy:
         return self.expired
 
 
-class SpySuspendPolicy:
+class SpySuspendService(SuspendService):
     def __init__(self, *, should_raise: bool = False):
         self.should_raise = should_raise
         self.invoked = False
         self.invoked_after_append_count: Optional[int] = None
 
-    def on_suspend(self, *, thread_id: str, suspend_entry: Any) -> None:
+    async def handle_suspend(self, thread_context, suspend_entry, resume_token, phase_context) -> None:
         self.invoked = True
         if self.should_raise:
-            raise RuntimeError("suspend policy failed")
+            raise RuntimeError("suspend service failed")
 
 
-class SpyResumeService:
+class SpyResumeService(ResumeService):
     def __init__(self, unauthorized: bool = False, invalid: bool = False, expired: bool = False):
         self.build_calls = []
         self.token_calls = []
@@ -145,7 +151,7 @@ class SpyResumeService:
         return f"resume-{suspend_entry.thread_id}-{suspend_entry.entry_id}"
 
 
-class FakeOrchestrationStrategy:
+class FakeOrchestrationStrategy(OrchestrationStrategy):
     def __init__(self):
         self._event_factories: List[Callable[[ThreadContext, PhaseContext], AgentEvent]] = []
         self._raise: Optional[Exception] = None
@@ -179,7 +185,7 @@ class FakeOrchestrationStrategy:
             yield factory(thread_context, phase_context)
 
 
-class SpyTelemetryPolicy:
+class SpyTelemetryService(TelemetryService):
     def __init__(self):
         self._events: List[TelemetryEvent] = []
 

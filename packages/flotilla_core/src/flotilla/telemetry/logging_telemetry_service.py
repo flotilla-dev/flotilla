@@ -1,12 +1,16 @@
-from flotilla.telemetry.telemetry_policy import TelemetryPolicy
+from flotilla.telemetry.telemetry_service import TelemetryService
 from flotilla.telemetry.telemetry_event import TelemetryEvent, Severity
 from typing import Optional
 import logging
 
 
-class LoggerTelemetry(TelemetryPolicy):
+class LoggingTelemetryService(TelemetryService):
     """
-    TelemetryPolicy implementation using stdlib logging.
+    TelemetryService implementation that emits events through stdlib logging.
+
+    Runtime and framework components use TelemetryService for best-effort
+    observation. This implementation maps TelemetryEvent severity to logging
+    levels and forwards event metadata as structured logging extras.
     """
 
     def __init__(self, logger: Optional[logging.Logger] = None):
@@ -36,7 +40,7 @@ class LoggerTelemetry(TelemetryPolicy):
             return logging.DEBUG
         elif severity == Severity.INFO:
             return logging.INFO
-        elif severity == Severity.WARN:
+        elif severity == Severity.WARNING:
             return logging.WARNING
         elif severity == Severity.ERROR:
             return logging.ERROR

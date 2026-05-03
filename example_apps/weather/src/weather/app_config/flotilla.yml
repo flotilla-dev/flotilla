@@ -9,33 +9,33 @@ flotilla:
     store:
       $ref: thread_store
     phase_context_service:
-      $class: flotilla.runtime.phase_context_service.PhaseContextService
+      $class: flotilla.runtime.phase_context_service.DefaultPhaseContextService
     execution_timeout_policy:
       $class: flotilla.timeout.default_execution_timeout_policy.DefaultExecutionTimeoutPolicy
       # constructor arg
       timeout_ms: 300000 # 5 minutes
     resume_service:
-      $class: flotilla.suspend.resume_service.ResumeService
+      $class: flotilla.suspend.resume_service.DefaultResumeService
       resume_authorization_policy:
-        $class: flotilla.suspend.permissive_resume_authorization.PermissiveResumeAuthorization
+        $class: flotilla.suspend.permissive_resume_authorization.PermissiveResumeAuthorizationPolicy
       ttl_seconds: 432000 # 5 days
-    suspend_policy:
-      $class: flotilla.suspend.no_op_suspend.NoOpSuspend
-    telemetry_policy:
-      $ref: telemetry_policy
+    suspend_service:
+      $class: flotilla.suspend.no_op_suspend_service.NoOpSuspendService
+    telemetry_service:
+      $ref: telemetry_service
   orchestration_strategy:
     $class: flotilla.runtime.support.single_agent_orchestration.SingleAgentOrchestration
     $name: orchestration_strategy
     agent: 
       $ref: flotilla.agents.weather_agent
     telemetry: 
-      $ref: telemetry_policy
+      $ref: telemetry_service
   thread_entry_store:
     $class: flotilla.thread.in_memory_store.InMemoryStore
     $name: thread_store
   telemetry:
-    $class: flotilla.telemetry.logger_telemetry.LoggerTelemetry
-    $name: telemetry_policy
+    $class: flotilla.telemetry.logging_telemetry_service.LoggingTelemetryService
+    $name: telemetry_service
   thread_service:
     $class: flotilla.thread.thread_service.ThreadService
     $name: thread_service

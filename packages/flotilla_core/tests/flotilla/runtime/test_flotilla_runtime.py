@@ -17,7 +17,6 @@ from flotilla.thread.in_memory_store import InMemoryStore
 from flotilla.thread.thread_entry_store import ThreadEntryStore
 from flotilla.agents.agent_event import AgentEvent
 from flotilla.runtime.content_part import TextPart
-from flotilla.telemetry.telemetry_policy import TelemetryPolicy
 
 
 # ---------------------------------------------------------------------------
@@ -249,12 +248,12 @@ async def test_message_final_maps_to_agent_output_and_is_durable(
 
 
 @pytest.mark.asyncio
-async def test_suspend_appends_suspend_entry_then_invokes_suspend_policy_failure_is_non_fatal(
+async def test_suspend_appends_suspend_entry_then_invokes_suspend_service_failure_is_non_fatal(
     runtime_factory,
     store,
     phase_context_service,
     strategy,
-    suspend_policy_failing,
+    suspend_service_failing,
 ):
     thread_id = await store.create_thread()
 
@@ -262,7 +261,7 @@ async def test_suspend_appends_suspend_entry_then_invokes_suspend_policy_failure
         store=store,
         phase_context_service=phase_context_service,
         orchestration_strategy=strategy,
-        suspend_policy=suspend_policy_failing,
+        suspend_service=suspend_service_failing,
     )
 
     strategy.set_events(
@@ -280,7 +279,7 @@ async def test_suspend_appends_suspend_entry_then_invokes_suspend_policy_failure
     resp: RuntimeResponse = await runtime.run(
         request=RuntimeRequest(thread_id=thread_id, user_id="u1", content=[TextPart(text="go")])
     )
-    # SuspendPolicy failure must not break durable state; runtime may still return ok or a warning.
+    # SuspendService failure must not break durable state; runtime may still return ok or a warning.
     # Spec says non-fatal; your RuntimeResponse shape decides whether ok=True with warning vs ok=False.
 
     assert resp
@@ -297,7 +296,7 @@ async def test_orchestration_error_is_converted_to_error_entry(
     store,
     phase_context_service,
     strategy,
-    suspend_policy_ok,
+    suspend_service_ok,
 ):
     thread_id = await store.create_thread()
 
@@ -305,7 +304,7 @@ async def test_orchestration_error_is_converted_to_error_entry(
         store=store,
         phase_context_service=phase_context_service,
         orchestration_strategy=strategy,
-        suspend_policy=suspend_policy_ok,
+        suspend_service=suspend_service_ok,
     )
 
     strategy.set_raise(RuntimeError("boom"))

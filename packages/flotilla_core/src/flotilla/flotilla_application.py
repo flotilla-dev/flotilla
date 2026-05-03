@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import sys
 import inspect
 from typing import Any, Dict, Type, get_type_hints, Optional
 
 from flotilla.config.errors import FlotillaConfigurationError
 from flotilla.container.flotilla_container import FlotillaContainer
-from flotilla.telemetry.telemetry_policy import TelemetryPolicy
-from flotilla.telemetry.logger_telemetry import LoggerTelemetry
+from flotilla.telemetry.telemetry_service import TelemetryService
+from flotilla.telemetry.logging_telemetry_service import LoggingTelemetryService
+from flotilla.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class FlotillaApplication:
@@ -61,9 +63,9 @@ class FlotillaApplication:
         run()  (optional blocking execution)
     """
 
-    def __init__(self, telemetry: Optional[TelemetryPolicy] = None):
+    def __init__(self, telemetry: Optional[TelemetryService] = None):
 
-        self._telemetry = telemetry or LoggerTelemetry()
+        self._telemetry = telemetry or LoggingTelemetryService()
 
         self._container = None
         self._built = False
@@ -99,23 +101,29 @@ class FlotillaApplication:
         """
 
         if self._container is None:
+            logger.error("Application build requested before container was attached")
             raise RuntimeError("Container must be attached before build()")
 
         if self._built:
+            logger.error("Application build requested after it was already built")
             raise RuntimeError("Application already built")
 
         annotations = self._collect_annotations()
+        logger.info("Build Flotilla application %s with %d declared service(s)", type(self).__name__, len(annotations))
 
         for name, service_type in annotations.items():
 
             if name == "telemetry":
+                logger.debug("Skip telemetry service annotation during application build")
                 continue
 
             private_name = f"_{name}"
 
             if hasattr(self, private_name):
+                logger.error("Application service storage attribute '%s' already exists", private_name)
                 raise FlotillaConfigurationError(f"Service storage attribute '{private_name}' already exists")
 
+            logger.debug("Resolve application service '%s' by type %s", name, service_type)
             service = await self._container.find_one_by_type(service_type)
 
             setattr(self, private_name, service)
@@ -126,9 +134,11 @@ class FlotillaApplication:
 
         result = self._execute_build()
         if inspect.isawaitable(result):
+            logger.debug("Await application build hook for %s", type(self).__name__)
             await result
 
         self._built = True
+        logger.info("Flotilla application %s build complete", type(self).__name__)
 
     # ------------------------------------------------------------------
     # Annotation Collection
@@ -181,8 +191,10 @@ class FlotillaApplication:
         Subclasses override this method to initialize application resources.
         """
         self._assert_built()
+        logger.info("Start Flotilla application %s", type(self).__name__)
         self._execute_start()
         self._started = True
+        logger.info("Flotilla application %s started", type(self).__name__)
 
     def run(self, **kwargs) -> None:
         """
@@ -193,6 +205,7 @@ class FlotillaApplication:
         """
         try:
             self._run = True
+            logger.info("Run Flotilla application %s", type(self).__name__)
             self._execute_run(**kwargs)
         finally:
             self.shutdown()
@@ -202,12 +215,15 @@ class FlotillaApplication:
         Shutdown the application and release resources.
         """
         if self._shutdown:
+            logger.debug("Application shutdown skipped because %s is already shut down", type(self).__name__)
             return
 
+        logger.info("Shut down Flotilla application %s", type(self).__name__)
         self._shutdown = True
         self._execute_shutdown()
         self._container = None
         self._started = False
+        logger.info("Flotilla application %s shutdown complete", type(self).__name__)
 
     # ----------------------------
     # Public Accessors
@@ -218,7 +234,7 @@ class FlotillaApplication:
         return self._started
 
     @property
-    def telemetry(self) -> TelemetryPolicy:
+    def telemetry(self) -> TelemetryService:
         return self._telemetry
 
     # -------------------------

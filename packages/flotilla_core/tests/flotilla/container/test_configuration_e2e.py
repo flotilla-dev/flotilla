@@ -43,7 +43,7 @@ def write(path: Path, content: str):
     path.write_text(content, encoding="utf-8")
 
 
-async def test_configuration_e2e(tmp_path: Path, agent_factory, tool_factory, resume_service_valid, store, telemetry_policy):
+async def test_configuration_e2e(tmp_path: Path, agent_factory, tool_factory, resume_service_valid, store, telemetry_service):
 
     def mock_agent_provider(**kwargs):
         return agent_factory(name="Mock Agent", **kwargs)
@@ -55,7 +55,7 @@ async def test_configuration_e2e(tmp_path: Path, agent_factory, tool_factory, re
         return resume_service_valid
 
     def mock_telemtry_provider():
-        return telemetry_policy
+        return telemetry_service
 
     def mock_store_provider():
         return store
@@ -88,10 +88,10 @@ example:
         resume_service:
             # custom provider
             $provider: mock_resume_provider
-        suspend_policy:
+        suspend_service:
             # reference to default name
-            $ref: example.suspend_policy
-        telemetry_policy:
+            $ref: example.suspend_service
+        telemetry_service:
             $ref: example.telemetry
 
     strategy:
@@ -107,12 +107,12 @@ example:
         $name: thread_store
 
     phase_context:
-        $class: flotilla.runtime.phase_context_service.PhaseContextService
+        $class: flotilla.runtime.phase_context_service.DefaultPhaseContextService
         $name: phase_context
 
-    suspend_policy:
+    suspend_service:
         # uses class exposed in __init__.py
-        $class: flotilla.suspend.NoOpSuspend
+        $class: flotilla.suspend.NoOpSuspendService
 
     telemetry:
         $provider: mock_telemetry_provider
@@ -179,7 +179,7 @@ router:
     assert container.exists("orchestration_strategy")
     assert container.exists("thread_store")
     assert container.exists("phase_context")
-    assert container.exists("example.suspend_policy")
+    assert container.exists("example.suspend_service")
     assert container.exists("example.telemetry")
     assert container.exists("agent")
     assert container.exists("tool_factory")
@@ -197,8 +197,8 @@ router:
     assert runtime._store
     assert runtime._phase_context_service
     assert runtime._resume_service
-    assert runtime._suspend_policy
-    assert runtime._telemetry_policy
+    assert runtime._suspend_service
+    assert runtime._telemetry_service
     assert runtime._timeout_policy
     # assert embedded componet is attached to runtime and is the same as on the container
     assert runtime._timeout_policy is await container.get("example.runtime.execution_timeout_policy")
