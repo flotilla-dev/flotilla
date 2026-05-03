@@ -14,15 +14,15 @@ flotilla:
     agent: 
       $ref: flotilla.agents.approval_agent
     telemetry: 
-      $ref: telemetry_policy
+      $ref: telemetry_service
   thread_entry_store:
     $class: flotilla_sql.thread.sql_thread_entry_storey.SqlThreadEntryStore
     $name: thread_store
     engine:
       $ref: database_engine
   telemetry:
-    $class: flotilla.telemetry.logger_telemetry.LoggerTelemetry
-    $name: telemetry_policy
+    $class: flotilla.telemetry.logging_telemetry_service.LoggingTelemetryService
+    $name: telemetry_service
   thread_service:
     $class: flotilla.thread.thread_service.ThreadService
     $name: thread_service

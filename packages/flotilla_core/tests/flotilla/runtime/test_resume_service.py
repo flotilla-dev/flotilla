@@ -3,16 +3,16 @@ import pytest
 from flotilla.runtime.content_part import StructuredPart, TextPart
 from flotilla.runtime.phase_context import PhaseContext
 from flotilla.runtime.runtime_request import RuntimeRequest
-from flotilla.suspend.permissive_resume_authorization import PermissiveResumeAuthorization
-from flotilla.suspend.resume_service import ResumeService
+from flotilla.suspend.permissive_resume_authorization_policy import PermissiveResumeAuthorizationPolicy
+from flotilla.suspend.resume_service import DefaultResumeService
 from flotilla.thread.thread_context import ThreadContext
 from flotilla.thread.thread_entries import ResumeEntry, SuspendEntry, UserInput
 
 
 @pytest.mark.asyncio
 async def test_build_resume_entry_allows_new_phase_context_for_resume_request():
-    service = ResumeService(
-        resume_authorization_policy=PermissiveResumeAuthorization(),
+    service = DefaultResumeService(
+        resume_authorization_policy=PermissiveResumeAuthorizationPolicy(),
         ttl_seconds=3600,
     )
 

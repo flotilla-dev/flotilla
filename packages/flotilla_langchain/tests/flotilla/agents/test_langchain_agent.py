@@ -212,6 +212,23 @@ class NamedTool(FlotillaTool):
         return value
 
 
+class AsyncNamedTool(FlotillaTool):
+    @property
+    def name(self) -> str:
+        return "async_custom_tool_name"
+
+    @property
+    def llm_description(self) -> str:
+        return "An async test tool."
+
+    @property
+    def execution_callable(self):
+        return self.some_method
+
+    async def some_method(self, value: str) -> str:
+        return value
+
+
 # --------------------------------------------------
 # Utilities
 # --------------------------------------------------
@@ -606,4 +623,11 @@ def test_wrap_tool_uses_flotilla_tool_name():
 def test_wrap_tool_preserves_invocation():
     wrapped = LangChainAgent._wrap_tool(NamedTool())
     result = wrapped.invoke({"value": "ok"})
+    assert result == "ok"
+
+
+@pytest.mark.asyncio
+async def test_wrap_tool_preserves_async_invocation():
+    wrapped = LangChainAgent._wrap_tool(AsyncNamedTool())
+    result = await wrapped.ainvoke({"value": "ok"})
     assert result == "ok"

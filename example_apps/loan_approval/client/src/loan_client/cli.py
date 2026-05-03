@@ -67,7 +67,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "get-thread":
             payload = client.get_thread(args.thread_id)
         elif args.command == "submit-loan":
-            payload = _submit_loan(client=client, user_id=args.user_id)
+            _submit_loan(client=client, user_id=args.user_id)
+            return 0
         else:
             parser.error(f"Unknown command: {args.command}")
             return 2
@@ -80,10 +81,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_error(f"Request failed: {exc}")
         return 1
 
-    if args.command == "submit-loan":
-        _print_submission_result(payload)
-    else:
-        print(json.dumps(payload, indent=2, sort_keys=True))
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 
@@ -107,17 +105,7 @@ def _submit_loan(*, client: LoanServerClient, user_id: str) -> dict[str, Any]:
     final_response = None
     resume_token = initial_response.get("resume_token")
     review_decision = None
-
-    if initial_response.get("type") == "SUSPEND":
-        review_decision = _prompt_review_decision("Review decision [approve/reject]: ")
-        final_response = client.submit_loan_review(
-            thread_id,
-            user_id=user_id,
-            resume_token=resume_token,
-            decision=review_decision,
-        )
-
-    return {
+    payload = {
         "thread_id": thread_id,
         "request": {
             "name": name,
@@ -128,6 +116,22 @@ def _submit_loan(*, client: LoanServerClient, user_id: str) -> dict[str, Any]:
         "review_decision": review_decision,
         "final_response": final_response,
     }
+
+    _print_initial_submission_result(payload)
+
+    if initial_response.get("type") == "SUSPEND":
+        review_decision = _prompt_review_decision("Review decision [approve/reject]: ")
+        final_response = client.submit_loan_review(
+            thread_id,
+            user_id=user_id,
+            resume_token=resume_token,
+            decision=review_decision,
+        )
+        payload["review_decision"] = review_decision
+        payload["final_response"] = final_response
+        _print_final_submission_result(payload)
+
+    return payload
 
 
 def _prompt_non_empty(prompt: str) -> str:
@@ -162,7 +166,7 @@ def _prompt_review_decision(prompt: str) -> str:
         print("Enter either 'approve' or 'reject'.")
 
 
-def _print_submission_result(payload: dict[str, Any]) -> None:
+def _print_initial_submission_result(payload: dict[str, Any]) -> None:
     initial_response = payload["initial_response"]
     print(f"Thread ID: {payload['thread_id']}")
     print(f"Status: {initial_response['type']}")
@@ -170,7 +174,10 @@ def _print_submission_result(payload: dict[str, Any]) -> None:
         print(f"Resume Token: {payload['resume_token']}")
     print("Agent response:")
     print(_content_to_text(initial_response.get("content", [])))
+    print()
 
+
+def _print_final_submission_result(payload: dict[str, Any]) -> None:
     if payload.get("review_decision") and payload.get("final_response"):
         final_response = payload["final_response"]
         print(f"Review Decision: {payload['review_decision']}")

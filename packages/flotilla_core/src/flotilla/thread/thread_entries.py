@@ -24,6 +24,14 @@ class ActorType(str, Enum):
 
 
 class ThreadEntryBase(BaseModel, ABC):
+    """
+    Base durable record for every runtime thread state transition.
+
+    FlotillaRuntime appends concrete ThreadEntry variants to represent user
+    input, agent output, suspend, resume, close, and error transitions. Stores
+    assign identity, order, and timestamp fields during append. ThreadContext
+    later derives execution status from the ordered entries.
+    """
 
     type: ThreadEntryType = Field(..., description="The type of ThreadEntry class")
 

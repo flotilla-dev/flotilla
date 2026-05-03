@@ -316,7 +316,7 @@ Runtime I/O supports observability by carrying:
 - `timestamp` fields for diagnostic visibility
 - `user_id` for audit-relevant request context
 
-Runtime I/O does not define logging, metrics, spans, or audit sinks. Those behaviors are owned by `TelemetryPolicy`, transport adapters, and runtime collaborators.
+Runtime I/O does not define logging, metrics, spans, or audit sinks. Those behaviors are owned by `TelemetryService`, transport adapters, and runtime collaborators.
 
 Observability fields MUST NOT be required for correctness, ordering, timeout enforcement, or durable identity.
 
@@ -327,5 +327,5 @@ Observability fields MUST NOT be required for correctness, ordering, timeout enf
 - `Thread Model`
 - `ThreadEntryStore`
 - `ResumeAuthorizationPolicy`
-- `SuspendPolicy`
-- `TelemetryPolicy`
+- `SuspendService`
+- `TelemetryService`

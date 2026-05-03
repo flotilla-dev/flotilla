@@ -26,7 +26,7 @@ Runtime MUST NOT:
 -   Create threads (thread identity lifecycle is outside runtime)
 -   Require callers to construct `PhaseContext`
 -   Persist tool semantics or tool-specific records
--   Guarantee delivery of external notifications (SuspendPolicy reliability is app-specific)
+-   Guarantee delivery of external notifications (SuspendService reliability is app-specific)
     
 ----------
 
@@ -39,8 +39,8 @@ Runtime sits between:
 -   `ThreadEntryStore` enforcing CAS + persistence
 -   Policies:
     
-    -   `SuspendPolicy`    
-    -   `TelemetryPolicy`
+    -   `SuspendService`    
+    -   `TelemetryService`
     -   `ExecutionTimeoutPolicy`
     -   `ResumeService`
         
@@ -104,11 +104,11 @@ Runtime MUST defensively convert unexpected exceptions into a terminal `ErrorEnt
 
 ----------
 
-### 3.4 SuspendPolicy (Configured)
+### 3.4 SuspendService (Configured)
 
-Runtime accepts a `SuspendPolicy` collaborator and installs `NoOpSuspend` by default.
+Runtime accepts a `SuspendService` collaborator and installs `NoOpSuspendService` by default.
 
-The current implementation does not invoke `SuspendPolicy.handle_suspend()` during suspend handling.
+After a `SuspendEntry` is durably appended and reloaded, runtime creates a resume token and invokes `SuspendService.handle_suspend()` on a best-effort, non-fatal basis.
 
 ----------
 

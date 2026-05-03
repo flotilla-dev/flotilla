@@ -12,6 +12,9 @@ from flotilla.thread.errors import (
     ThreadNotFoundError,
     ConcurrentThreadExecutionError,
 )
+from flotilla.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class InMemoryStore(ThreadEntryStore):
@@ -40,18 +43,22 @@ class InMemoryStore(ThreadEntryStore):
         async with self._lock:
             if thread_id in self._threads:
                 # Extremely unlikely, but maintain spec guarantee
+                logger.error("Generated duplicate in-memory thread id '%s'", thread_id)
                 raise Exception("Thread already exists")
 
             self._threads[thread_id] = []
 
+        logger.debug("Created in-memory thread '%s'", thread_id)
         return thread_id
 
     async def load(self, thread_id: str) -> List[ThreadEntry]:
         async with self._lock:
             if thread_id not in self._threads:
+                logger.warning("In-memory thread '%s' was not found", thread_id)
                 raise ThreadNotFoundError(thread_id=thread_id, message=f"Thread {thread_id} not found")
 
             # Return immutable snapshot copy
+            logger.debug("Loaded in-memory thread '%s' with %d entries", thread_id, len(self._threads[thread_id]))
             return list(self._threads[thread_id])
 
     # ---------------------------------------------------------
@@ -70,6 +77,7 @@ class InMemoryStore(ThreadEntryStore):
 
             # Thread existence check
             if entry.thread_id not in self._threads:
+                logger.warning("Append rejected because in-memory thread '%s' does not exist", entry.thread_id)
                 raise ThreadNotFoundError(
                     thread_id=entry.thread_id,
                     message=f"Thread {entry.thread_id} does not exist",
@@ -79,6 +87,10 @@ class InMemoryStore(ThreadEntryStore):
 
             # Reject client-supplied entry_id or timestamp
             if entry.entry_id is not None or entry.timestamp is not None:
+                logger.warning(
+                    "Append rejected for thread '%s' because entry identity fields were client supplied",
+                    entry.thread_id,
+                )
                 raise AppendConflictError(
                     thread_id=entry.thread_id,
                     phase_id=entry.phase_id,
@@ -88,6 +100,11 @@ class InMemoryStore(ThreadEntryStore):
             # Empty thread case
             if not thread_entries:
                 if expected_previous_entry_id is not None:
+                    logger.warning(
+                        "First append rejected for thread '%s': expected_previous_entry_id was '%s'",
+                        entry.thread_id,
+                        expected_previous_entry_id,
+                    )
                     raise AppendConflictError(
                         thread_id=entry.thread_id,
                         phase_id=entry.phase_id,
@@ -95,6 +112,11 @@ class InMemoryStore(ThreadEntryStore):
                         message=f"Expected previous entry id must be None for first append, not {expected_previous_entry_id}",
                     )
                 if entry.previous_entry_id is not None:
+                    logger.warning(
+                        "First append rejected for thread '%s': entry.previous_entry_id was '%s'",
+                        entry.thread_id,
+                        entry.previous_entry_id,
+                    )
                     raise AppendConflictError(
                         thread_id=entry.thread_id,
                         phase_id=entry.phase_id,
@@ -109,6 +131,7 @@ class InMemoryStore(ThreadEntryStore):
 
                 # 0. Non-empty thread preconditions
                 if expected_previous_entry_id is None:
+                    logger.warning("Append rejected for thread '%s': expected_previous_entry_id was None", entry.thread_id)
                     raise ConcurrentThreadExecutionError(
                         thread_id=entry.thread_id,
                         phase_id=entry.phase_id,
@@ -118,6 +141,7 @@ class InMemoryStore(ThreadEntryStore):
                         message=("Expected previous entry id cannot be None"),
                     )
                 if entry.previous_entry_id is None:
+                    logger.warning("Append rejected for thread '%s': entry.previous_entry_id was None", entry.thread_id)
                     raise AppendConflictError(
                         thread_id=entry.thread_id,
                         phase_id=entry.phase_id,
@@ -128,6 +152,12 @@ class InMemoryStore(ThreadEntryStore):
 
                 # CAS Validation
                 if current_tail.entry_id != expected_previous_entry_id:
+                    logger.warning(
+                        "Append CAS rejected for thread '%s': current tail '%s' expected '%s'",
+                        entry.thread_id,
+                        current_tail.entry_id,
+                        expected_previous_entry_id,
+                    )
                     raise ConcurrentThreadExecutionError(
                         thread_id=entry.thread_id,
                         phase_id=entry.phase_id,
@@ -140,6 +170,12 @@ class InMemoryStore(ThreadEntryStore):
                         ),
                     )
                 if entry.previous_entry_id != current_tail.entry_id:
+                    logger.warning(
+                        "Append CAS rejected for thread '%s': entry previous '%s' current tail '%s'",
+                        entry.thread_id,
+                        entry.previous_entry_id,
+                        current_tail.entry_id,
+                    )
                     raise ConcurrentThreadExecutionError(
                         thread_id=entry.thread_id,
                         phase_id=entry.phase_id,
@@ -161,4 +197,11 @@ class InMemoryStore(ThreadEntryStore):
             # Persist append
             thread_entries.append(new_entry)
 
+            logger.debug(
+                "Appended %s entry '%s' to in-memory thread '%s' at order %d",
+                type(new_entry).__name__,
+                new_entry.entry_id,
+                new_entry.thread_id,
+                new_entry.entry_order,
+            )
             return new_entry

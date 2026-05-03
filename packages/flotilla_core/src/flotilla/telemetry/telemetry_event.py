@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 class Severity(str, Enum):
     DEBUG = "DEBUG"
     INFO = "INFO"
-    WARN = "WARN"
+    WARNING = "WARNING"
     ERROR = "ERROR"
 
 
@@ -69,7 +69,7 @@ class TelemetryEvent(BaseModel):
         return cls(
             event_type=type,
             component=component,
-            severity=Severity.WARN,
+            severity=Severity.WARNING,
             attributes=attributes,
         )
 

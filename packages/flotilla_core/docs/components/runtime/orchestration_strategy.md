@@ -131,8 +131,8 @@ Because of this symmetry:
 - Issue `ResumeToken`
 - Access `ThreadEntryStore`
 - Modify timeout semantics
-- Invoke `SuspendPolicy`
-- Invoke `TelemetryPolicy` directly
+- Invoke `SuspendService`
+- Invoke `TelemetryService` directly
 
 Durable mutation is exclusively owned by `FlotillaRuntime`.
 
@@ -298,7 +298,7 @@ For every invocation:
 - `AgentEvent`
 - `Thread Model`
 - `ExecutionTimeoutPolicy`
-- `SuspendPolicy`
+- `SuspendService`
 
 This design guarantees:
 

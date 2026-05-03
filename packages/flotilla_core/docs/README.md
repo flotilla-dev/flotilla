@@ -35,8 +35,11 @@ Component specs describe exact contracts, local responsibilities, data models, a
 
 - [ExecutionTimeoutPolicy](components/policies/execution_timeout_policy.md)
 - [ResumeAuthorizationPolicy](components/policies/resume_authorization_policy.md)
-- [SuspendPolicy](components/policies/suspend_policy.md)
-- [TelemetryPolicy](components/policies/telemetry_policy.md)
+
+### Services
+
+- [SuspendService](components/services/suspend_service.md)
+- [TelemetryService](components/services/telemetry_service.md)
 
 ### Tools
 

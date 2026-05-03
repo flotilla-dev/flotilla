@@ -344,33 +344,33 @@ async def test_create_requires_class(container):
 
 
 async def test_find_instances_optional_type(container):
-    class TelemetryPolicy: ...
+    class TelemetryService: ...
 
-    policy = TelemetryPolicy()
+    policy = TelemetryService()
     container._install_instance_binding(component_name="telemetry", component=policy)
     container._built = True
 
-    assert await container.find_instances_by_type(Optional[TelemetryPolicy]) == [policy]
+    assert await container.find_instances_by_type(Optional[TelemetryService]) == [policy]
 
 
 async def test_find_instances_union_type(container):
-    class TelemetryPolicy: ...
+    class TelemetryService: ...
 
-    policy = TelemetryPolicy()
+    policy = TelemetryService()
     container._install_instance_binding(component_name="telemetry", component=policy)
     container._built = True
 
-    assert await container.find_instances_by_type(Union[TelemetryPolicy, None]) == [policy]
+    assert await container.find_instances_by_type(Union[TelemetryService, None]) == [policy]
 
 
 async def test_find_instances_annotated_type(container):
-    class TelemetryPolicy: ...
+    class TelemetryService: ...
 
-    policy = TelemetryPolicy()
+    policy = TelemetryService()
     container._install_instance_binding(component_name="telemetry", component=policy)
     container._built = True
 
-    assert await container.find_instances_by_type(Annotated[TelemetryPolicy, "meta"]) == [policy]
+    assert await container.find_instances_by_type(Annotated[TelemetryService, "meta"]) == [policy]
 
 
 async def test_find_instances_union_multiple_types(container):

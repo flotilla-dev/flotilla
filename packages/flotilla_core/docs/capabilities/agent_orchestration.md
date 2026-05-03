@@ -137,7 +137,7 @@ Thread creation is part of the Agent Orchestration capability because every agen
 5. Runtime creates a resume token from the durable suspend entry.
 6. Runtime emits a `SUSPEND` outcome containing the resume token.
 
-`SuspendPolicy` is configured as a post-terminal notification/routing collaborator. The current runtime implementation accepts the collaborator but does not invoke it during suspend handling.
+`SuspendService` is configured as a post-terminal notification/routing collaborator. Runtime invokes it after the suspend entry is durable and the resume token has been created. Failures are best-effort and non-fatal.
 
 ### Error Flow
 
@@ -211,11 +211,11 @@ Evaluates whether a decoded resume token payload is authorized to resume a durab
 
 Determines whether an active phase has expired. Runtime owns timeout enforcement.
 
-### SuspendPolicy
+### SuspendService
 
 Defines a best-effort post-terminal suspend notification hook. It does not own durable mutation or resume authorization.
 
-### TelemetryPolicy
+### TelemetryService
 
 Receives structured telemetry events emitted by runtime and collaborators. Telemetry is non-authoritative and non-fatal.
 
@@ -341,5 +341,5 @@ This capability is successful when:
 - ThreadEntryStore Specification
 - ExecutionTimeoutPolicy Specification
 - ResumeAuthorizationPolicy Specification
-- SuspendPolicy Specification
-- TelemetryPolicy Specification
+- SuspendService Specification
+- TelemetryService Specification

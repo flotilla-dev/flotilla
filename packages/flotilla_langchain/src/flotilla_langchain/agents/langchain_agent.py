@@ -60,6 +60,13 @@ class LangChainAgent(FlotillaAgent):
         self._graph: CompiledStateGraph = self._build_graph()
 
         super().__init__(agent_name=agent_name)
+        logger.info(
+            "Initialized LangChainAgent '%s' with %d tool(s), %d middleware item(s), checkpointer=%s",
+            self.agent_name,
+            len(self._tools),
+            len(self._middleware),
+            self._checkpointer is not None,
+        )
 
     # ------------------------------------------------------------------
     # Graph Construction
@@ -67,6 +74,7 @@ class LangChainAgent(FlotillaAgent):
 
     def _build_graph(self) -> CompiledStateGraph:
         structured_tools = [self._wrap_tool(t) for t in self._tools]
+        logger.debug("Build LangChain graph with %d structured tool(s)", len(structured_tools))
 
         return create_agent(
             model=self._llm,
@@ -79,12 +87,17 @@ class LangChainAgent(FlotillaAgent):
 
     @staticmethod
     def _wrap_tool(tool: FlotillaTool) -> StructuredTool:
+        logger.debug("Wrap Flotilla tool '%s' for LangChain", tool.name)
         fn = tool.execution_callable  # bound method
         instance = fn.__self__
         func = fn.__func__  # underlying function
 
-        def tool_func(*args, **kwargs):
-            return func(instance, *args, **kwargs)
+        if inspect.iscoroutinefunction(func):
+            async def tool_func(*args, **kwargs):
+                return await func(instance, *args, **kwargs)
+        else:
+            def tool_func(*args, **kwargs):
+                return func(instance, *args, **kwargs)
 
         # preserve metadata
         update_wrapper(tool_func, func)
@@ -94,11 +107,14 @@ class LangChainAgent(FlotillaAgent):
         params = list(sig.parameters.values())[1:]  # drop "self"
         tool_func.__signature__ = sig.replace(parameters=params)
 
-        return StructuredTool.from_function(
-            func=tool_func,
-            name=tool.name,
-            description=tool.llm_description,
-        )
+        if inspect.iscoroutinefunction(tool_func):
+            return StructuredTool.from_function(
+                coroutine=tool_func,
+                name=tool.name,
+                description=tool.llm_description,
+            )
+
+        return StructuredTool.from_function(func=tool_func, name=tool.name, description=tool.llm_description)
 
     # ------------------------------------------------------------------
     # Execution
@@ -112,14 +128,22 @@ class LangChainAgent(FlotillaAgent):
     ) -> AsyncIterator[AgentEvent]:
 
         if not thread_context.entries:
+            logger.error("LangChainAgent '%s' received empty ThreadContext", self.agent_name)
             raise RuntimeError("ThreadContext must contain at least one entry.")
 
         triggering_entry = thread_context.entries[-1]
         entry_id = triggering_entry.entry_id
 
         if not entry_id:
+            logger.error("LangChainAgent '%s' received triggering entry without entry_id", self.agent_name)
             raise RuntimeError("Triggering entry must have a non-null entry_id.")
 
+        logger.info(
+            "Start LangChainAgent '%s' for thread '%s' phase '%s'",
+            self.agent_name,
+            phase_context.thread_id,
+            phase_context.phase_id,
+        )
         yield AgentEvent.message_start(entry_id=entry_id, agent_id=self.agent_name)
 
         chunk_buffer: List[str] = []
@@ -129,6 +153,11 @@ class LangChainAgent(FlotillaAgent):
         command = self._resume_command(triggering_entry)
         graph_input = command or self._graph_input(thread=thread_context, config=phase_context)
         graph_config = self._graph_config(phase_context)
+        logger.debug(
+            "Invoke LangChain graph for agent '%s' with resume_command=%s",
+            self.agent_name,
+            command is not None,
+        )
 
         try:
             async for event in self._graph.astream(
@@ -153,6 +182,11 @@ class LangChainAgent(FlotillaAgent):
                     if isinstance(message, AIMessageChunk):
                         if message.content:
                             chunk_buffer.append(message.content)
+                            logger.debug(
+                                "LangChainAgent '%s' emitted message chunk of length %d",
+                                self.agent_name,
+                                len(message.content),
+                            )
 
                             yield AgentEvent.message_chunk(
                                 entry_id=entry_id,
@@ -166,6 +200,12 @@ class LangChainAgent(FlotillaAgent):
                 elif mode == "updates":
                     interrupt_payload = chunk.get("__interrupt__")
                     if interrupt_payload is not None:
+                        logger.info(
+                            "LangChainAgent '%s' received LangGraph interrupt for thread '%s' phase '%s'",
+                            self.agent_name,
+                            phase_context.thread_id,
+                            phase_context.phase_id,
+                        )
                         yield AgentEvent.suspend(
                             entry_id=entry_id,
                             agent_id=self.agent_name,
@@ -183,7 +223,7 @@ class LangChainAgent(FlotillaAgent):
 
             final_state = await self._graph.aget_state(config=graph_config)
 
-            logger.info(f"StateSnapshot type {type(final_state)}")
+            logger.debug("LangChainAgent '%s' final state type is %s", self.agent_name, type(final_state))
 
             messages = final_state.values.get("messages", [])
             if isinstance(messages, list):
@@ -193,6 +233,12 @@ class LangChainAgent(FlotillaAgent):
                         break
 
             if last_ai_message is None:
+                logger.warning(
+                    "LangChainAgent '%s' final state did not contain an AIMessage for thread '%s' phase '%s'",
+                    self.agent_name,
+                    phase_context.thread_id,
+                    phase_context.phase_id,
+                )
                 yield AgentEvent.error(
                     entry_id=entry_id,
                     agent_id=self.agent_name,
@@ -215,6 +261,13 @@ class LangChainAgent(FlotillaAgent):
                 final_state=final_state,
             )
 
+            logger.info(
+                "Complete LangChainAgent '%s' for thread '%s' phase '%s' with %d content part(s)",
+                self.agent_name,
+                phase_context.thread_id,
+                phase_context.phase_id,
+                len(parts),
+            )
             yield AgentEvent.message_final(
                 entry_id=entry_id,
                 agent_id=self.agent_name,
@@ -223,12 +276,20 @@ class LangChainAgent(FlotillaAgent):
             )
 
         except asyncio.CancelledError:
+            logger.warning(
+                "LangChainAgent '%s' execution was cancelled for thread '%s' phase '%s'",
+                self.agent_name,
+                phase_context.thread_id,
+                phase_context.phase_id,
+            )
             raise
 
         except Exception as e:
-            logger.error(
-                f"Error while executing LangChainAgent {self.agent_name}",
-                exc_info=True,
+            logger.exception(
+                "Error while executing LangChainAgent '%s' for thread '%s' phase '%s'",
+                self.agent_name,
+                phase_context.thread_id,
+                phase_context.phase_id,
             )
 
             yield AgentEvent.error(
@@ -350,6 +411,12 @@ class LangChainAgent(FlotillaAgent):
             else:
                 messages.append(AIMessage(content=text))
 
+        logger.debug(
+            "Mapped %d thread entries into %d LangChain message(s) for thread '%s'",
+            len(thread.entries),
+            len(messages),
+            config.thread_id,
+        )
         return {
             "messages": messages,
             "configurable": {
@@ -382,6 +449,7 @@ class LangChainAgent(FlotillaAgent):
             return None
 
         payload = self._map_resume_content_to_payload(entry.content)
+        logger.debug("Mapped ResumeEntry '%s' content to LangGraph resume command", entry.entry_id)
 
         return Command(resume=payload)
 

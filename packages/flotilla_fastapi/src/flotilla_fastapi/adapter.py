@@ -9,6 +9,9 @@ from flotilla_fastapi.handler import HTTPHandler
 from flotilla_fastapi.route_definition import RouteDefinition
 from flotilla_fastapi.exception_handler import HTTPExceptionHandler
 from flotilla_fastapi.interceptor import HTTPRequestInterceptor
+from flotilla.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class FastAPIAdapter:
@@ -35,9 +38,16 @@ class FastAPIAdapter:
         return self._app
 
     def start(self) -> None:
+        logger.info(
+            "Start FastAPIAdapter binding handlers=%d exception_handlers=%d interceptors=%d",
+            len(self._handlers),
+            len(self._exception_handlers),
+            len(self._interceptors),
+        )
         self._bind_interceptors()
         self._bind_routes()
         self._bind_exception_handlers()
+        logger.info("FastAPIAdapter binding complete")
 
     # --------------------------------------------------
     # Route Binding
@@ -47,6 +57,7 @@ class FastAPIAdapter:
 
         for handler in self._handlers:
             route_defs = self._get_route_methods(handler)
+            logger.debug("Discovered %d route(s) on handler %s", len(route_defs), type(handler).__name__)
 
             for route_def in route_defs:
                 endpoint = self._build_endpoint(handler, route_def)
@@ -60,6 +71,13 @@ class FastAPIAdapter:
                     endpoint=endpoint,
                     methods=[route_def.http_method],
                     **route_kwargs,
+                )
+                logger.info(
+                    "Registered FastAPI route %s %s -> %s.%s",
+                    route_def.http_method,
+                    route_def.path,
+                    type(handler).__name__,
+                    route_def.method_name,
                 )
 
     def _get_route_methods(self, handler: HTTPHandler) -> List[RouteDefinition]:
@@ -104,12 +122,15 @@ class FastAPIAdapter:
 
     def _wrap_execution(self, endpoint):
         async def wrapped(**kwargs):
+            logger.debug("Execute FastAPI endpoint %s", endpoint.__name__)
             result = await endpoint(**kwargs)
 
             if isinstance(result, Response):
+                logger.debug("FastAPI endpoint %s returned Response", endpoint.__name__)
                 return result
 
             if self._is_async_iterator(result):
+                logger.debug("FastAPI endpoint %s returned async iterator", endpoint.__name__)
                 return self._to_streaming_response(result)
 
             return result
@@ -129,6 +150,7 @@ class FastAPIAdapter:
     def _to_streaming_response(self, iterator: AsyncIterator[Any]) -> StreamingResponse:
         async def stream():
             async for event in iterator:
+                logger.debug("Serialize FastAPI streaming event of type %s", type(event).__name__)
                 yield self._serialize_stream_event(event)
 
         return StreamingResponse(
@@ -156,6 +178,7 @@ class FastAPIAdapter:
             exc_type = handler.exception_type
 
             if exc_type in seen:
+                logger.error("Duplicate HTTPExceptionHandler for %s", exc_type.__name__)
                 raise ValueError(f"Duplicate HTTPExceptionHandler for {exc_type.__name__}")
 
             seen.add(exc_type)
@@ -164,9 +187,15 @@ class FastAPIAdapter:
                 exc_type,
                 self._build_exception_handler(handler),
             )
+            logger.info("Registered FastAPI exception handler for %s", exc_type.__name__)
 
     def _build_exception_handler(self, handler: HTTPExceptionHandler):
         async def fastapi_handler(request, exc):
+            logger.warning(
+                "Handle FastAPI exception %s with %s",
+                type(exc).__name__,
+                type(handler).__name__,
+            )
             return await handler.handle(request, exc)
 
         return fastapi_handler
@@ -181,3 +210,4 @@ class FastAPIAdapter:
 
     def _register_interceptor(self, interceptor: HTTPRequestInterceptor) -> None:
         self._app.middleware("http")(interceptor.dispatch)
+        logger.info("Registered FastAPI interceptor %s", type(interceptor).__name__)

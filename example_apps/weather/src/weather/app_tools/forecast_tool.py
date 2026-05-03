@@ -1,5 +1,8 @@
 from flotilla.tools.flotilla_tool import FlotillaTool
+from flotilla.utils.logger import get_logger
 import requests
+
+logger = get_logger(__name__)
 
 
 class ForecastTool(FlotillaTool):
@@ -35,6 +38,6 @@ including upcoming temperatures, conditions, and precipitation.
 
     def get_forecast(self, city: str) -> str:
         """Retrieves the 1 day forecast for a location"""
-        # logger.info(f"Get forecast for city {city}")
+        logger.info("Get forecast for city '%s'", city)
         url = f"{self.base_url}/v1/forecast.json?key={self.api_key}&q={city}&days=1&aqi=no&alerts=no"
         return requests.get(url).text

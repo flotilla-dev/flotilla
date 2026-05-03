@@ -8,7 +8,7 @@ from unittest.mock import Mock
 from flotilla.tools.flotilla_tool import FlotillaTool
 from flotilla.thread.thread_entry_store import ThreadEntryStore
 from flotilla.thread.in_memory_store import InMemoryStore
-from flotilla.telemetry.telemetry_policy import TelemetryPolicy
+from flotilla.telemetry.telemetry_service import TelemetryService
 from flotilla.agents.flotilla_agent import FlotillaAgent
 from flotilla.config.secret_resolver import SecretResolver
 from flotilla.container.flotilla_container import FlotillaContainer
@@ -19,10 +19,10 @@ from .runtime_fakes import (
     FaultInjectingStore,
     SpyPhaseContextService,
     SpyExecutionTimeoutPolicy,
-    SpySuspendPolicy,
+    SpySuspendService,
     SpyResumeService,
     FakeOrchestrationStrategy,
-    SpyTelemetryPolicy,
+    SpyTelemetryService,
 )
 
 # ---------------------------------------------------------------------------
@@ -82,13 +82,13 @@ def resume_service_expired() -> SpyResumeService:
 
 
 @pytest.fixture
-def suspend_policy_ok() -> SpySuspendPolicy:
-    return SpySuspendPolicy(should_raise=False)
+def suspend_service_ok() -> SpySuspendService:
+    return SpySuspendService(should_raise=False)
 
 
 @pytest.fixture
-def suspend_policy_failing() -> SpySuspendPolicy:
-    return SpySuspendPolicy(should_raise=True)
+def suspend_service_failing() -> SpySuspendService:
+    return SpySuspendService(should_raise=True)
 
 
 @pytest.fixture
@@ -97,8 +97,8 @@ def strategy() -> FakeOrchestrationStrategy:
 
 
 @pytest.fixture
-def telemetry_policy() -> TelemetryPolicy:
-    return SpyTelemetryPolicy()
+def telemetry_service() -> TelemetryService:
+    return SpyTelemetryService()
 
 
 @pytest.fixture
@@ -117,8 +117,8 @@ def runtime_factory() -> Callable[..., Any]:
         orchestration_strategy: Optional[FakeOrchestrationStrategy] = None,
         execution_timeout_policy: Optional[SpyExecutionTimeoutPolicy] = None,
         resume_service: Optional[SpyResumeService] = None,
-        suspend_policy: Optional[SpySuspendPolicy] = None,
-        telemetry_policy: Optional[TelemetryPolicy] = None,
+        suspend_service: Optional[SpySuspendService] = None,
+        telemetry_service: Optional[TelemetryService] = None,
     ):
 
         store = store or InMemoryStore()
@@ -126,8 +126,8 @@ def runtime_factory() -> Callable[..., Any]:
         orchestration_strategy = orchestration_strategy or FakeOrchestrationStrategy()
         execution_timeout_policy = execution_timeout_policy or SpyExecutionTimeoutPolicy(expired=False)
         resume_service = resume_service or SpyResumeService()
-        suspend_policy = suspend_policy or SpySuspendPolicy()
-        telemetry_policy = telemetry_policy or SpyTelemetryPolicy()
+        suspend_service = suspend_service or SpySuspendService()
+        telemetry_service = telemetry_service or SpyTelemetryService()
 
         return FlotillaRuntime(
             orchestration=orchestration_strategy,
@@ -135,8 +135,8 @@ def runtime_factory() -> Callable[..., Any]:
             phase_context_service=phase_context_service,
             execution_timeout_policy=execution_timeout_policy,
             resume_service=resume_service,
-            suspend_policy=suspend_policy,
-            telemetry_policy=telemetry_policy,
+            suspend_service=suspend_service,
+            telemetry_service=telemetry_service,
         )
 
     return _make_runtime

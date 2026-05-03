@@ -1,60 +1,55 @@
-# TelemetryPolicy Specification (v3.0)
+# TelemetryService Specification (v3.0)
 
 ## 1. Executive Summary
 
-`TelemetryPolicy` defines the framework-wide, pluggable telemetry interface for Flotilla.
+`TelemetryService` defines the framework-wide, pluggable telemetry interface for Flotilla.
 
-It provides structured, non-authoritative observation of framework behavior across:
+It provides structured, non-authoritative observation of selected framework behavior across:
 
-- Configuration loading
-- Component compilation
-- Container construction
 - Runtime execution
 - Agent execution
-- Tool execution
 - Suspend / Resume lifecycle
 - Timeout enforcement
 
-`TelemetryPolicy` is injectable across the framework, transport-agnostic, storage-agnostic, observational only, and non-fatal by design.
+The initial telemetry taxonomy is intentionally small. Additional event types may be added as framework observability needs become clearer.
 
-`TelemetryPolicy` MUST NOT influence execution semantics. Execution correctness is defined by other framework specifications.
+`TelemetryService` is injectable across the framework, transport-agnostic, storage-agnostic, observational only, and non-fatal by design.
+
+`TelemetryService` MUST NOT influence execution semantics. Execution correctness is defined by other framework specifications.
 
 ---
 
 ## 2. Architectural Context
 
-`TelemetryPolicy` is a core collaborator that may be injected into:
+`TelemetryService` is a core collaborator that may be injected into:
 
 - `FlotillaApplication`
-- `ConfigLoader`
-- `ComponentCompiler`
-- `FlotillaContainer`
 - `FlotillaRuntime`
 - `FlotillaAgent`
 - `FlotillaTool` (optional)
-- `SuspendPolicy`
+- `SuspendService`
 - `ExecutionTimeoutPolicy`
 
-`TelemetryPolicy` does not own execution lifecycle, durability, or concurrency. It observes framework behavior but does not define it.
+`TelemetryService` does not own execution lifecycle, durability, or concurrency. It observes framework behavior but does not define it.
 
 ---
 
 ## 3. Core Concepts
 
-`TelemetryPolicy` is a pluggable, best-effort observer. `TelemetryEvent` is the canonical event object passed to the policy.
+`TelemetryService` is a pluggable, best-effort observer. `TelemetryEvent` is the canonical event object passed to the service.
 
 Core terms:
 
 - Telemetry event: structured diagnostic signal emitted by a framework component.
 - Context: optional correlation identifiers attached to telemetry.
 - Attributes: JSON-safe diagnostic values carried with an event.
-- No-op policy: default implementation that intentionally drops telemetry.
+- No-op service: default implementation that intentionally drops telemetry.
 
 ---
 
 ## 4. Responsibilities
 
-`TelemetryPolicy` is responsible for:
+`TelemetryService` is responsible for:
 
 - Receiving structured `TelemetryEvent` objects
 - Emitting or forwarding those events to an observability backend
@@ -64,7 +59,7 @@ Core terms:
 
 ## 5. Non-Responsibilities
 
-`TelemetryPolicy` is NOT responsible for:
+`TelemetryService` is NOT responsible for:
 
 - Modifying execution behavior
 - Persisting thread entries
@@ -79,10 +74,10 @@ Core terms:
 
 ### Interface Contract
 
-`TelemetryPolicy` exposes a single method:
+`TelemetryService` exposes a single method:
 
 ```python
-class TelemetryPolicy(Protocol):
+class TelemetryService(ABC):
 
     def emit(self, event: TelemetryEvent) -> None:
         ...
@@ -92,7 +87,7 @@ The framework invokes `emit()` whenever a telemetry event is generated. Implemen
 
 ### Failure Handling
 
-If `TelemetryPolicy.emit` raises an exception:
+If `TelemetryService.emit` raises an exception:
 
 - The framework MUST catch and swallow it.
 - Execution MUST continue unaffected.
@@ -104,7 +99,7 @@ Telemetry is strictly non-fatal.
 
 ## 7. Constraints & Guarantees
 
-`TelemetryPolicy` MUST:
+`TelemetryService` MUST:
 
 - Never mutate framework state.
 - Never modify `RuntimeRequest` or `RuntimeResponse`.
@@ -143,13 +138,13 @@ Framework components MUST:
 
 ### Field Definitions
 
-**`event_type`** (REQUIRED) — Canonical identifier describing what occurred. Examples: `CONFIG_LOAD_START`, `CONFIG_LOAD_COMPLETE`, `COMPILATION_START`, `COMPILATION_COMPLETE`, `CONTAINER_BUILD_START`, `CONTAINER_BUILD_COMPLETE`, `RUNTIME_REQUEST_RECEIVED`, `RUNTIME_PHASE_INITIATED`, `AGENT_RUN_START`, `AGENT_RUN_COMPLETE`, `TOOL_EXECUTION_START`, `TOOL_EXECUTION_COMPLETE`, `RUNTIME_TERMINAL`, `EXECUTION_TIMEOUT_TRIGGERED`. The framework SHOULD define and maintain a canonical event taxonomy.
+**`event_type`** (REQUIRED) — Canonical identifier describing what occurred. Event values use lowercase dotted names in the form `<domain>.<entity>.<outcome>`, such as `runtime.phase.started` or `agent.run.failed`. The framework SHOULD define and maintain a small canonical event taxonomy.
 
-**`component`** (REQUIRED) — Name of the emitting component. Examples: `ConfigLoader`, `ComponentCompiler`, `FlotillaContainer`, `FlotillaRuntime`, `FlotillaAgent`, `FlotillaTool`, `SuspendPolicy`, `ExecutionTimeoutPolicy`.
+**`component`** (REQUIRED) — Name of the emitting component. Examples: `FLOTILLA_RUNTIME` and `FLOTILLA_AGENT`.
 
 **`timestamp`** (OPTIONAL) — ISO-8601 timestamp indicating when the event was emitted. Defaults to the current UTC time.
 
-**`severity`** (OPTIONAL) — Enum: `DEBUG`, `INFO`, `WARN`, `ERROR`. Defaults to `INFO`. Reflects observability classification, not execution outcome.
+**`severity`** (OPTIONAL) — Enum: `DEBUG`, `INFO`, `WARNING`, `ERROR`. Defaults to `INFO`. Reflects observability classification, not execution outcome.
 
 **`context`** (OPTIONAL) — Arbitrary structured identifiers for correlation and trace alignment. Values must be JSON-safe. MUST NOT contain `ContentPart`, secrets, or raw tool payloads.
 
@@ -159,46 +154,30 @@ Framework components MUST:
 
 ## 9. Interaction Model
 
-`TelemetryPolicy` may receive events at various lifecycle boundaries:
-
-**Configuration Phase**
-- `CONFIG_LOAD_START`
-- `CONFIG_LOAD_COMPLETE`
-- `CONFIG_VALIDATION_ERROR`
-
-**Compilation Phase**
-- `COMPILATION_START`
-- `COMPILATION_COMPLETE`
-- `REF_RESOLUTION`
-- `COMPILATION_ERROR`
-
-**Container Build Phase**
-- `CONTAINER_BUILD_START`
-- `COMPONENT_INSTANTIATED`
-- `CONTAINER_BUILD_COMPLETE`
+`TelemetryService` may receive the following current canonical events:
 
 **Runtime Phase**
-- `RUNTIME_REQUEST_RECEIVED`
-- `RUNTIME_PHASE_INITIATED`
-- `AGENT_EVENT_EMITTED`
-- `RUNTIME_TERMINAL`
-- `RUNTIME_REJECTED`
+- `runtime.phase.started`
+- `runtime.phase.completed`
+- `runtime.phase.suspended`
+- `runtime.phase.failed`
+- `runtime.thread.not_found`
+- `runtime.active_thread.rejected`
+- `runtime.resume.rejected`
+- `runtime.timeout.closed`
 
 **Agent Phase**
-- `AGENT_RUN_START`
-- `AGENT_RUN_COMPLETE`
-- `AGENT_RUN_ERROR`
+- `agent.run.started`
+- `agent.run.completed`
+- `agent.run.failed`
 
-**Tool Execution Phase**
-- `TOOL_EXECUTION_START`
-- `TOOL_EXECUTION_COMPLETE`
-- `TOOL_EXECUTION_ERROR`
+Additional detail SHOULD be represented as structured attributes rather than as additional event types. For example, `runtime.resume.rejected` SHOULD use a `reason` attribute such as `invalid_token`, `expired_token`, or `unauthorized`.
 
 ---
 
 ### Thread Safety and Concurrency
 
-`TelemetryPolicy` implementations MUST:
+`TelemetryService` implementations MUST:
 
 - Be thread-safe
 - Be re-entrant
@@ -213,20 +192,20 @@ The framework does not guarantee ordering across threads.
 The framework MUST provide a default no-op implementation:
 
 ```python
-class NoOpTelemetryPolicy:
+class NoOpTelemetryService:
     def emit(self, event: TelemetryEvent) -> None:
         pass
 ```
 
-`TelemetryPolicy` is optional.
+`TelemetryService` is optional.
 
 ---
 
 ## 11. Extension Points
 
-`TelemetryPolicy` may be implemented to support structured logging, metrics aggregation, audit logging, distributed tracing adapters, and enterprise observability systems.
+`TelemetryService` may be implemented to support structured logging, metrics aggregation, audit logging, distributed tracing adapters, and enterprise observability systems.
 
-Adapters may transform `TelemetryEvent` into logs, metrics, spans, or external telemetry pipelines. The `TelemetryPolicy` interface remains neutral and does not encode tracing semantics.
+Adapters may transform `TelemetryEvent` into logs, metrics, spans, or external telemetry pipelines. The `TelemetryService` interface remains neutral and does not encode tracing semantics.
 
 ---
 
@@ -246,6 +225,6 @@ This specification guarantees:
 - `FlotillaRuntime`
 - `FlotillaAgent`
 - `FlotillaTool`
-- `SuspendPolicy`
+- `SuspendService`
 - `ExecutionTimeoutPolicy`
 - `Runtime I/O`

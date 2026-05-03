@@ -4,7 +4,14 @@ from typing import Callable
 
 class FlotillaTool(ABC):
     """
-    API class for wrapping an LLM executable Tool.
+    Executable capability exposed to an agent or LLM adapter.
+
+    Agents use tools to perform bounded external work during an orchestration
+    phase. A tool supplies a stable name, an LLM-facing description, and the
+    callable that performs the actual action.
+
+    Tools are not part of the durable runtime state machine. Any effects they
+    perform are application-level side effects coordinated by the agent.
     """
 
     @property

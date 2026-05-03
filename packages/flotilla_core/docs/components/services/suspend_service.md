@@ -1,32 +1,32 @@
-# SuspendPolicy Specification (v1.2-draft)
+# SuspendService Specification (v1.2-draft)
 
 ## 1. Executive Summary
 
 ### Purpose
 
-`SuspendPolicy` defines who should be notified and how when an execution phase terminates with a `SuspendEntry`.
+`SuspendService` defines who should be notified and how when an execution phase terminates with a `SuspendEntry`.
 
-`SuspendPolicy` is strictly post-terminal and non-mutating:
+`SuspendService` is strictly post-terminal and non-mutating:
 
 - `SuspendEntry` is authoritative and durable.
-- `SuspendPolicy` does not affect thread state.
-- `SuspendPolicy` failures are non-fatal.
-- `SuspendPolicy` MUST NOT influence execution phase outcome.
+- `SuspendService` does not affect thread state.
+- `SuspendService` failures are non-fatal.
+- `SuspendService` MUST NOT influence execution phase outcome.
 
-`SuspendPolicy` exists to support multi-user environments where the resumer may differ from the requester.
+`SuspendService` exists to support multi-user environments where the resumer may differ from the requester.
 
-### What SuspendPolicy Does
+### What SuspendService Does
 
-`SuspendPolicy`:
+`SuspendService`:
 
 - Receives a durable `SuspendEntry`
 - Receives the issued `ResumeToken`
 - Performs synchronous best-effort routing or notification
 - MAY emit advisory information (optional, non-authoritative)
 
-### What SuspendPolicy Does Not Do
+### What SuspendService Does Not Do
 
-`SuspendPolicy` MUST NOT:
+`SuspendService` MUST NOT:
 
 - Mutate durable state (no `ThreadEntryStore` writes)
 - Create or modify `ResumeToken`
@@ -44,15 +44,15 @@ Intended execution order:
 1. Runtime appends `SuspendEntry` durably.
 2. Runtime reloads thread and reconstructs `ThreadContext`.
 3. Runtime emits suspend response to the requester.
-4. Runtime may invoke `SuspendPolicy` synchronously (best-effort).
+4. Runtime may invoke `SuspendService` synchronously (best-effort).
 
-`SuspendPolicy` is designed to be invoked after durability and after terminal semantics are established. It cannot alter the canonical shape of the thread.
+`SuspendService` is designed to be invoked after durability and after terminal semantics are established. It cannot alter the canonical shape of the thread.
 
 ---
 
 ## 3. Core Concepts
 
-`SuspendPolicy` is a post-terminal, best-effort notification policy intended to run after a `SuspendEntry` is durably appended.
+`SuspendService` is a post-terminal, best-effort notification service intended to run after a `SuspendEntry` is durably appended.
 
 Core inputs:
 
@@ -63,14 +63,14 @@ Core inputs:
 
 ### Canonical Interface
 
-`SuspendPolicy` MUST expose semantics equivalent to:
+`SuspendService` MUST expose semantics equivalent to:
 
 ```python
 async def handle_suspend(
     thread_context: ThreadContext,
     suspend_entry: SuspendEntry,
     resume_token: str,
-    execution_config: PhaseContext,
+    phase_context: PhaseContext,
 ) -> None:
     ...
 ```
@@ -87,7 +87,7 @@ async def handle_suspend(
 
 ## 4. Responsibilities
 
-`SuspendPolicy` is responsible for:
+`SuspendService` is responsible for:
 
 - Handling suspend information when invoked after durable terminal state is established.
 - Performing best-effort routing or notification.
@@ -96,7 +96,7 @@ async def handle_suspend(
 
 ## 5. Non-Responsibilities
 
-`SuspendPolicy` is NOT responsible for:
+`SuspendService` is NOT responsible for:
 
 - Creating, modifying, validating, or consuming `ResumeToken`.
 - Appending or modifying `ThreadEntry` objects.
@@ -110,24 +110,24 @@ async def handle_suspend(
 
 ### 4.1 Invocation Timing
 
-When runtime invokes `SuspendPolicy`, it MUST invoke it:
+When runtime invokes `SuspendService`, it MUST invoke it:
 
 - Only after `SuspendEntry` has been durably appended
 - Only after reload of `ThreadContext`
 - At most once per runtime request execution
 
-Runtime MUST NOT invoke `SuspendPolicy` before durable mutation.
+Runtime MUST NOT invoke `SuspendService` before durable mutation.
 
 ### 4.2 Synchronous, Non-Blocking Semantics
 
-When invoked, runtime MUST await `SuspendPolicy` completion before exiting runtime execution. However:
+When invoked, runtime MUST await `SuspendService` completion before exiting runtime execution. However:
 
-- `SuspendPolicy` MUST NOT delay runtime completion indefinitely.
-- Runtime SHOULD enforce a configurable timeout for `SuspendPolicy` execution.
+- `SuspendService` MUST NOT delay runtime completion indefinitely.
+- Runtime SHOULD enforce a configurable timeout for `SuspendService` execution.
 
 ### 4.3 Non-Mutating Guarantee
 
-`SuspendPolicy` MUST NOT:
+`SuspendService` MUST NOT:
 
 - Write to `ThreadEntryStore`
 - Modify any `ThreadEntry`
@@ -135,25 +135,25 @@ When invoked, runtime MUST await `SuspendPolicy` completion before exiting runti
 - Invalidate `ResumeToken`
 - Alter `ThreadContext`
 
-`SuspendPolicy` produces no durable mutations.
+`SuspendService` produces no durable mutations.
 
 ---
 
 ### Error Handling
 
-`SuspendPolicy` MUST NOT allow errors to leak into runtime execution flow.
+`SuspendService` MUST NOT allow errors to leak into runtime execution flow.
 
-- Any exception raised by `SuspendPolicy` MUST be caught by `FlotillaRuntime`.
-- Runtime MUST treat `SuspendPolicy` exceptions as non-fatal.
+- Any exception raised by `SuspendService` MUST be caught by `FlotillaRuntime`.
+- Runtime MUST treat `SuspendService` exceptions as non-fatal.
 
 Runtime MUST NOT:
 
 - Append additional `ThreadEntry`
-- Convert policy failure into `ErrorEntry`
+- Convert service failure into `ErrorEntry`
 - Alter the terminal state of the execution phase
 - Change the emitted suspend response
 
-`SuspendPolicy` failures MUST NOT:
+`SuspendService` failures MUST NOT:
 
 - Cause the execution phase to fail
 - Modify thread state
@@ -166,14 +166,14 @@ Runtime MAY log the error or emit telemetry (if configured). Runtime MUST still 
 
 ## 7. Constraints & Guarantees
 
-`SuspendPolicy` MUST preserve:
+`SuspendService` MUST preserve:
 
 - `SuspendEntry` remains the sole terminal entry for the phase.
 - `ResumeToken` validity remains unchanged.
 - No additional durable mutations occur.
 - Execution phase remains suspended.
 
-`SuspendPolicy` MUST NOT influence:
+`SuspendService` MUST NOT influence:
 
 - Execution phase semantics
 - Thread concurrency rules

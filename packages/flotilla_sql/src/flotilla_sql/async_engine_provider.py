@@ -1,4 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from flotilla.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def async_engine_provider(
@@ -16,6 +19,14 @@ def async_engine_provider(
     Expect `dsn` to be a SQLAlchemy async URL such as `postgresql+asyncpg://...`.
     Keep this separate from any psycopg/libpq DSN used by sync PostgreSQL clients.
     """
+    logger.info(
+        "Create SQLAlchemy async engine pool_size=%d max_overflow=%d pool_timeout=%d pool_recycle=%d echo=%s",
+        pool_size,
+        max_overflow,
+        pool_timeout,
+        pool_recycle,
+        echo,
+    )
     return create_async_engine(
         url=dsn,
         echo=echo,

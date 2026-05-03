@@ -37,6 +37,6 @@ humidity, and wind.
     @tool_call
     def get_current_weather(self, city: str) -> str:
         """Get weather for a given city"""
-        logger.info(f"Lookup the current weather for {city}")
+        logger.info("Lookup current weather for city '%s'", city)
         url = f"{self.base_url}/v1/current.json?key={self.api_key}&q={city}&aqi=no"
         return requests.get(url).text
