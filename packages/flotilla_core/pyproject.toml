@@ -3,7 +3,22 @@ name = "flotilla-core"
 version = "0.1.0"
 description = "Core runtime and agent contract for Flotilla"
 authors = ["geoff <geoffschneider@gmail.com>"]
+license = "Apache-2.0"
 readme = "README.md"
+homepage = "https://github.com/flotilla-dev/flotilla"
+repository = "https://github.com/flotilla-dev/flotilla"
+documentation = "https://github.com/flotilla-dev/flotilla/tree/main/docs"
+keywords = ["ai", "agents", "workflow", "runtime", "durable-execution"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 packages = [
     { include = "flotilla", from = "src" }
 ]

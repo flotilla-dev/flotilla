@@ -295,7 +295,8 @@ class LangChainAgent(FlotillaAgent):
             yield AgentEvent.error(
                 entry_id=entry_id,
                 agent_id=self.agent_name,
-                content=[TextPart(text=str(e))],
+                content=[TextPart(text="Agent execution failed.")],
+                metadata={"reason": "agent_execution_failed"},
             )
 
     # ------------------------------------------------------------------

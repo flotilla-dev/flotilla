@@ -4,6 +4,7 @@ from flotilla.tools.decorated_flotilla_tool import DecoratedFlotillaTool
 from flotilla.tools.tool_decorators import tool_call
 
 logger = get_logger(__name__)
+REQUEST_TIMEOUT_SECONDS = 10
 
 
 class CurrentWeatherTool(DecoratedFlotillaTool):
@@ -38,5 +39,6 @@ humidity, and wind.
     def get_current_weather(self, city: str) -> str:
         """Get weather for a given city"""
         logger.info("Lookup current weather for city '%s'", city)
-        url = f"{self.base_url}/v1/current.json?key={self.api_key}&q={city}&aqi=no"
-        return requests.get(url).text
+        url = f"{self.base_url}/v1/current.json"
+        params = {"key": self.api_key, "q": city, "aqi": "no"}
+        return requests.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS).text

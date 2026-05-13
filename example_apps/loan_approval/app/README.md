@@ -103,6 +103,10 @@ curl -X POST http://127.0.0.1:8000/threads/<thread-id>/loan-request \
   -d '{"user_id":"loan-client","name":"Ada Lovelace","amount":50000}'
 ```
 
+## Security Note
+
+This is a framework integration example, not a production API boundary. The loan approval endpoints are intentionally small and unauthenticated so the example stays focused on Flotilla runtime, persistence, and suspend/resume behavior. The `GET /threads/{thread_id}` endpoint returns serialized durable workflow entries for demonstration and audit inspection, including content that may be sensitive in real systems. A production application should put these routes behind application-owned authentication and authorization, redact or narrow thread-history responses for each caller, and derive `user_id` from the authenticated requester rather than accepting it directly from request bodies.
+
 ## Run Tests
 
 ```bash

@@ -3,7 +3,24 @@ name = "flotilla-fastapi"
 version = "0.1.0"
 description = "FastAPI integration for Flotilla"
 authors = ["Geoff Schneider <geoffschneider@gmail.com>"]
+license = "Apache-2.0"
 readme = "README.md"
+homepage = "https://github.com/flotilla-dev/flotilla"
+repository = "https://github.com/flotilla-dev/flotilla"
+documentation = "https://github.com/flotilla-dev/flotilla/tree/main/packages/flotilla_fastapi"
+keywords = ["ai", "agents", "fastapi", "workflow", "runtime"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 packages = [
     { include = "flotilla_fastapi", from = "src" }
 ]
@@ -11,12 +28,12 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"
 
-# Core dependency (local during development)
-flotilla-core = { path = "../flotilla_core", develop = true }
+# Core dependency
+flotilla-core = "^0.1.0"
 
 # Modern FastAPI stack (aligned versions)
 fastapi = "0.135.0"
-starlette = "0.46.0"
+starlette = ">=0.49.1,<0.50.0"
 uvicorn = "0.32.1"
 
 # Keep consistent with your existing environment unless you upgrade globally

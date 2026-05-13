@@ -205,7 +205,7 @@ Creates resume tokens from durable suspend entries and validates resume requests
 
 ### ResumeAuthorizationPolicy
 
-Evaluates whether a decoded resume token payload is authorized to resume a durable suspend entry.
+Evaluates whether a decoded resume token payload is authorized to resume a durable suspend entry for the current phase context.
 
 ### ExecutionTimeoutPolicy
 

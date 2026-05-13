@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from flotilla.runtime.phase_context import PhaseContext
 from flotilla.thread.thread_entries import SuspendEntry
 from flotilla.suspend.resume_token_payload import ResumeTokenPayload
 
@@ -23,4 +24,5 @@ class ResumeAuthorizationPolicy(ABC):
         *,
         payload: ResumeTokenPayload,
         suspend_entry: SuspendEntry,
+        phase_context: PhaseContext,
     ) -> bool: ...

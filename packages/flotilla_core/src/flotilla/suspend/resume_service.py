@@ -134,7 +134,11 @@ class DefaultResumeService(ResumeService):
             )
             raise ResumeTokenInvalidError("Entry ID of token does not match SuspendEntry ID")
 
-        if not await self._auth_policy.is_authorized(payload=payload, suspend_entry=thread_context.last_entry):
+        if not await self._auth_policy.is_authorized(
+            payload=payload,
+            suspend_entry=thread_context.last_entry,
+            phase_context=phase_context,
+        ):
             logger.warning(
                 "Resume authorization denied for thread '%s' suspend entry '%s'",
                 request.thread_id,

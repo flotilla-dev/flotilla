@@ -1,0 +1,206 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, for example 0.1.0"
+        required: true
+        type: string
+      target_branch:
+        description: "Branch head to release"
+        required: true
+        default: "main"
+        type: string
+      repository:
+        description: "Package index to publish to"
+        required: true
+        default: "testpypi"
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_sha: ${{ steps.release_ref.outputs.release_sha }}
+
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+
+      - name: Capture release SHA
+        id: release_ref
+        run: echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install release tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Validate release metadata
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          version = os.environ["RELEASE_VERSION"]
+          if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+              raise SystemExit(f"Release version must look like X.Y.Z, got {version!r}")
+
+          packages = [
+              Path("packages/flotilla_core/pyproject.toml"),
+              Path("packages/flotilla_fastapi/pyproject.toml"),
+              Path("packages/flotilla_langchain/pyproject.toml"),
+              Path("packages/flotilla_sql/pyproject.toml"),
+          ]
+
+          for pyproject in packages:
+              data = tomllib.loads(pyproject.read_text())
+              poetry = data["tool"]["poetry"]
+              package_name = poetry["name"]
+              package_version = poetry["version"]
+              if package_version != version:
+                  raise SystemExit(
+                      f"{package_name} version is {package_version}, expected {version}"
+                  )
+
+              dependencies = poetry.get("dependencies", {})
+              for dependency_name, dependency_value in dependencies.items():
+                  if isinstance(dependency_value, dict) and "path" in dependency_value:
+                      raise SystemExit(
+                          f"{package_name} has path dependency in main dependencies: {dependency_name}"
+                      )
+
+          print(f"Release metadata validated for {version}")
+          PY
+
+      - name: Check release tag does not already exist
+        if: inputs.repository == 'pypi'
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          tag="v${RELEASE_VERSION}"
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: |
+          python -m pip install -e packages/flotilla_core
+          python -m pip install --no-deps -e packages/flotilla_fastapi
+          python -m pip install --no-deps -e packages/flotilla_langchain
+          python -m pip install --no-deps -e packages/flotilla_sql
+          python -m pip install --no-deps -e packages/flotilla_testing
+          python -m pip install pytest pytest-asyncio pytest-mock httpx testcontainers[postgres] psycopg2-binary
+          pytest
+
+      - name: Build distributions
+        run: |
+          mkdir -p dist
+          python -m build packages/flotilla_core --outdir dist
+          python -m build packages/flotilla_fastapi --outdir dist
+          python -m build packages/flotilla_langchain --outdir dist
+          python -m build packages/flotilla_sql --outdir dist
+
+      - name: Check distributions
+        run: twine check dist/*
+
+      - name: Upload checked distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  tag:
+    name: Tag release
+    if: inputs.repository == 'pypi'
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Create and push release tag
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          tag="v${RELEASE_VERSION}"
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    runs-on: ubuntu-latest
+    if: inputs.repository == 'testpypi'
+    needs: validate
+    environment: testpypi
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download checked distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: dist
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    if: inputs.repository == 'pypi'
+    needs:
+      - validate
+      - tag
+    environment: pypi
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download checked distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

@@ -2,6 +2,8 @@ from flotilla.tools.decorated_flotilla_tool import DecoratedFlotillaTool
 from flotilla.tools.tool_decorators import tool_call
 import requests
 
+REQUEST_TIMEOUT_SECONDS = 10
+
 
 class CitySearchTool(DecoratedFlotillaTool):
 
@@ -32,5 +34,6 @@ A list of candidate cities that match the provided name.
 
     @tool_call
     def city_search(self, name: str) -> str:
-        url = f"{self.base_url}/v1/search.json?key={self.api_key}&q={name}"
-        return requests.get(url).text
+        url = f"{self.base_url}/v1/search.json"
+        params = {"key": self.api_key, "q": name}
+        return requests.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS).text

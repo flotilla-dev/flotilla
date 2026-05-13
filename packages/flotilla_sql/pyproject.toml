@@ -1,9 +1,25 @@
 [tool.poetry]
 name = "flotilla-sql"
 version = "0.1.0"
-description = "Production implementations of Flotilla core interfaces that utilize SQL backend for storage"
+description = "SQL-backed durable storage implementations for Flotilla"
 authors = ["geoff <geoffschneider@gmail.com>"]
+license = "Apache-2.0"
 readme = "README.md"
+homepage = "https://github.com/flotilla-dev/flotilla"
+repository = "https://github.com/flotilla-dev/flotilla"
+documentation = "https://github.com/flotilla-dev/flotilla/tree/main/packages/flotilla_sql"
+keywords = ["ai", "agents", "sql", "postgresql", "durable-execution"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 packages = [
     { include = "flotilla_sql", from = "src" }
 ]
@@ -12,7 +28,7 @@ packages = [
 python = ">=3.11,<4.0"
 
 # Production dependency
-flotilla-core = { path = "../flotilla_core", develop = true }
+flotilla-core = "^0.1.0"
 
 SQLAlchemy = "2.0.48"
 asyncpg = "0.31.0"

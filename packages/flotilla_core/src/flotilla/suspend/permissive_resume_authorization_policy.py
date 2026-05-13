@@ -10,5 +10,5 @@ class PermissiveResumeAuthorizationPolicy(ResumeAuthorizationPolicy):
     answers only the final permission question and always allows the resume.
     """
 
-    async def is_authorized(self, *, payload, suspend_entry):
+    async def is_authorized(self, *, payload, suspend_entry, phase_context):
         return True

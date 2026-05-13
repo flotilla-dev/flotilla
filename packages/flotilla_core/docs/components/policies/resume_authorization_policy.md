@@ -90,7 +90,8 @@ class  ResumeAuthorizationPolicy(Protocol):
   self,  
   *,  
   payload: ResumeTokenPayload,
-  suspend_entry: SuspendEntry,  
+  suspend_entry: SuspendEntry,
+  phase_context: PhaseContext,  
  ) -> bool:  
  ```
 
@@ -100,6 +101,7 @@ class  ResumeAuthorizationPolicy(Protocol):
 |--|--|--|
 | `payload` | `ResumeTokenPayload` | Decoded resume token payload |
 | `suspend_entry` | `SuspendEntry` | The durable suspend entry associated with the resume_token |
+| `phase_context` | `PhaseContext` | Current resume attempt context, including requester `user_id` |
 
 The policy MUST return:
 
@@ -115,7 +117,7 @@ During resume handling, FlotillaRuntime MUST:
 2.  Identify the correct `SuspendEntry`.
 3.  Invoke:
 ```python
-is_authorized(payload=payload, suspend_entry=suspend_entry)
+is_authorized(payload=payload, suspend_entry=suspend_entry, phase_context=phase_context)
 ```
 5.  If the result is `False`, reject the resume attempt.
 6.  If the result is `True`, proceed with resume.
@@ -169,7 +171,7 @@ Flotilla MAY provide a permissive default:
 ```python
 class  AllowAllResumeAuthorizationPolicy:  
   
-  def  is_authorized(self, *, payload, suspend_entry):
+  def  is_authorized(self, *, payload, suspend_entry, phase_context):
   return  True
 ```
 This allows applications that enforce authorization upstream to opt out of additional checks.

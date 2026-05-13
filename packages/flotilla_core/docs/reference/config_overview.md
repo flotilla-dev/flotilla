@@ -24,6 +24,13 @@ Flotilla configuration grammar may be used.
 
 A Flotilla configuration describes a component registry specification.
 
+Flotilla configuration must be treated as trusted application code. Directives
+such as `$class` can import and instantiate Python objects during container
+build, so configuration files or fragments must not be accepted directly from
+tenant-controlled or end-user-controlled input. Applications that load remote
+or generated configuration are responsible for authenticating that source and
+constraining which component definitions it may provide.
+
 Each definition declares:
 
 - how a component or factory binding is constructed

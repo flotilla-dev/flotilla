@@ -300,7 +300,22 @@ async def test_error_emits_error_event(thread_context, phase_context):
 
     assert output[0].type == "message_start"
     assert output[-1].type == "error"
+    assert output[-1].content[0].text == "Agent execution failed."
+    assert output[-1].execution_metadata == {"reason": "agent_execution_failed"}
     assert not any(e.type == "message_final" for e in output)
+
+
+@pytest.mark.asyncio
+async def test_error_event_does_not_expose_exception_message(thread_context, phase_context):
+    graph = ErrorGraph()
+    agent = TestAgent(graph)
+
+    output = []
+    async for e in agent.run(thread_context, phase_context):
+        output.append(e)
+
+    assert output[-1].type == "error"
+    assert "boom" not in output[-1].content[0].text
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,21 @@ from flotilla.thread.thread_context import ThreadContext
 from flotilla.thread.thread_entries import ResumeEntry, SuspendEntry, UserInput
 
 
+class CapturingResumeAuthorizationPolicy:
+    def __init__(self):
+        self.calls = []
+
+    async def is_authorized(self, *, payload, suspend_entry, phase_context):
+        self.calls.append(
+            {
+                "payload": payload,
+                "suspend_entry": suspend_entry,
+                "phase_context": phase_context,
+            }
+        )
+        return True
+
+
 @pytest.mark.asyncio
 async def test_build_resume_entry_allows_new_phase_context_for_resume_request():
     service = DefaultResumeService(
@@ -67,3 +82,51 @@ async def test_build_resume_entry_allows_new_phase_context_for_resume_request():
     assert resume_entry.previous_entry_id == "e2"
     assert resume_entry.actor_id == "reviewer-1"
     assert resume_entry.content[0].id == "loan_review_decision"
+
+
+@pytest.mark.asyncio
+async def test_build_resume_entry_passes_phase_context_to_authorization_policy():
+    policy = CapturingResumeAuthorizationPolicy()
+    service = DefaultResumeService(
+        resume_authorization_policy=policy,
+        ttl_seconds=3600,
+    )
+
+    suspend = SuspendEntry(
+        thread_id="t1",
+        phase_id="phase-suspend",
+        entry_id="e2",
+        previous_entry_id="e1",
+        actor_id="a1",
+        content=[TextPart(text="approval required")],
+    )
+    user = UserInput(
+        thread_id="t1",
+        phase_id="phase-start",
+        entry_id="e1",
+        actor_id="u1",
+        content=[TextPart(text="hello")],
+    )
+    thread_context = ThreadContext(entries=[user, suspend])
+    phase_context = PhaseContext(
+        thread_id="t1",
+        phase_id="phase-resume-request",
+        user_id="reviewer-1",
+        agent_config={},
+    )
+    request = RuntimeRequest(
+        thread_id="t1",
+        user_id="reviewer-1",
+        resume_token=service.create_token(suspend),
+        content=[TextPart(text="approved")],
+    )
+
+    await service.build_resume_entry(
+        request=request,
+        phase_context=phase_context,
+        thread_context=thread_context,
+    )
+
+    assert len(policy.calls) == 1
+    assert policy.calls[0]["phase_context"] is phase_context
+    assert policy.calls[0]["phase_context"].user_id == "reviewer-1"
