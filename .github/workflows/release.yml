@@ -50,6 +50,12 @@ jobs:
       - name: Install release tools
         run: python -m pip install --upgrade build twine
 
+      - name: Install Poetry
+        run: python -m pip install poetry
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+
       - name: Validate release metadata
         env:
           RELEASE_VERSION: ${{ inputs.version }}
@@ -70,6 +76,7 @@ jobs:
               Path("packages/flotilla_langchain/pyproject.toml"),
               Path("packages/flotilla_sql/pyproject.toml"),
           ]
+          # packages/flotilla_testing is intentionally dev-only and is not published.
 
           for pyproject in packages:
               data = tomllib.loads(pyproject.read_text())
@@ -104,13 +111,8 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pip install -e packages/flotilla_core
-          python -m pip install --no-deps -e packages/flotilla_fastapi
-          python -m pip install --no-deps -e packages/flotilla_langchain
-          python -m pip install --no-deps -e packages/flotilla_sql
-          python -m pip install --no-deps -e packages/flotilla_testing
-          python -m pip install pytest pytest-asyncio pytest-mock httpx testcontainers[postgres] psycopg2-binary
-          pytest
+          poetry install
+          poetry run pytest
 
       - name: Build distributions
         run: |
@@ -119,6 +121,22 @@ jobs:
           python -m build packages/flotilla_fastapi --outdir dist
           python -m build packages/flotilla_langchain --outdir dist
           python -m build packages/flotilla_sql --outdir dist
+
+      - name: Ensure dev-only packages were not built
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          forbidden_prefixes = ("flotilla_testing-", "flotilla-testing-")
+          forbidden = [
+              path
+              for path in Path("dist").iterdir()
+              if path.name.startswith(forbidden_prefixes)
+          ]
+          if forbidden:
+              names = ", ".join(path.name for path in forbidden)
+              raise SystemExit(f"Dev-only package distributions must not be published: {names}")
+          PY
 
       - name: Check distributions
         run: twine check dist/*
