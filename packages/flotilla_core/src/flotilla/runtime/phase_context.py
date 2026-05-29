@@ -30,6 +30,11 @@ class PhaseContext(BaseModel):
         description="Optional collection of Agent specifc execution configuration",
     )
 
+    thread_attributes: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional collection of creation-time ThreadAttribute values keyed by attribute name",
+    )
+
     model_config = ConfigDict(
         frozen=True,
         extra="forbid",

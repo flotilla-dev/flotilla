@@ -11,8 +11,8 @@ class LoanServerClient:
     base_url: str
     timeout: float = 10.0
 
-    def create_thread(self) -> dict[str, Any]:
-        return self._request("POST", "/threads")
+    def create_thread(self, title: str = "Loan approval") -> dict[str, Any]:
+        return self._request("POST", "/threads", json={"title": title})
 
     def get_thread(self, thread_id: str) -> dict[str, Any]:
         return self._request("GET", f"/threads/{thread_id}")

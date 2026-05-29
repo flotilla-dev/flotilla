@@ -28,6 +28,7 @@ from flotilla.thread.thread_service import ThreadService
 from flotilla.runtime.runtime_request import RuntimeRequest
 from flotilla.runtime.runtime_response import RuntimeResponse
 from flotilla.runtime.content_part import ContentPart, TextPart, ContentPartType
+from flotilla.thread.thread import CreateThreadRequest
 
 from flotilla_langchain.llm.providers import openai_llm_provider
 from flotilla.container.constants import REFLECTION_PROVIDER_KEY
@@ -64,7 +65,8 @@ async def _interactive_loop_async(app: FlotillaApplication) -> None:
     Single asyncio loop for the whole interactive session.
     """
     runtime = app.runtime
-    thread_id = await app.thread_service.create_thread()
+    thread = await app.thread_service.create_thread(CreateThreadRequest(title="Weather conversation"))
+    thread_id = thread.thread_id
 
     console.print("[green]✓ Ready for queries[/green]")
     console.print(f"[dim]thread_id: {thread_id}[/dim]\n")

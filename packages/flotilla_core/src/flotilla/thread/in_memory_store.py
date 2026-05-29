@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from uuid import uuid4
 
 from flotilla.thread.thread_entry_store import ThreadEntryStore
+from flotilla.thread.thread import CreateThreadRequest, Thread, ThreadAttribute
 from flotilla.thread.thread_entries import ThreadEntry
 from flotilla.thread.errors import (
     AppendConflictError,
@@ -31,14 +32,27 @@ class InMemoryStore(ThreadEntryStore):
 
     def __init__(self) -> None:
         self._threads: Dict[str, List[ThreadEntry]] = {}
+        self._thread_metadata: Dict[str, Thread] = {}
+        self._thread_attributes: Dict[str, List[ThreadAttribute]] = {}
         self._lock = asyncio.Lock()
 
     # ---------------------------------------------------------
     # Thread lifecycle
     # ---------------------------------------------------------
 
-    async def create_thread(self) -> str:
+    async def create_thread(self, request: CreateThreadRequest) -> Thread:
         thread_id = str(uuid4())
+        now = datetime.now(timezone.utc)
+        thread = Thread(
+            thread_id=thread_id,
+            title=request.title,
+            created_at=now,
+            created_by=request.created_by,
+        )
+        attributes = [
+            attribute.model_copy(update={"created_at": now})
+            for attribute in request.attributes
+        ]
 
         async with self._lock:
             if thread_id in self._threads:
@@ -47,9 +61,27 @@ class InMemoryStore(ThreadEntryStore):
                 raise Exception("Thread already exists")
 
             self._threads[thread_id] = []
+            self._thread_metadata[thread_id] = thread
+            self._thread_attributes[thread_id] = attributes
 
         logger.debug("Created in-memory thread '%s'", thread_id)
-        return thread_id
+        return thread
+
+    async def load_thread(self, thread_id: str) -> Thread:
+        async with self._lock:
+            if thread_id not in self._thread_metadata:
+                logger.warning("In-memory thread '%s' was not found", thread_id)
+                raise ThreadNotFoundError(thread_id=thread_id, message=f"Thread {thread_id} not found")
+
+            return self._thread_metadata[thread_id]
+
+    async def load_thread_attributes(self, thread_id: str) -> List[ThreadAttribute]:
+        async with self._lock:
+            if thread_id not in self._threads:
+                logger.warning("In-memory thread '%s' was not found", thread_id)
+                raise ThreadNotFoundError(thread_id=thread_id, message=f"Thread {thread_id} not found")
+
+            return list(self._thread_attributes[thread_id])
 
     async def load(self, thread_id: str) -> List[ThreadEntry]:
         async with self._lock:

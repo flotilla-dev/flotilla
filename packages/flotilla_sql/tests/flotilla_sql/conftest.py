@@ -35,6 +35,7 @@ async def engine(async_dsn):
 
     async with engine.begin() as conn:
         # 🔥 Drop all tables (reverse dependency order)
+        await conn.exec_driver_sql("DROP TABLE IF EXISTS thread_attribute CASCADE")
         await conn.exec_driver_sql("DROP TABLE IF EXISTS content_part CASCADE")
         await conn.exec_driver_sql("DROP TABLE IF EXISTS thread_entry CASCADE")
         await conn.exec_driver_sql("DROP TABLE IF EXISTS thread CASCADE")

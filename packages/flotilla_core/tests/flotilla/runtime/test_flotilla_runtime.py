@@ -10,6 +10,7 @@ from flotilla.runtime.runtime_response import (
     RuntimeReseponseType,
 )
 from flotilla.runtime.runtime_event import RuntimeEventType  # adjust
+from flotilla.thread.thread import CreateThreadRequest
 from flotilla.thread.thread_entries import UserInput, ErrorEntry, SuspendEntry, AgentOutput
 
 from flotilla.thread.errors import ConcurrentThreadExecutionError, AppendConflictError
@@ -44,7 +45,7 @@ async def test_phase_context_created_before_store_load(
     phase_context_service,
     strategy,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -73,7 +74,7 @@ async def test_runtime_initiates_phase_on_empty_thread_appends_user_input(
     store,
     strategy,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -100,7 +101,7 @@ async def test_runtime_returns_error_on_initiating_append_cas_failure(
     runtime_factory,
     store,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -130,7 +131,7 @@ async def test_timeout_policy_checked_when_last_entry_not_terminal_and_appends_t
     strategy,
     timeout_policy_expired,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -185,7 +186,7 @@ async def test_resume_authorization_failure_returns_error_and_does_not_append_re
     strategy,
     resume_service_unauthorized,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -214,7 +215,7 @@ async def test_message_final_maps_to_agent_output_and_is_durable(
     store,
     strategy,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -255,7 +256,7 @@ async def test_suspend_appends_suspend_entry_then_invokes_suspend_service_failur
     strategy,
     suspend_service_failing,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -298,7 +299,7 @@ async def test_orchestration_error_is_converted_to_error_entry(
     strategy,
     suspend_service_ok,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -326,7 +327,7 @@ async def test_terminal_append_cas_failure_returns_error_response(
     store,
     strategy,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -382,7 +383,7 @@ async def test_multiple_terminal_events_are_ignored(
     store,
     strategy,
 ):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(
         store=store,
@@ -429,7 +430,7 @@ async def test_runtime_returns_error_if_thread_not_found(runtime_factory):
 
 @pytest.mark.asyncio
 async def test_phase_id_consistency_across_phase(runtime_factory, store, strategy):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
     runtime = runtime_factory(store=store, orchestration_strategy=strategy)
 
     request = RuntimeRequest(thread_id=thread_id, user_id="u1", content=[TextPart(text="hello")])
@@ -461,7 +462,7 @@ async def test_phase_id_consistency_across_phase(runtime_factory, store, strateg
 
 @pytest.mark.asyncio
 async def test_initiating_append_cas_failure_returns_error(runtime_factory, store, strategy):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(store=store, orchestration_strategy=strategy)
 
@@ -490,7 +491,7 @@ async def test_initiating_append_cas_failure_returns_error(runtime_factory, stor
 
 @pytest.mark.asyncio
 async def test_terminal_append_cas_failure_returns_error(runtime_factory, store, strategy):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     store.fail_append_on_nth = (
         2,
@@ -524,7 +525,7 @@ async def test_terminal_append_cas_failure_returns_error(runtime_factory, store,
 
 @pytest.mark.asyncio
 async def test_orchestration_error_is_converted_to_error_entry(runtime_factory, store, strategy):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     strategy.set_raise(RuntimeError("boom"))
 
@@ -542,7 +543,7 @@ async def test_orchestration_error_is_converted_to_error_entry(runtime_factory, 
 
 @pytest.mark.asyncio
 async def test_streaming_events_not_durable(runtime_factory, store, strategy):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     strategy.set_events(
         [
@@ -580,7 +581,7 @@ async def test_streaming_events_not_durable(runtime_factory, store, strategy):
 
 @pytest.mark.asyncio
 async def test_resume_authorization_failure_returns_error(runtime_factory, store, resume_service_unauthorized):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     runtime = runtime_factory(store=store, resume_service=resume_service_unauthorized)
 
@@ -601,7 +602,7 @@ async def test_resume_authorization_failure_returns_error(runtime_factory, store
 
 @pytest.mark.asyncio
 async def test_suspend_returns_resume_token(runtime_factory, store, strategy):
-    thread_id = await store.create_thread()
+    thread_id = (await store.create_thread(CreateThreadRequest(title="Test Thread"))).thread_id
 
     strategy.set_events(
         [

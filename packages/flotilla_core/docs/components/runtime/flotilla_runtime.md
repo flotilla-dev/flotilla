@@ -82,6 +82,8 @@ If the thread does not exist, runtime MUST raise/emit `THREAD_NOT_FOUND`.
         
 -   Runtime and OrchestrationStrategy MUST treat `PhaseContext` as immutable
 -   `agent_config` inside `PhaseContext` is adapter-defined and MUST be treated as opaque by runtime.
+-   `thread_attributes` inside `PhaseContext`, when present, are immutable thread-creation-time values and MUST be treated as opaque by runtime.
+-   `PhaseContextService` MAY omit thread attributes. A storage-independent `PhaseContextService` that creates context only from `RuntimeRequest` is valid.
     
 ----------
 

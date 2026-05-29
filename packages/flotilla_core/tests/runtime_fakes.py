@@ -3,6 +3,7 @@ from flotilla.thread.thread_context import ThreadContext
 from flotilla.runtime.phase_context import PhaseContext  # adjust
 from flotilla.telemetry.telemetry_event import TelemetryEvent
 from flotilla.suspend.errors import ResumeAuthorizationError, ResumeTokenExpiredError, ResumeTokenInvalidError
+from flotilla.thread.thread import CreateThreadRequest, Thread, ThreadAttribute
 from flotilla.thread.thread_entries import ResumeEntry
 from flotilla.thread.thread_entry_store import ThreadEntryStore
 from flotilla.thread.in_memory_store import InMemoryStore
@@ -37,8 +38,14 @@ class FaultInjectingStore(ThreadEntryStore):
     # Thread lifecycle
     # ---------------------------------------
 
-    async def create_thread(self) -> str:
-        return await self._inner.create_thread()
+    async def create_thread(self, request: CreateThreadRequest) -> Thread:
+        return await self._inner.create_thread(request=request)
+
+    async def load_thread(self, thread_id: str) -> Thread:
+        return await self._inner.load_thread(thread_id=thread_id)
+
+    async def load_thread_attributes(self, thread_id: str) -> list[ThreadAttribute]:
+        return await self._inner.load_thread_attributes(thread_id=thread_id)
 
     async def load(self, thread_id: str):
         self.load_calls += 1

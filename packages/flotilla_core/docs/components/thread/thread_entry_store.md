@@ -60,7 +60,13 @@ It provides:
 ```python
 class  ThreadEntryStore:
 
-async  def  create_thread(self) -> str:
+async  def  create_thread(self, request: CreateThreadRequest) -> Thread:
+...
+
+async  def  load_thread(self, thread_id: str) -> Thread:
+...
+
+async  def  load_thread_attributes(self, thread_id: str) -> list[ThreadAttribute]:
 ...
 
 async  def  load(self, thread_id: str) -> list[ThreadEntry]:
@@ -73,7 +79,9 @@ async  def  append(self, entry: ThreadEntry, expected_previous_entry_id: str | N
 
 ### Interface Semantics
 
--  `create_thread()` creates a durable thread identity record and returns the durable `thread_id`.
+-  `create_thread()` creates a durable thread record, persists any creation-time `ThreadAttribute` records, and returns the durable `Thread`.
+-  `load_thread()` returns the durable thread metadata record.
+-  `load_thread_attributes()` returns immutable creation-time attributes for the thread.
 -  `load()` returns all entries for `thread_id` in strict durable order.
 -  `append()` is atomic and conditional.
 
@@ -125,8 +133,15 @@ The returned `ThreadEntry` is NOT authoritative state and MUST NOT be used to co
 `create_thread()` MUST:
 
 - Generate a globally unique `thread_id`
-- Durably persist it
-- Return that `thread_id`
+- Require a non-empty `title`
+- Durably persist the thread metadata record
+- Assign and persist `created_at`
+- Persist any supplied `ThreadAttribute` records atomically with the thread
+- Assign and persist `ThreadAttribute.created_at`
+- Reject duplicate attribute keys within the same thread creation request
+- Return the created `Thread`
+
+Thread attributes MUST be creation-time only. `ThreadEntryStore` MUST NOT expose a post-creation API to add, update, or delete thread attributes.
 
 
 ### 4.2 Thread Existence Requirement for Append
