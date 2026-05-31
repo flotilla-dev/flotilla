@@ -98,6 +98,44 @@ Thread Model **must NOT**:
 
 ## 3. Core Concepts
 
+### Thread
+
+A `Thread` is the durable identity and metadata record for an agentic conversation.
+
+Required thread fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `thread_id` | string | Yes | Store-assigned durable thread identifier |
+| `created_at` | datetime | Yes | Store-assigned creation timestamp |
+| `title` | string | Yes | Human-readable thread title |
+
+Optional thread fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `created_by` | string | No | Application-defined identifier for the creator |
+
+Thread identity and metadata are distinct from `ThreadEntry` records. `ThreadEntry` remains the append-only execution log.
+
+### ThreadAttribute
+
+`ThreadAttribute` is an immutable child of a `Thread`.
+
+It is a key/value pair attached at thread creation time and may be used by applications as thread-level metadata or execution configuration.
+
+Required thread attribute fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `key` | string | Yes | Attribute key, unique within a thread |
+| `value` | JSON value | Yes | Application-defined JSON-serializable value |
+| `created_at` | datetime | Yes | Store-assigned attribute creation timestamp |
+
+`ThreadAttribute` records are children of a parent `Thread`. The storage representation MUST enforce uniqueness by `(thread_id, key)`.
+
+Thread attributes MUST NOT be added, updated, or deleted after thread creation. This preserves repeatable agent behavior when attributes are included in `PhaseContext`.
+
 ### Closed Set of ThreadEntry Types
 
 | Type | Durable? | Description |

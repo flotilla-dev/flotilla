@@ -48,6 +48,8 @@ Deterministic behavior is defined by:
 - `PhaseContext`
 - Injected reasoning engine behavior
 
+When `PhaseContext` includes thread attributes, the agent MAY use those values to configure runtime behavior, prompts, model selection, or other application-defined execution choices.
+
 ---
 
 ## 2. Architectural Context
@@ -227,6 +229,7 @@ Agent MUST NEVER emit zero events.
 - Agent instances MUST be stateless across calls.
 - `ThreadContext` MUST be treated as read-only.
 - `PhaseContext` MUST NOT be mutated.
+- Thread attributes exposed through `PhaseContext` MUST be treated as read-only.
 - No internal mutable state allowed per execution.
 
 ### Error Handling

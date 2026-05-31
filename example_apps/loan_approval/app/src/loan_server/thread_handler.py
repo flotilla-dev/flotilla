@@ -1,6 +1,7 @@
 from typing import Any
 
 from pydantic import BaseModel
+from flotilla.thread.thread import CreateThreadRequest
 from flotilla.thread.thread_entries import ThreadEntry
 from flotilla.thread.thread_service import ThreadService
 from flotilla_fastapi.handler import HTTPHandler
@@ -21,9 +22,9 @@ class ThreadHandler(HTTPHandler):
         self._thread_service = thread_service
 
     @routes.post("/threads", status_code=201)
-    async def create_thread(self) -> CreateThreadResponse:
-        thread_id = await self._thread_service.create_thread()
-        return CreateThreadResponse(thread_id=thread_id)
+    async def create_thread(self, request: CreateThreadRequest) -> CreateThreadResponse:
+        thread = await self._thread_service.create_thread(request)
+        return CreateThreadResponse(thread_id=thread.thread_id)
 
     @routes.get("/threads/{thread_id}")
     async def load_thread(self, thread_id: str) -> LoadThreadResponse:

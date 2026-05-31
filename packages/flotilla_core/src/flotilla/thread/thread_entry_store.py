@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from flotilla.thread.thread import CreateThreadRequest, Thread, ThreadAttribute
 from flotilla.thread.thread_entries import ThreadEntry
 
 
@@ -21,9 +22,21 @@ class ThreadEntryStore(ABC):
     """
 
     @abstractmethod
-    async def create_thread(self) -> str:
+    async def create_thread(self, request: CreateThreadRequest) -> Thread:
         """
-        Create a new empty thread log and return its thread id.
+        Create a new empty thread log and return the created thread metadata.
+        """
+
+    @abstractmethod
+    async def load_thread(self, thread_id: str) -> Thread:
+        """
+        Return the durable thread metadata for a thread.
+        """
+
+    @abstractmethod
+    async def load_thread_attributes(self, thread_id: str) -> list[ThreadAttribute]:
+        """
+        Return creation-time attributes for a thread.
         """
 
     @abstractmethod

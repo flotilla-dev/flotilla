@@ -19,6 +19,7 @@ def test_create_phase_context_basic():
     assert phase_context.user_id == "u1"
     assert isinstance(phase_context.phase_id, str)
     assert phase_context.agent_config == {}
+    assert phase_context.thread_attributes == {}
 
 
 def test_phase_id_is_unique():
@@ -42,3 +43,14 @@ def test_agent_config_override():
     phase_context = service.create_phase_context(request)
 
     assert phase_context.agent_config == {"temperature": 0.5}
+
+
+def test_custom_phase_context_can_include_thread_attributes():
+    phase_context = PhaseContext(
+        thread_id="t1",
+        phase_id="p1",
+        user_id="u1",
+        thread_attributes={"region": "midwest"},
+    )
+
+    assert phase_context.thread_attributes == {"region": "midwest"}

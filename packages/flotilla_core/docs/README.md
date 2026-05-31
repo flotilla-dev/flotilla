@@ -18,6 +18,7 @@ Component specs describe exact contracts, local responsibilities, data models, a
 ### Runtime
 
 - [FlotillaRuntime](components/runtime/flotilla_runtime.md)
+- [PhaseContext and PhaseContextService](components/runtime/phase_context.md)
 - [Runtime I/O](components/runtime/runtime_io.md)
 - [OrchestrationStrategy](components/runtime/orchestration_strategy.md)
 
@@ -29,6 +30,7 @@ Component specs describe exact contracts, local responsibilities, data models, a
 ### Thread
 
 - [Thread Model](components/thread/thread_model.md)
+- [ThreadService](components/thread/thread_service.md)
 - [ThreadEntryStore](components/thread/thread_entry_store.md)
 
 ### Policies

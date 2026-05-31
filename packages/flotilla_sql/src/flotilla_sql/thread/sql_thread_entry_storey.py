@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -9,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 
 from flotilla.thread.thread_entry_store import ThreadEntryStore
+from flotilla.thread.thread import CreateThreadRequest, Thread, ThreadAttribute
 from flotilla.thread.thread_entries import ThreadEntry, ThreadEntryFactory
 from flotilla.thread.errors import (
     AppendConflictError,
@@ -30,23 +32,125 @@ class SqlThreadEntryStore(ThreadEntryStore):
     # Public API
     # --------------------------------------------------------
 
-    async def create_thread(self) -> str:
+    async def create_thread(self, request: CreateThreadRequest) -> Thread:
         thread_id = str(uuid.uuid4())
         now = self._utc_now_naive()
+        thread = Thread(
+            thread_id=thread_id,
+            title=request.title,
+            created_at=self._ensure_utc(now),
+            created_by=request.created_by,
+        )
 
         async with self._engine.begin() as conn:
             await conn.execute(
                 text(
                     """
-                    INSERT INTO thread (thread_id, created_at)
-                    VALUES (:thread_id, :created_at)
+                    INSERT INTO thread (thread_id, title, created_by, created_at)
+                    VALUES (:thread_id, :title, :created_by, :created_at)
                 """
                 ),
-                {"thread_id": thread_id, "created_at": now},
+                {
+                    "thread_id": thread.thread_id,
+                    "title": thread.title,
+                    "created_by": thread.created_by,
+                    "created_at": now,
+                },
             )
+            if request.attributes:
+                await conn.execute(
+                    text(
+                        """
+                        INSERT INTO thread_attribute (
+                            thread_id,
+                            key,
+                            value,
+                            created_at
+                        )
+                        VALUES (
+                            :thread_id,
+                            :key,
+                            :value,
+                            :created_at
+                        )
+                        """
+                    ),
+                    [
+                        {
+                            "thread_id": thread.thread_id,
+                            "key": attribute.key,
+                            "value": json.dumps(attribute.value, sort_keys=True),
+                            "created_at": now,
+                        }
+                        for attribute in request.attributes
+                    ],
+                )
 
         logger.info("Created SQL thread '%s'", thread_id)
-        return thread_id
+        return thread
+
+    async def load_thread(self, thread_id: str) -> Thread:
+        async with self._engine.begin() as conn:
+            row = (
+                (
+                    await conn.execute(
+                        text(
+                            """
+                            SELECT thread_id, title, created_by, created_at
+                            FROM thread
+                            WHERE thread_id = :thread_id
+                            """
+                        ),
+                        {"thread_id": thread_id},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+
+        if row is None:
+            logger.warning("SQL thread '%s' was not found", thread_id)
+            raise ThreadNotFoundError(thread_id=thread_id, message=f"Thread does not exist: {thread_id}")
+
+        return Thread(
+            thread_id=row["thread_id"],
+            title=row["title"],
+            created_by=row["created_by"],
+            created_at=self._ensure_utc(row["created_at"]),
+        )
+
+    async def load_thread_attributes(self, thread_id: str) -> List[ThreadAttribute]:
+        async with self._engine.begin() as conn:
+            if not await self._thread_exists(conn, thread_id):
+                logger.warning("SQL thread '%s' was not found", thread_id)
+                raise ThreadNotFoundError(thread_id=thread_id, message=f"Thread does not exist: {thread_id}")
+
+            rows = (
+                (
+                    await conn.execute(
+                        text(
+                            """
+                            SELECT key, value, created_at
+                            FROM thread_attribute
+                            WHERE thread_id = :thread_id
+                            ORDER BY key ASC
+                            """
+                        ),
+                        {"thread_id": thread_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+
+        return [
+            ThreadAttribute(
+                key=row["key"],
+                value=json.loads(row["value"]),
+                created_at=self._ensure_utc(row["created_at"]),
+            )
+            for row in rows
+        ]
 
     async def load(self, thread_id: str) -> List[ThreadEntry]:
         async with self._engine.begin() as conn:

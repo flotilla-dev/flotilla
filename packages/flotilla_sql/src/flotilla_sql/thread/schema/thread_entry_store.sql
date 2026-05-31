@@ -1,5 +1,7 @@
 CREATE TABLE thread (
     thread_id VARCHAR PRIMARY KEY,
+    title VARCHAR NOT NULL,
+    created_by VARCHAR NULL,
     created_at TIMESTAMP NOT NULL
 );
 
@@ -41,3 +43,20 @@ CREATE TABLE content_part (
 
 CREATE INDEX idx_content_part_entry
 ON content_part (entry_id);
+
+CREATE TABLE thread_attribute (
+    thread_id VARCHAR NOT NULL,
+    key VARCHAR NOT NULL,
+    value TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+
+    CONSTRAINT pk_thread_attribute
+        PRIMARY KEY (thread_id, key),
+
+    CONSTRAINT fk_thread_attribute_thread
+        FOREIGN KEY (thread_id)
+        REFERENCES thread(thread_id)
+);
+
+CREATE INDEX idx_thread_attribute_thread
+ON thread_attribute (thread_id);

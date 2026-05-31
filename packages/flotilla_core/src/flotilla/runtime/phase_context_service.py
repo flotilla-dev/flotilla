@@ -52,6 +52,7 @@ class DefaultPhaseContextService(PhaseContextService):
             correlation_id=request.correlation_id,
             trace_id=request.trace_id,
             agent_config=self._create_agent_config(request=request),
+            thread_attributes={},
         )
 
     def _create_agent_config(self, request: RuntimeRequest) -> Dict[str, Any]:

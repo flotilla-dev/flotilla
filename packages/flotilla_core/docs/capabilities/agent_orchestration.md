@@ -91,7 +91,7 @@ This capability does not:
 
 ### Thread Preparation
 
-1. A caller or application service creates a thread through the thread lifecycle surface.
+1. A caller or application service creates a thread through the thread lifecycle surface. Thread creation may include a required title and optional immutable thread attributes.
 2. The created `thread_id` is returned to the caller or retained by the application.
 3. The caller includes that existing `thread_id` in a `RuntimeRequest`.
 
@@ -177,7 +177,7 @@ Runtime I/O defines the objects that developers and adapters use at the runtime 
 
 ### PhaseContext and PhaseContextService
 
-Provide immutable per-phase metadata. Runtime constructs a new `PhaseContext` for each execution phase.
+Provide immutable per-phase metadata. Runtime constructs a new `PhaseContext` for each execution phase. A `PhaseContextService` may optionally include immutable thread attributes as `PhaseContext.thread_attributes`, but storage-independent services that omit thread attributes are valid.
 
 ### ThreadEntryStore
 
@@ -267,6 +267,7 @@ Telemetry must not alter execution correctness, ordering, durability, or caller-
 
 ```text
 ThreadEntryStore.create_thread()
+    -> Thread
     -> thread_id
     -> RuntimeRequest
     -> PhaseContext

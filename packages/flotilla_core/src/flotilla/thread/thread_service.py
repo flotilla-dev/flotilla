@@ -1,4 +1,5 @@
 from flotilla.thread.thread_entry_store import ThreadEntryStore
+from flotilla.thread.thread import CreateThreadRequest, Thread, ThreadAttribute
 from flotilla.thread.thread_entries import ThreadEntry
 from typing import List
 
@@ -23,12 +24,24 @@ class ThreadService:
         """
         self._store: ThreadEntryStore = store
 
-    async def create_thread(self) -> str:
+    async def create_thread(self, request: CreateThreadRequest) -> Thread:
         """
-        Creates a new conversation thread in the internal store and returns the ID of the thread.  Call this
+        Creates a new conversation thread in the internal store and returns the Thread metadata.  Call this
         create a thread before calling FlotillaRuntime.run()/FlotillaRuntime.stream()
         """
-        return await self._store.create_thread()
+        return await self._store.create_thread(request=request)
+
+    async def load_thread(self, thread_id: str) -> Thread:
+        """
+        Returns the metadata for a Thread
+        """
+        return await self._store.load_thread(thread_id=thread_id)
+
+    async def load_thread_attributes(self, thread_id: str) -> List[ThreadAttribute]:
+        """
+        Returns the immutable creation-time ThreadAttribute objects attached to a Thread
+        """
+        return await self._store.load_thread_attributes(thread_id=thread_id)
 
     async def load(self, thread_id: str) -> List[ThreadEntry]:
         """

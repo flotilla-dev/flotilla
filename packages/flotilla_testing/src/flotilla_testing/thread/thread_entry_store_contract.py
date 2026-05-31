@@ -5,6 +5,7 @@ import uuid
 
 from flotilla.thread.thread_entry_store import ThreadEntryStore
 from flotilla.thread.thread_context import ThreadContext
+from flotilla.thread.thread import CreateThreadRequest, ThreadAttribute
 from flotilla.thread.thread_entries import UserInput
 from flotilla.runtime.content_part import TextPart
 from flotilla.thread.errors import (
@@ -23,15 +24,90 @@ class ThreadEntryStoreContract(ABC):
     def make_text(self, text: str) -> TextPart:
         return TextPart(text=text)
 
+    async def create_thread_id(self, store: ThreadEntryStore, title: str = "Test Thread") -> str:
+        thread = await store.create_thread(CreateThreadRequest(title=title))
+        return thread.thread_id
+
     @pytest.fixture
     async def store(self) -> ThreadEntryStore:
         return await self.create_store()
 
     @pytest.mark.asyncio
     async def test_create_thread_returns_unique_id(self, store):
-        t1 = await store.create_thread()
-        t2 = await store.create_thread()
-        assert t1 != t2
+        t1 = await store.create_thread(CreateThreadRequest(title="First Thread"))
+        t2 = await store.create_thread(CreateThreadRequest(title="Second Thread"))
+        assert t1.thread_id != t2.thread_id
+        assert t1.title == "First Thread"
+        assert t1.created_at is not None
+
+    @pytest.mark.asyncio
+    async def test_create_thread_requires_title(self, store):
+        with pytest.raises(ValueError):
+            CreateThreadRequest(title="")
+
+    @pytest.mark.asyncio
+    async def test_load_thread_returns_thread_metadata(self, store):
+        created = await store.create_thread(
+            CreateThreadRequest(title="Loan Review", created_by="u1")
+        )
+
+        loaded = await store.load_thread(created.thread_id)
+
+        assert loaded == created
+
+    @pytest.mark.asyncio
+    async def test_load_thread_nonexistent_thread_fails(self, store):
+        with pytest.raises(ThreadNotFoundError):
+            await store.load_thread(str(uuid.uuid4()))
+
+    @pytest.mark.asyncio
+    async def test_create_thread_persists_initial_attributes(self, store):
+        created = await store.create_thread(
+            CreateThreadRequest(
+                title="Loan Review",
+                attributes=[
+                    ThreadAttribute(key="customer_id", value="c123"),
+                    ThreadAttribute(key="tags", value=["vip", "north"]),
+                ],
+            )
+        )
+
+        attributes = await store.load_thread_attributes(created.thread_id)
+
+        assert [attribute.key for attribute in attributes] == ["customer_id", "tags"]
+        assert attributes[0].created_at is not None
+        assert attributes[0].created_at >= created.created_at
+        assert attributes[1].value == ["vip", "north"]
+
+    @pytest.mark.asyncio
+    async def test_create_thread_rejects_duplicate_attribute_keys(self, store):
+        with pytest.raises(ValueError):
+            CreateThreadRequest(
+                title="Loan Review",
+                attributes=[
+                    ThreadAttribute(key="customer_id", value="c123"),
+                    ThreadAttribute(key="customer_id", value="c456"),
+                ],
+            )
+
+    @pytest.mark.asyncio
+    async def test_create_thread_rejects_client_supplied_attribute_created_at(self, store):
+        with pytest.raises(ValueError):
+            CreateThreadRequest(
+                title="Loan Review",
+                attributes=[
+                    ThreadAttribute(
+                        key="customer_id",
+                        value="c123",
+                        created_at=datetime.utcnow(),
+                    ),
+                ],
+            )
+
+    @pytest.mark.asyncio
+    async def test_load_thread_attributes_nonexistent_thread_fails(self, store):
+        with pytest.raises(ThreadNotFoundError):
+            await store.load_thread_attributes(str(uuid.uuid4()))
 
     @pytest.mark.asyncio
     async def test_append_fails_if_thread_does_not_exist(self, store):
@@ -51,7 +127,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_first_append_requires_none_previous(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         entry = UserInput(
             thread_id=thread_id,
@@ -70,7 +146,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_first_append_rejects_if_expected_previous_not_none(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         entry = UserInput(
             thread_id=thread_id,
@@ -85,7 +161,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_cas_enforced_on_append(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         await store.append(
             UserInput(
@@ -113,7 +189,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_previous_entry_id_must_match_expected(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         await store.append(
             UserInput(
@@ -144,7 +220,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_expected_and_entry_previous_must_match(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         await store.append(
             UserInput(
@@ -173,7 +249,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_error_precedence_structural_over_cas(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         await store.append(
             UserInput(
@@ -199,7 +275,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_reject_client_supplied_entry_id(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         entry = UserInput(
             thread_id=thread_id,
@@ -216,7 +292,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_reject_client_supplied_timestamp(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         entry = UserInput(
             thread_id=thread_id,
@@ -233,7 +309,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_append_returns_realized_entry(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         entry = UserInput(
             thread_id=thread_id,
@@ -250,7 +326,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_append_returns_new_instance(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         entry = UserInput(
             thread_id=thread_id,
@@ -266,7 +342,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_load_returns_strict_order(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         await store.append(
             UserInput(
@@ -299,7 +375,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_timestamp_monotonicity(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         await store.append(
             UserInput(
@@ -331,7 +407,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_content_parts_preserved(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         content = [
             self.make_text("a"),
@@ -356,13 +432,13 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_load_empty_thread_returns_empty_list(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
         entries = await store.load(thread_id)
         assert entries == []
 
     @pytest.mark.asyncio
     async def test_entry_order_starts_at_zero_and_increments(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         e1 = await store.append(
             UserInput(
@@ -393,7 +469,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_entry_order_is_gapless(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         prev = None
         for i in range(5):
@@ -417,7 +493,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_load_returns_entries_sorted_by_entry_order(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         prev = None
         for i in range(3):
@@ -441,7 +517,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_entry_order_is_immutable(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         entry = await store.append(
             UserInput(
@@ -463,7 +539,7 @@ class ThreadEntryStoreContract(ABC):
 
     @pytest.mark.asyncio
     async def test_entry_order_unique_per_thread(self, store):
-        thread_id = await store.create_thread()
+        thread_id = await self.create_thread_id(store)
 
         prev = None
         for i in range(3):
