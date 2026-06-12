@@ -38,6 +38,103 @@ flotilla:
     assert config["flotilla"]["agent_selector"]["type"] == "keyword"
 
 
+def test_yaml_source_validates_against_default_schema(tmp_path: Path):
+    config_path = tmp_path / "application.yml"
+    write(
+        config_path,
+        """
+flotilla:
+  runtime:
+    $class: flotilla.runtime.flotilla_runtime.FlotillaRuntime
+    $name: runtime
+    timeout_ms: 300000
+    store:
+      $ref: thread_store
+  thread_entry_store:
+    $class: flotilla.thread.in_memory_store.InMemoryStore
+    $name: thread_store
+"""
+    )
+
+    source = YamlConfigurationSource(path=config_path)
+    config = asyncio.run(source.load())
+
+    assert config["flotilla"]["runtime"]["$name"] == "runtime"
+
+
+def test_yaml_source_default_schema_rejects_raw_list(tmp_path: Path):
+    config_path = tmp_path / "application.yml"
+    write(
+        config_path,
+        """
+component:
+  $provider: simple
+  items:
+    - a
+    - b
+"""
+    )
+
+    source = YamlConfigurationSource(path=config_path)
+
+    with pytest.raises(YamlSchemaValidationError):
+        asyncio.run(source.load())
+
+
+def test_yaml_source_default_schema_rejects_raw_object_arg(tmp_path: Path):
+    config_path = tmp_path / "application.yml"
+    write(
+        config_path,
+        """
+component:
+  $provider: simple
+  options:
+    retries: 3
+"""
+    )
+
+    source = YamlConfigurationSource(path=config_path)
+
+    with pytest.raises(YamlSchemaValidationError):
+        asyncio.run(source.load())
+
+
+def test_yaml_source_default_schema_rejects_scalar_directive_form(tmp_path: Path):
+    config_path = tmp_path / "application.yml"
+    write(
+        config_path,
+        """
+component:
+  $provider: simple
+  dep: "$ref other"
+"""
+    )
+
+    source = YamlConfigurationSource(path=config_path)
+
+    with pytest.raises(YamlSchemaValidationError):
+        asyncio.run(source.load())
+
+
+def test_yaml_source_can_disable_schema_validation(tmp_path: Path):
+    config_path = tmp_path / "application.yml"
+    write(
+        config_path,
+        """
+component:
+  $provider: simple
+  items:
+    - a
+    - b
+"""
+    )
+
+    source = YamlConfigurationSource(path=config_path, validate_schema=False)
+    config = asyncio.run(source.load())
+
+    assert config["component"]["items"] == ["a", "b"]
+
+
 def test_yaml_source_missing_file_raises(tmp_path: Path):
     source = YamlConfigurationSource(path=tmp_path / "missing.yml")
     with pytest.raises(FileNotFoundError):
@@ -117,4 +214,19 @@ properties:
     )
 
     config = asyncio.run(source.load())
+    assert "flotilla" in config
+
+
+@pytest.mark.parametrize(
+    "config_path",
+    [
+        Path("example_apps/weather/src/weather/app_config/flotilla.yml"),
+        Path("example_apps/loan_approval/app/src/loan_server/flotilla.yml"),
+    ],
+)
+def test_example_app_configs_validate_against_default_schema(config_path: Path):
+    source = YamlConfigurationSource(path=config_path)
+
+    config = asyncio.run(source.load())
+
     assert "flotilla" in config

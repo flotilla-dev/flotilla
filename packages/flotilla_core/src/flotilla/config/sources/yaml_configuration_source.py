@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from importlib.resources import files
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
 
 from flotilla.config.configuration_source import ConfigurationSource
 from flotilla.utils.logger import get_logger
@@ -44,12 +46,16 @@ class YamlConfigurationSource:
         self,
         *,
         path: Path,
+        validate_schema: bool = True,
         schema_path: Optional[Path] = None,
     ):
         self._path = Path(path)
-        self._schema_path = schema_path
+        self._schema_path = Path(schema_path) if schema_path else None
 
-        self._validator = self._load_schema_validator(schema_path)
+        self._validator = self._load_schema_validator(
+            validate_schema=validate_schema,
+            schema_path=self._schema_path,
+        )
 
     # ------------------------------------------------------------
     # ConfigurationSource API
@@ -91,10 +97,15 @@ class YamlConfigurationSource:
 
     def _load_schema_validator(
         self,
+        *,
+        validate_schema: bool,
         schema_path: Optional[Path],
     ) -> Optional[Draft202012Validator]:
-        if not schema_path:
+        if not validate_schema:
             return None
+
+        if not schema_path:
+            return self._load_default_schema_validator()
 
         if not schema_path.exists():
             raise FileNotFoundError(f"Schema not found: {schema_path}")
@@ -106,6 +117,23 @@ class YamlConfigurationSource:
             raise YamlConfigurationError(
                 f"Failed to parse schema file: {schema_path}"
             ) from e
+
+        return Draft202012Validator(schema)
+
+    def _load_default_schema_validator(self) -> Draft202012Validator:
+        try:
+            schema_resource = files("flotilla.config.schema").joinpath("flotilla.schema.yml")
+            with schema_resource.open("r", encoding="utf-8") as f:
+                schema = yaml.safe_load(f)
+        except (FileNotFoundError, ModuleNotFoundError) as e:
+            raise FileNotFoundError("Packaged Flotilla schema not found") from e
+        except yaml.YAMLError as e:
+            raise YamlConfigurationError("Failed to parse packaged Flotilla schema") from e
+
+        try:
+            Draft202012Validator.check_schema(schema)
+        except SchemaError as e:
+            raise YamlConfigurationError("Packaged Flotilla schema is invalid") from e
 
         return Draft202012Validator(schema)
 

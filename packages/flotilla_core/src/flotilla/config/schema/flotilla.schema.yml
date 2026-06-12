@@ -1,0 +1,120 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://flotilla.dev/schema/flotilla.schema.yml
+title: Flotilla Configuration Schema
+description: Structural schema for Flotilla's component-graph configuration grammar.
+
+$ref: "#/$defs/root"
+
+$defs:
+  root:
+    type: object
+    propertyNames:
+      not:
+        pattern: "^\\$"
+    additionalProperties:
+      $ref: "#/$defs/configNode"
+
+  configNode:
+    oneOf:
+      - $ref: "#/$defs/componentDefinition"
+      - $ref: "#/$defs/refNode"
+      - $ref: "#/$defs/listNode"
+      - $ref: "#/$defs/mapNode"
+      - $ref: "#/$defs/secretNode"
+      - $ref: "#/$defs/groupingNode"
+      - $ref: "#/$defs/scalarValue"
+
+  configValue:
+    oneOf:
+      - $ref: "#/$defs/componentDefinition"
+      - $ref: "#/$defs/refNode"
+      - $ref: "#/$defs/listNode"
+      - $ref: "#/$defs/mapNode"
+      - $ref: "#/$defs/secretNode"
+      - $ref: "#/$defs/scalarValue"
+
+  groupingNode:
+    type: object
+    propertyNames:
+      not:
+        pattern: "^\\$"
+    additionalProperties:
+      $ref: "#/$defs/configNode"
+
+  componentDefinition:
+    type: object
+    oneOf:
+      - required: ["$provider"]
+      - required: ["$class"]
+      - required: ["$factory"]
+    propertyNames:
+      anyOf:
+        - enum: ["$provider", "$class", "$factory", "$name"]
+        - not:
+            pattern: "^\\$"
+    properties:
+      $provider:
+        type: string
+        minLength: 1
+      $class:
+        type: string
+        minLength: 1
+      $factory:
+        type: string
+        minLength: 1
+      $name:
+        type: string
+        minLength: 1
+    additionalProperties:
+      $ref: "#/$defs/configValue"
+
+  refNode:
+    type: object
+    required: ["$ref"]
+    properties:
+      $ref:
+        type: string
+        minLength: 1
+      $params:
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/configValue"
+    additionalProperties: false
+
+  listNode:
+    type: object
+    required: ["$list"]
+    properties:
+      $list:
+        type: array
+        items:
+          $ref: "#/$defs/configValue"
+    additionalProperties: false
+
+  mapNode:
+    type: object
+    required: ["$map"]
+    properties:
+      $map:
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/configValue"
+    additionalProperties: false
+
+  secretNode:
+    type: object
+    required: ["$secret"]
+    properties:
+      $secret:
+        type: string
+        minLength: 1
+    additionalProperties: false
+
+  scalarValue:
+    oneOf:
+      - type: "null"
+      - type: boolean
+      - type: number
+      - type: string
+        not:
+          pattern: "^\\s*\\$"
