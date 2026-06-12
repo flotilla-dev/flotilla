@@ -72,9 +72,13 @@ Flotilla includes built-in implementations such as:
 - `YamlConfigurationSource`
 - `DictConfigurationSource`
 
-`YamlConfigurationSource` loads one explicit YAML file path. To layer multiple
-YAML files, pass multiple sources to `ConfigLoader` in the desired order. Later
-files override earlier files.
+`YamlConfigurationSource` loads one explicit YAML file path. By default, loaded
+YAML is structurally validated against the packaged Flotilla configuration
+schema before it is returned to `ConfigLoader`. Applications may disable schema
+validation or provide a custom schema path when constructing the source.
+
+To layer multiple YAML files, pass multiple sources to `ConfigLoader` in the
+desired order. Later files override earlier files.
 
 Python configuration sources are the preferred way to mix programmatic
 configuration with YAML. A Python source may return a whole configuration tree

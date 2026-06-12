@@ -22,6 +22,9 @@ classifiers = [
 packages = [
     { include = "flotilla", from = "src" }
 ]
+include = [
+    { path = "src/flotilla/config/schema/flotilla.schema.yml", format = ["sdist", "wheel"] }
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"
